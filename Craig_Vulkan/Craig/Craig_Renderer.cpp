@@ -91,6 +91,8 @@ CraigError Craig::Renderer::terminate() {
     }
 #endif
 
+    m_VK_device.destroy();
+
     // Clean up.
     m_VK_instance.destroySurfaceKHR(m_VK_surface);
     m_VK_instance.destroy();
@@ -102,7 +104,7 @@ void Craig::Renderer::InitVulkan() {
     
     setupDebugMessenger(); // Actually enable the messenger
 	pickPhysicalDevice(); // Pick a suitable physical device for rendering
-
+	createLogicalDevice(); // Create a logical device to interact with the physical device
 }
 
 // This function is called by Vulkan to report debug messages.
@@ -213,4 +215,33 @@ bool Craig::Renderer::isDeviceSuitable(vk::PhysicalDevice device) {
     QueueFamilyIndices indices = findQueueFamilies(device);
 
     return indices.graphicsFamily.has_value();
+}
+
+void Craig::Renderer::createLogicalDevice() {
+
+    QueueFamilyIndices indices = findQueueFamilies(m_VK_physicalDevice);
+
+    //This structure describes the number of queues we want for a single queue family. 
+    float queuePriority = 1.0f;
+    vk::DeviceQueueCreateInfo queueCreateInfo = vk::DeviceQueueCreateInfo()
+        .setQueueFamilyIndex(indices.graphicsFamily.value())
+        .setQueueCount(1)
+        .setPQueuePriorities(&queuePriority);
+
+    vk::PhysicalDeviceFeatures deviceFeatures;
+
+    vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
+        .setQueueCreateInfos(queueCreateInfo)
+        .setQueueCreateInfoCount(1)
+        .setPEnabledFeatures(&deviceFeatures);
+
+    try {
+        m_VK_device = m_VK_physicalDevice.createDevice(createInfo);
+    }
+    catch (const std::exception& e) {
+        throw std::runtime_error("Failed to create logical device: " + std::string(e.what()));
+    }
+
+	m_VK_graphicsQueue = m_VK_device.getQueue(indices.graphicsFamily.value(), 0);
+
 }
