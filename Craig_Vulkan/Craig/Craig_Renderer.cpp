@@ -20,6 +20,7 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 	// Use validation layers if this is a debug build
 #if defined(_DEBUG)
 	m_VK_Layers.push_back("VK_LAYER_KHRONOS_validation");
+    mp_CurrentWindow->getExtensionsVector().push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
     // vk::ApplicationInfo allows the programmer to specifiy some basic information about the
@@ -172,7 +173,7 @@ void Craig::Renderer::pickPhysicalDevice() {
 
     if (m_VK_physicalDevice) {
         vk::PhysicalDeviceProperties props = m_VK_physicalDevice.getProperties();
-        std::cout << "\nSelected GPU: " << props.deviceName << "\n";
+		printf("\nFound GPU: %s\n", props.deviceName);
     }
     else {
         throw std::runtime_error("failed to find a suitable GPU!");
