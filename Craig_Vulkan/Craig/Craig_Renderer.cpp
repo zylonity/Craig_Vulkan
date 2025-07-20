@@ -229,31 +229,33 @@ bool Craig::Renderer::isDeviceSuitable(vk::PhysicalDevice device) {
 }
 
 void Craig::Renderer::createLogicalDevice() {
-
+    // Query the queue families that support graphics and presentation
     QueueFamilyIndices indices = findQueueFamilies(m_VK_physicalDevice);
 
     std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
+    // Use a set to avoid duplicating queue create info if graphics == presentation
     std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
+    float queuePriority = 1.0f; // Priority for the queue(s) we are creating (range: 0.0 to 1.0)
 
-    //This structure describes the number of queues we want for a single queue family. 
-    float queuePriority = 1.0f;
-
+    // Create a vk::DeviceQueueCreateInfo for each unique queue family
     for (uint32_t queueFamily : uniqueQueueFamilies) {
         vk::DeviceQueueCreateInfo queueCreateInfo = vk::DeviceQueueCreateInfo()
             .setQueueFamilyIndex(queueFamily)
             .setQueueCount(1)
             .setPQueuePriorities(&queuePriority);
 
-		queueCreateInfos.push_back(queueCreateInfo);
+        queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    vk::PhysicalDeviceFeatures deviceFeatures;
+    vk::PhysicalDeviceFeatures deviceFeatures; // Enable desired features (none yet, placeholder)
 
+    // Fill in device creation info with queue setup and feature requirements
     vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
         .setQueueCreateInfos(queueCreateInfos)
         .setPEnabledFeatures(&deviceFeatures);
 
+    // Create the logical device for the selected physical device
     try {
         m_VK_device = m_VK_physicalDevice.createDevice(createInfo);
     }
@@ -261,7 +263,7 @@ void Craig::Renderer::createLogicalDevice() {
         throw std::runtime_error("Failed to create logical device: " + std::string(e.what()));
     }
 
-	m_VK_graphicsQueue = m_VK_device.getQueue(indices.graphicsFamily.value(), 0);
+    // Retrieve the queue handles for rendering and presentation
+    m_VK_graphicsQueue = m_VK_device.getQueue(indices.graphicsFamily.value(), 0);
     m_VK_presentationQueue = m_VK_device.getQueue(indices.presentFamily.value(), 0);
-
 }
