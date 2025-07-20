@@ -16,7 +16,7 @@ namespace Craig {
 		CraigError terminate();
 
 		// Getters
-		const std::vector<const char*>& getExtensionsVector() const { return mv_SDL_Extensions; }
+		std::vector<const char*>& getExtensionsVector() { return mv_SDL_Extensions; }
 		SDL_Window* getSDLWindow() const { return mp_SDL_Window; }
 
 
