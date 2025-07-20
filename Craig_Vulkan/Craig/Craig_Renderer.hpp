@@ -69,6 +69,7 @@ namespace Craig {
 
 		vk::Queue m_VK_graphicsQueue; // Graphics queue for rendering (vk::Queue wrapper)
 
+		vk::Queue m_VK_presentationQueue; // Presentation queue for rendering (vk::Queue wrapper)
 	};
 
 

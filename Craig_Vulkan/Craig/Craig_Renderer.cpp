@@ -1,5 +1,6 @@
 #include <cassert>
 #include <iostream>
+#include <set>
 
 #include "Craig_Renderer.hpp"
 #include "Craig_Window.hpp"
@@ -231,18 +232,26 @@ void Craig::Renderer::createLogicalDevice() {
 
     QueueFamilyIndices indices = findQueueFamilies(m_VK_physicalDevice);
 
+    std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
+    std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+
+
     //This structure describes the number of queues we want for a single queue family. 
     float queuePriority = 1.0f;
-    vk::DeviceQueueCreateInfo queueCreateInfo = vk::DeviceQueueCreateInfo()
-        .setQueueFamilyIndex(indices.graphicsFamily.value())
-        .setQueueCount(1)
-        .setPQueuePriorities(&queuePriority);
+
+    for (uint32_t queueFamily : uniqueQueueFamilies) {
+        vk::DeviceQueueCreateInfo queueCreateInfo = vk::DeviceQueueCreateInfo()
+            .setQueueFamilyIndex(queueFamily)
+            .setQueueCount(1)
+            .setPQueuePriorities(&queuePriority);
+
+		queueCreateInfos.push_back(queueCreateInfo);
+    }
 
     vk::PhysicalDeviceFeatures deviceFeatures;
 
     vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
-        .setQueueCreateInfos(queueCreateInfo)
-        .setQueueCreateInfoCount(1)
+        .setQueueCreateInfos(queueCreateInfos)
         .setPEnabledFeatures(&deviceFeatures);
 
     try {
@@ -253,5 +262,6 @@ void Craig::Renderer::createLogicalDevice() {
     }
 
 	m_VK_graphicsQueue = m_VK_device.getQueue(indices.graphicsFamily.value(), 0);
+    m_VK_presentationQueue = m_VK_device.getQueue(indices.presentFamily.value(), 0);
 
 }
