@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 #include <SDL2/SDL_vulkan.h>
@@ -20,6 +21,10 @@ namespace Craig {
 		CraigError terminate();
 	private:
 
+		struct QueueFamilyIndices {
+			std::optional<uint32_t> graphicsFamily;
+		};
+
 		void setupDebugMessenger(); // Sets up the Vulkan debug messenger after instance creation
 		void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo); // Fills the debug messenger config
 		static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -30,6 +35,8 @@ namespace Craig {
 
 		void pickPhysicalDevice(); // Picks a suitable physical device for rendering
 		bool isDeviceSuitable(VkPhysicalDevice device);
+		QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
+
 
 		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
 

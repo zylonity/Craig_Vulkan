@@ -176,7 +176,41 @@ void Craig::Renderer::pickPhysicalDevice() {
 
 }
 
+//From the tutorial:
+/* It has been briefly touched upon before that almost every operation in Vulkan, anything from drawing to uploading textures, 
+requires commands to be submitted to a queue. There are different types of queues that originate from different queue families 
+and each family of queues allows only a subset of commands. For example, there could be a queue family that only allows processing 
+of compute commands or one that only allows memory transfer related commands.*/
+
+Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(VkPhysicalDevice device) {
+    QueueFamilyIndices indices;
+    // Logic to find queue family indices to populate struct with
+
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+	//Find at least one queue family that supports graphics operations
+    int i = 0;
+    for (const auto& queueFamily : queueFamilies) {
+        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+            indices.graphicsFamily = i;
+        }
+
+        if(indices.graphicsFamily.has_value()) {
+            break; // We found a graphics queue family, no need to keep searching
+		}
+
+        i++;
+    }
+
+    return indices;
+}
+
 bool Craig::Renderer::isDeviceSuitable(VkPhysicalDevice device) {
-	//Since we're just starting out, we'll assume all devices are suitable, but I can change this later depending on what I want to do with the engine.
-    return true;
+    QueueFamilyIndices indices = findQueueFamilies(device);
+
+    return indices.graphicsFamily.has_value();
 }
