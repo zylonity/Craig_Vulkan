@@ -49,6 +49,14 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
         m_VK_instInfo.setPNext(&debugCreateInfo); // Attach debug info to the instance creation
 
 		m_VK_instance = vk::createInstance(m_VK_instInfo); //Now that we have the instance created, we can initialize Vulkan
+
+        // Create a Vulkan surface for rendering
+        VkSurfaceKHR cSurface; // Vulkan surface for rendering
+        bool sdlRetBool = SDL_Vulkan_CreateSurface(mp_CurrentWindow->getSDLWindow(), static_cast<VkInstance>(m_VK_instance), &cSurface);
+        assert(sdlRetBool && "Could not create a Vulkan surface.");
+
+        m_VK_surface = vk::SurfaceKHR(cSurface);
+
         InitVulkan();
     }
     catch (const std::exception& e) {
@@ -56,12 +64,7 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 		assert(false && message.c_str()); // Technicallllyyy.. undefined behavior cos of the string, but we want to crash here anyways.
     }
 
-    // Create a Vulkan surface for rendering
-    VkSurfaceKHR cSurface; // Vulkan surface for rendering
-	bool sdlRetBool = SDL_Vulkan_CreateSurface(mp_CurrentWindow->getSDLWindow(), static_cast<VkInstance>(m_VK_instance), &cSurface);
-    assert(sdlRetBool && "Could not create a Vulkan surface.");
-
-    m_VK_surface = vk::SurfaceKHR(cSurface);
+    
 
 	return ret;
 }
@@ -202,7 +205,14 @@ Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(vk::Physi
     for (const auto& queueFamily : queueFamilies) {
         if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) {
             indices.graphicsFamily = i;
-            break;
+        }
+
+        if(device.getSurfaceSupportKHR(i, m_VK_surface)) {
+            indices.presentFamily = i; // If the queue family supports presentation to the surface, set the present family
+		}
+
+        if (indices.isComplete()) {
+			break; // If we already found a suitable family, no need to keep searching
         }
 
         i++;
@@ -214,7 +224,7 @@ Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(vk::Physi
 bool Craig::Renderer::isDeviceSuitable(vk::PhysicalDevice device) {
     QueueFamilyIndices indices = findQueueFamilies(device);
 
-    return indices.graphicsFamily.has_value();
+    return indices.isComplete();
 }
 
 void Craig::Renderer::createLogicalDevice() {
