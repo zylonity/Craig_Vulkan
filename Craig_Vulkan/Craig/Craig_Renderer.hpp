@@ -25,6 +25,8 @@ namespace Craig {
 			std::optional<uint32_t> graphicsFamily;
 		};
 
+		void InitVulkan();
+
 		void setupDebugMessenger(); // Sets up the Vulkan debug messenger after instance creation
 		void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo); // Fills the debug messenger config
 		static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
@@ -34,8 +36,8 @@ namespace Craig {
 			void* userData); // This is the function Vulkan will call to report debug messages
 
 		void pickPhysicalDevice(); // Picks a suitable physical device for rendering
-		bool isDeviceSuitable(VkPhysicalDevice device);
-		QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
+		bool isDeviceSuitable(vk::PhysicalDevice device);
+		QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device);
 
 
 		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
@@ -51,8 +53,7 @@ namespace Craig {
 
 		vk::DebugUtilsMessengerEXT m_VK_debugMessenger; // Debug messenger for Vulkan validation layers (vk::DebugUtilsMessengerEXT wrapper)
 
-		VkPhysicalDevice m_VK_physicalDevice; // Physical device for Vulkan rendering (VkPhysicalDevice handle)
-		std::vector<VkPhysicalDevice> m_VK_devices;
+		vk::PhysicalDevice m_VK_physicalDevice; // Physical device for rendering (vk::PhysicalDevice wrapper)
 
 	};
 

@@ -47,8 +47,8 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
         populateDebugMessengerCreateInfo(debugCreateInfo);
         m_VK_instInfo.setPNext(&debugCreateInfo); // Attach debug info to the instance creation
 
-        m_VK_instance = vk::createInstance(m_VK_instInfo);
-        setupDebugMessenger(); // Actually enable the messenger
+		m_VK_instance = vk::createInstance(m_VK_instInfo); //Now that we have the instance created, we can initialize Vulkan
+        InitVulkan();
     }
     catch (const std::exception& e) {
         std::string message = std::string("Vulkan instance creation failed: ") + e.what();
@@ -95,6 +95,13 @@ CraigError Craig::Renderer::terminate() {
     m_VK_instance.destroy();
 
 	return ret;
+}
+
+void Craig::Renderer::InitVulkan() {
+    
+    setupDebugMessenger(); // Actually enable the messenger
+	pickPhysicalDevice(); // Pick a suitable physical device for rendering
+
 }
 
 // This function is called by Vulkan to report debug messages.
@@ -150,26 +157,24 @@ void Craig::Renderer::setupDebugMessenger() {
 
 void Craig::Renderer::pickPhysicalDevice() {
 
-    uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(m_VK_instance, &deviceCount, nullptr);
 
-    if (deviceCount == 0) {
-        throw std::runtime_error("No physical devices found with Vulkan support.");
-	}
+    auto devices = m_VK_instance.enumeratePhysicalDevices();
+    if (devices.empty()) {
+        throw std::runtime_error("No Vulkan-compatible GPUs found.");
+    }
 
-	// Resize the vector to hold the physical devices
-	m_VK_devices.resize(deviceCount);
-	// Get the list of physical devices
-    vkEnumeratePhysicalDevices(m_VK_instance, &deviceCount, m_VK_devices.data());
-
-    for (const auto& device : m_VK_devices) {
+    for (const auto& device : devices) {
         if (isDeviceSuitable(device)) {
             m_VK_physicalDevice = device;
             break;
         }
     }
 
-    if (m_VK_physicalDevice == VK_NULL_HANDLE) {
+    if (m_VK_physicalDevice) {
+        vk::PhysicalDeviceProperties props = m_VK_physicalDevice.getProperties();
+        std::cout << "\nSelected GPU: " << props.deviceName << "\n";
+    }
+    else {
         throw std::runtime_error("failed to find a suitable GPU!");
     }
 
@@ -182,26 +187,20 @@ requires commands to be submitted to a queue. There are different types of queue
 and each family of queues allows only a subset of commands. For example, there could be a queue family that only allows processing 
 of compute commands or one that only allows memory transfer related commands.*/
 
-Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(VkPhysicalDevice device) {
+Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(vk::PhysicalDevice device) {
     QueueFamilyIndices indices;
     // Logic to find queue family indices to populate struct with
 
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+    auto queueFamilies = device.getQueueFamilyProperties();
 
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
 
 	//Find at least one queue family that supports graphics operations
     int i = 0;
     for (const auto& queueFamily : queueFamilies) {
-        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) {
             indices.graphicsFamily = i;
+            break;
         }
-
-        if(indices.graphicsFamily.has_value()) {
-            break; // We found a graphics queue family, no need to keep searching
-		}
 
         i++;
     }
@@ -209,7 +208,7 @@ Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(VkPhysica
     return indices;
 }
 
-bool Craig::Renderer::isDeviceSuitable(VkPhysicalDevice device) {
+bool Craig::Renderer::isDeviceSuitable(vk::PhysicalDevice device) {
     QueueFamilyIndices indices = findQueueFamilies(device);
 
     return indices.graphicsFamily.has_value();
