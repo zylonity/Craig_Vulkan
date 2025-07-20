@@ -28,6 +28,9 @@ namespace Craig {
 			const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
 			void* userData); // This is the function Vulkan will call to report debug messages
 
+		void pickPhysicalDevice(); // Picks a suitable physical device for rendering
+		bool isDeviceSuitable(VkPhysicalDevice device);
+
 		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
 
 		std::vector<const char*> m_VK_Layers; //Validation layers for debugging
@@ -39,7 +42,10 @@ namespace Craig {
 
 		vk::SurfaceKHR m_VK_surface; // Vulkan surface for rendering (vk::SurfaceKHR wrapper)
 
-		vk::DebugUtilsMessengerEXT m_debugMessenger; // Debug messenger for Vulkan validation layers (vk::DebugUtilsMessengerEXT wrapper)
+		vk::DebugUtilsMessengerEXT m_VK_debugMessenger; // Debug messenger for Vulkan validation layers (vk::DebugUtilsMessengerEXT wrapper)
+
+		VkPhysicalDevice m_VK_physicalDevice; // Physical device for Vulkan rendering (VkPhysicalDevice handle)
+		std::vector<VkPhysicalDevice> m_VK_devices;
 
 	};
 

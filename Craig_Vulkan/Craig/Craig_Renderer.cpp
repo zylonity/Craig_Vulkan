@@ -41,7 +41,7 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
         .setEnabledLayerCount(static_cast<uint32_t>(m_VK_Layers.size()))
         .setPpEnabledLayerNames(m_VK_Layers.data());
 
-	//Create the Vulkan instance
+	//Create the Vulkan instance/Initialize Vulkan
     try {
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
         populateDebugMessengerCreateInfo(debugCreateInfo);
@@ -79,13 +79,13 @@ CraigError Craig::Renderer::terminate() {
 
     //Destroy the messenger/debugger
 #if defined(_DEBUG)
-    if (m_debugMessenger) {
+    if (m_VK_debugMessenger) {
         auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
             m_VK_instance.getProcAddr("vkDestroyDebugUtilsMessengerEXT");
 
         if (func) {
             func(static_cast<VkInstance>(m_VK_instance),
-                static_cast<VkDebugUtilsMessengerEXT>(m_debugMessenger), nullptr);
+                static_cast<VkDebugUtilsMessengerEXT>(m_VK_debugMessenger), nullptr);
         }
     }
 #endif
@@ -142,8 +142,41 @@ void Craig::Renderer::setupDebugMessenger() {
 
     // If the function was loaded successfully, call it to create the messenger
     if (func && func(static_cast<VkInstance>(m_VK_instance), &createInfo, nullptr,
-        reinterpret_cast<VkDebugUtilsMessengerEXT*>(&m_debugMessenger)) != VK_SUCCESS) {
+        reinterpret_cast<VkDebugUtilsMessengerEXT*>(&m_VK_debugMessenger)) != VK_SUCCESS) {
         // Throw if something went wrong setting it up
         throw std::runtime_error("failed to set up debug messenger!");
     }
+}
+
+void Craig::Renderer::pickPhysicalDevice() {
+
+    uint32_t deviceCount = 0;
+    vkEnumeratePhysicalDevices(m_VK_instance, &deviceCount, nullptr);
+
+    if (deviceCount == 0) {
+        throw std::runtime_error("No physical devices found with Vulkan support.");
+	}
+
+	// Resize the vector to hold the physical devices
+	m_VK_devices.resize(deviceCount);
+	// Get the list of physical devices
+    vkEnumeratePhysicalDevices(m_VK_instance, &deviceCount, m_VK_devices.data());
+
+    for (const auto& device : m_VK_devices) {
+        if (isDeviceSuitable(device)) {
+            m_VK_physicalDevice = device;
+            break;
+        }
+    }
+
+    if (m_VK_physicalDevice == VK_NULL_HANDLE) {
+        throw std::runtime_error("failed to find a suitable GPU!");
+    }
+
+
+}
+
+bool Craig::Renderer::isDeviceSuitable(VkPhysicalDevice device) {
+	//Since we're just starting out, we'll assume all devices are suitable, but I can change this later depending on what I want to do with the engine.
+    return true;
 }
