@@ -44,10 +44,10 @@ namespace Craig {
 
 		// Physical device selection functions
 		void pickPhysicalDevice(); // Picks a suitable physical device for rendering
-		bool isDeviceSuitable(vk::PhysicalDevice device);
-		QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device);
+		bool isDeviceSuitable(const vk::PhysicalDevice& device);
+		QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device);
 
-		bool checkDeviceExtensionSupport(vk::PhysicalDevice device);
+		bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
 
 		void createLogicalDevice(); //Logical device to interact with the physical device
 

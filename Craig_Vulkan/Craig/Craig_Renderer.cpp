@@ -193,7 +193,7 @@ requires commands to be submitted to a queue. There are different types of queue
 and each family of queues allows only a subset of commands. For example, there could be a queue family that only allows processing 
 of compute commands or one that only allows memory transfer related commands.*/
 
-Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(vk::PhysicalDevice device) {
+Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(const vk::PhysicalDevice& device) {
     QueueFamilyIndices indices;
     // Logic to find queue family indices to populate struct with
 
@@ -221,7 +221,7 @@ Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(vk::Physi
     return indices;
 }
 
-bool Craig::Renderer::isDeviceSuitable(vk::PhysicalDevice device) {
+bool Craig::Renderer::isDeviceSuitable(const vk::PhysicalDevice& device) {
     QueueFamilyIndices indices = findQueueFamilies(device);
 
     bool extensionsSupported = checkDeviceExtensionSupport(device);
@@ -231,7 +231,7 @@ bool Craig::Renderer::isDeviceSuitable(vk::PhysicalDevice device) {
 
 //Here we get the list of available device extensions, and check if the required ones are present
 //by removing them from a set and checking if the set is empty at the end.
-bool Craig::Renderer::checkDeviceExtensionSupport(vk::PhysicalDevice device) {
+bool Craig::Renderer::checkDeviceExtensionSupport(const vk::PhysicalDevice& device) {
 
     std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
 
