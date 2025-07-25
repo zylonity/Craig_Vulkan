@@ -56,9 +56,12 @@ namespace Craig {
 		bool isDeviceSuitable(const vk::PhysicalDevice& device);
 		bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
 
-
 		QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device);
 		SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice& device);
+
+		vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
+		vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
+		vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 
 		void createLogicalDevice(); //Logical device to interact with the physical device
 

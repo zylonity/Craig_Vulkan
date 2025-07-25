@@ -305,3 +305,37 @@ void Craig::Renderer::createLogicalDevice() {
     m_VK_graphicsQueue = m_VK_device.getQueue(indices.graphicsFamily.value(), 0);
     m_VK_presentationQueue = m_VK_device.getQueue(indices.presentFamily.value(), 0);
 }
+vk::SurfaceFormatKHR Craig::Renderer::chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) {
+
+    //Check the colour format and colour space are correct
+    for (const auto& availableFormat : availableFormats) {
+        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) { //TODO: Expose to the class and allow for switching with imgui later.
+            return availableFormat;
+        }
+    }
+
+    return availableFormats[0];
+}
+
+vk::PresentModeKHR Craig::Renderer::chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) {
+
+
+    //VK_PRESENT_MODE_IMMEDIATE_KHR: Images submitted by your application are transferred to the screen right away, which may result in tearing.
+    //VK_PRESENT_MODE_FIFO_KHR : The swap chain is a queue where the display takes an image from the front of the queue when the display is refreshed and the program inserts rendered images at the back of the queue.If the queue is full then the program has to wait.This is most similar to vertical sync as found in modern games.The moment that the display is refreshed is known as "vertical blank".
+    //VK_PRESENT_MODE_FIFO_RELAXED_KHR : This mode only differs from the previous one if the application is late and the queue was empty at the last vertical blank.Instead of waiting for the next vertical blank, the image is transferred right away when it finally arrives.This may result in visible tearing.
+    //VK_PRESENT_MODE_MAILBOX_KHR : This is another variation of the second mode.Instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer ones.This mode can be used to render frames as fast as possible while still avoiding tearing, resulting in fewer latency issues than standard vertical sync.This is commonly known as "triple buffering", although the existence of three buffers alone does not necessarily mean that the framerate is unlocked.
+
+    //TODO: I want to be able to enable/disable Vsync later, so we expose this to the class and use accessors w/ imgui later
+    for (const auto& availablePresentMode : availablePresentModes) {
+        if (availablePresentMode == vk::PresentModeKHR::eMailbox) {
+            return availablePresentMode;
+        }
+    }
+
+
+    return vk::PresentModeKHR::eFifo;
+}
+
+vk::Extent2D Craig::Renderer::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) {
+
+}
