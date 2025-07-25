@@ -1,6 +1,7 @@
 #include <cassert>
 #include <iostream>
 #include <set>
+#include <algorithm>
 
 #include "Craig_Renderer.hpp"
 #include "Craig_Window.hpp"
@@ -337,5 +338,50 @@ vk::PresentModeKHR Craig::Renderer::chooseSwapPresentMode(const std::vector<vk::
 }
 
 vk::Extent2D Craig::Renderer::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) {
+
+    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+        return capabilities.currentExtent;
+    }
+    else {
+        //Rendering resolution, basically.
+        int width, height;
+        SDL_Vulkan_GetDrawableSize(mp_CurrentWindow->getSDLWindow(), &width, &height);
+
+        vk::Extent2D actualExtent;
+        actualExtent.width = std::clamp(static_cast<uint32_t>(width), capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+        actualExtent.height = std::clamp(static_cast<uint32_t>(height), capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+        return actualExtent;
+    }
+
+
+}
+
+void Craig::Renderer::createSwapChain() {
+    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_VK_physicalDevice);
+
+    vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+    vk::PresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+    vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+
+    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+
+    if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
+        imageCount = swapChainSupport.capabilities.maxImageCount;
+    }
+
+    printf("Creating draw buffer/swap chain with %i images\n", imageCount);
+
+    vk::SwapchainCreateInfoKHR createInfo;
+    createInfo
+        .setSurface(m_VK_surface)
+        .setMinImageCount(imageCount)
+        .setImageFormat(surfaceFormat.format)
+        .setImageColorSpace(surfaceFormat.colorSpace)
+        .setImageExtent(extent)
+        .setImageArrayLayers(1) //"always 1 unless you are developing a stereoscopic 3D application"
+        .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
+
+
 
 }

@@ -41,9 +41,12 @@ namespace Craig {
 
 		// Encapsulates the Vulkan initialization process
 		void InitVulkan();
+		void setupDebugMessenger(); // Sets up the Vulkan debug messenger after instance creation
+		void pickPhysicalDevice(); // Picks a suitable physical device for rendering
+		void createLogicalDevice(); //Logical device to interact with the physical device
+		void createSwapChain(); //Create double/triple buffer
 
 		// Debugging functions
-		void setupDebugMessenger(); // Sets up the Vulkan debug messenger after instance creation
 		void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo); // Fills the debug messenger config
 		static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 			VkDebugUtilsMessageSeverityFlagBitsEXT severity,
@@ -52,9 +55,9 @@ namespace Craig {
 			void* userData); // This is the function Vulkan will call to report debug messages
 
 		// Physical device selection functions
-		void pickPhysicalDevice(); // Picks a suitable physical device for rendering
 		bool isDeviceSuitable(const vk::PhysicalDevice& device);
 		bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
+		
 
 		QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device);
 		SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice& device);
@@ -63,7 +66,7 @@ namespace Craig {
 		vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
 		vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 
-		void createLogicalDevice(); //Logical device to interact with the physical device
+		
 
 		const std::vector<const char*> m_VK_deviceExtensions = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME // Required for swapchain support (Like a framebuffer)
