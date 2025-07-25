@@ -47,8 +47,13 @@ namespace Craig {
 		bool isDeviceSuitable(vk::PhysicalDevice device);
 		QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device);
 
+		bool checkDeviceExtensionSupport(vk::PhysicalDevice device);
+
 		void createLogicalDevice(); //Logical device to interact with the physical device
 
+		const std::vector<const char*> m_deviceExtensions = {
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME // Required for swapchain support (Like a framebuffer)
+		};
 
 		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
 

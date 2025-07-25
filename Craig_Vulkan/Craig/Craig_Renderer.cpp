@@ -65,7 +65,6 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 		assert(false && message.c_str()); // Technicallllyyy.. undefined behavior cos of the string, but we want to crash here anyways.
     }
 
-    
 
 	return ret;
 }
@@ -225,7 +224,24 @@ Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(vk::Physi
 bool Craig::Renderer::isDeviceSuitable(vk::PhysicalDevice device) {
     QueueFamilyIndices indices = findQueueFamilies(device);
 
-    return indices.isComplete();
+    bool extensionsSupported = checkDeviceExtensionSupport(device);
+
+    return indices.isComplete() && extensionsSupported;
+}
+
+//Here we get the list of available device extensions, and check if the required ones are present
+//by removing them from a set and checking if the set is empty at the end.
+bool Craig::Renderer::checkDeviceExtensionSupport(vk::PhysicalDevice device) {
+
+    std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
+
+	std::set<std::string> requiredExtensions(m_deviceExtensions.begin(), m_deviceExtensions.end());
+
+    for (const auto& extension : availableExtensions) {
+        requiredExtensions.erase(extension.extensionName);
+    }
+
+    return requiredExtensions.empty();
 }
 
 void Craig::Renderer::createLogicalDevice() {
@@ -253,7 +269,8 @@ void Craig::Renderer::createLogicalDevice() {
     // Fill in device creation info with queue setup and feature requirements
     vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
         .setQueueCreateInfos(queueCreateInfos)
-        .setPEnabledFeatures(&deviceFeatures);
+        .setPEnabledFeatures(&deviceFeatures)
+        .setPEnabledExtensionNames(m_deviceExtensions);
 
     // Create the logical device for the selected physical device
     try {
