@@ -221,12 +221,33 @@ Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(const vk:
     return indices;
 }
 
+Craig::Renderer::SwapChainSupportDetails Craig::Renderer::querySwapChainSupport(const vk::PhysicalDevice& device) {
+    SwapChainSupportDetails details;
+
+    details.capabilities = device.getSurfaceCapabilitiesKHR(m_VK_surface);
+    details.formats = device.getSurfaceFormatsKHR(m_VK_surface);
+    details.presentModes = device.getSurfacePresentModesKHR(m_VK_surface);
+
+
+    return details;
+}
+
 bool Craig::Renderer::isDeviceSuitable(const vk::PhysicalDevice& device) {
-    QueueFamilyIndices indices = findQueueFamilies(device);
+    QueueFamilyIndices indices = findQueueFamilies(device); //Check gfx device can render and present to the screen
 
-    bool extensionsSupported = checkDeviceExtensionSupport(device);
+    bool extensionsSupported = checkDeviceExtensionSupport(device); //Check it supports extensions, especifically the swapchain extension (AKA double buffering)
 
-    return indices.isComplete() && extensionsSupported;
+    bool swapChainAdequate = false; 
+    if (extensionsSupported) {
+        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device); //Check the swapchaine extension it has is actually what we want for this
+        swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+    }
+
+    printf("Found graphics and presentation indices: %s\n", indices.isComplete() ? "True" : "False");
+    printf("Extensions (Like swapchain/double buffers) are supported: %s\n", extensionsSupported ? "True" : "False");
+    printf("The swapchain extension is adequate for our use: %s\n", swapChainAdequate ? "True" : "False");
+
+    return indices.isComplete() && extensionsSupported && swapChainAdequate;
 }
 
 //Here we get the list of available device extensions, and check if the required ones are present
@@ -235,7 +256,7 @@ bool Craig::Renderer::checkDeviceExtensionSupport(const vk::PhysicalDevice& devi
 
     std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
 
-	std::set<std::string> requiredExtensions(m_deviceExtensions.begin(), m_deviceExtensions.end());
+	std::set<std::string> requiredExtensions(m_VK_deviceExtensions.begin(), m_VK_deviceExtensions.end());
 
     for (const auto& extension : availableExtensions) {
         requiredExtensions.erase(extension.extensionName);
@@ -270,7 +291,7 @@ void Craig::Renderer::createLogicalDevice() {
     vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
         .setQueueCreateInfos(queueCreateInfos)
         .setPEnabledFeatures(&deviceFeatures)
-        .setPEnabledExtensionNames(m_deviceExtensions);
+        .setPEnabledExtensionNames(m_VK_deviceExtensions);
 
     // Create the logical device for the selected physical device
     try {

@@ -21,6 +21,8 @@ namespace Craig {
 		CraigError terminate();
 	private:
 
+		//Essentially (from what I understand) it's the index (or like ID) of WHERE the queue is, 
+		// so the queue for graphics rendering could be at place 0, and the queue for presenting could be at place 2
 		struct QueueFamilyIndices {
 			std::optional<uint32_t> graphicsFamily;
 			std::optional<uint32_t> presentFamily;
@@ -28,6 +30,13 @@ namespace Craig {
 			bool isComplete() {
 				return graphicsFamily.has_value() && presentFamily.has_value();
 			}
+		};
+
+		struct SwapChainSupportDetails {
+			vk::SurfaceCapabilitiesKHR capabilities;
+			std::vector<vk::SurfaceFormatKHR> formats;
+			std::vector<vk::PresentModeKHR> presentModes;
+
 		};
 
 		// Encapsulates the Vulkan initialization process
@@ -45,13 +54,15 @@ namespace Craig {
 		// Physical device selection functions
 		void pickPhysicalDevice(); // Picks a suitable physical device for rendering
 		bool isDeviceSuitable(const vk::PhysicalDevice& device);
-		QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device);
-
 		bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
+
+
+		QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device);
+		SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice& device);
 
 		void createLogicalDevice(); //Logical device to interact with the physical device
 
-		const std::vector<const char*> m_deviceExtensions = {
+		const std::vector<const char*> m_VK_deviceExtensions = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME // Required for swapchain support (Like a framebuffer)
 		};
 
