@@ -82,6 +82,13 @@ CraigError Craig::Renderer::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+    m_VK_device.destroySwapchainKHR(m_VK_swapChain);
+
+    m_VK_device.destroy();
+
+    m_VK_instance.destroySurfaceKHR(m_VK_surface);
+    m_VK_instance.destroy();
+
     //Destroy the messenger/debugger
 #if defined(_DEBUG)
     if (m_VK_debugMessenger) {
@@ -95,11 +102,7 @@ CraigError Craig::Renderer::terminate() {
     }
 #endif
 
-    m_VK_device.destroy();
 
-    // Clean up.
-    m_VK_instance.destroySurfaceKHR(m_VK_surface);
-    m_VK_instance.destroy();
 
 	return ret;
 }
@@ -109,6 +112,8 @@ void Craig::Renderer::InitVulkan() {
     setupDebugMessenger(); // Actually enable the messenger
 	pickPhysicalDevice(); // Pick a suitable physical device for rendering
 	createLogicalDevice(); // Create a logical device to interact with the physical device
+    createSwapChain();
+    createImageViews();
 }
 
 // This function is called by Vulkan to report debug messages.
@@ -364,7 +369,7 @@ void Craig::Renderer::createSwapChain() {
     vk::PresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
     vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
-    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1; //Ammount of images we want for buffering, min is probably 2, so tripple buffering
 
     if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
         imageCount = swapChainSupport.capabilities.maxImageCount;
@@ -382,6 +387,45 @@ void Craig::Renderer::createSwapChain() {
         .setImageArrayLayers(1) //"always 1 unless you are developing a stereoscopic 3D application"
         .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
 
+    QueueFamilyIndices indices = findQueueFamilies(m_VK_physicalDevice);
+    uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
+    //In case we have separate graphics and presentation queues.
+    /*According to vulkan-tutorial.com
+    VK_SHARING_MODE_EXCLUSIVE: An image is owned by one queue family at a time and ownership must be explicitly transferred before using it in another queue family.
+    VK_SHARING_MODE_CONCURRENT: Images can be used across multiple queue families without explicit ownership transfers.
+    */
+    if (indices.graphicsFamily != indices.presentFamily) {
+        createInfo.setImageSharingMode(vk::SharingMode::eConcurrent)
+            .setQueueFamilyIndexCount(2)
+            .setPQueueFamilyIndices(queueFamilyIndices);
+    }
+    else {
+        createInfo.setImageSharingMode(vk::SharingMode::eExclusive);
+    }
+
+    //We can transform the image here (like a 90 degree clockwise rotation or horizontal flip.)
+    //Since we don't want any, we just specify the current transformation applied (which should be none)
+    createInfo.setPreTransform(swapChainSupport.capabilities.currentTransform)
+        .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque) //Blending with other windows in the window system (will mostly always be opaque)
+        .setPresentMode(presentMode)
+        .setClipped(VK_TRUE) //The GPU won't render pixels that are obscured (by other windows, for example)  it also means we can't trust the data in the pixels since they might've not rendered.
+        .setOldSwapchain(VK_NULL_HANDLE);
+
+
+    try {
+        m_VK_swapChain = m_VK_device.createSwapchainKHR(createInfo);
+    }
+    catch (const vk::SystemError& err) {
+        throw std::runtime_error("failed to create swap chain!");
+    }
+
+    m_VK_swapChainImages = m_VK_device.getSwapchainImagesKHR(m_VK_swapChain);
+    m_VK_swapChainImageFormat = surfaceFormat.format;
+    m_VK_swapChainExtent = extent;
+
+}
+
+void Craig::Renderer::createImageViews() {
 
 }

@@ -45,6 +45,7 @@ namespace Craig {
 		void pickPhysicalDevice(); // Picks a suitable physical device for rendering
 		void createLogicalDevice(); //Logical device to interact with the physical device
 		void createSwapChain(); //Create double/triple buffer
+		void createImageViews();
 
 		// Debugging functions
 		void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo); // Fills the debug messenger config
@@ -81,17 +82,24 @@ namespace Craig {
 		vk::ApplicationInfo m_VK_appInfo; // Application information for Vulkan instance creation
 		vk::InstanceCreateInfo m_VK_instInfo; // Instance creation information for Vulkan instance
 
+		vk::DebugUtilsMessengerEXT m_VK_debugMessenger; // Debug messenger for Vulkan validation layers
+
 		vk::SurfaceKHR m_VK_surface; // Vulkan surface for rendering (vk::SurfaceKHR wrapper)
+		vk::PhysicalDevice m_VK_physicalDevice; // Physical device for rendering
+		vk::Device m_VK_device; // Logical device for rendering
 
-		vk::DebugUtilsMessengerEXT m_VK_debugMessenger; // Debug messenger for Vulkan validation layers (vk::DebugUtilsMessengerEXT wrapper)
+		vk::Queue m_VK_graphicsQueue; // Graphics queue for rendering
+		vk::Queue m_VK_presentationQueue; // Presentation queue for rendering
 
-		vk::PhysicalDevice m_VK_physicalDevice; // Physical device for rendering (vk::PhysicalDevice wrapper)
+		vk::SwapchainKHR m_VK_swapChain; 
+		std::vector<vk::Image> m_VK_swapChainImages;
+		vk::Format m_VK_swapChainImageFormat;
+		vk::Extent2D m_VK_swapChainExtent;
 
-		vk::Device m_VK_device; // Logical device for rendering (vk::Device wrapper)
+		std::vector<vk::ImageView> m_VK_swapChainImageViews;
 
-		vk::Queue m_VK_graphicsQueue; // Graphics queue for rendering (vk::Queue wrapper)
 
-		vk::Queue m_VK_presentationQueue; // Presentation queue for rendering (vk::Queue wrapper)
+
 	};
 
 
