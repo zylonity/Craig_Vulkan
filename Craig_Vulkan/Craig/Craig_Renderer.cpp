@@ -82,14 +82,21 @@ CraigError Craig::Renderer::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+
+
+    for (auto imageView : m_VK_swapChainImageViews) {
+        m_VK_device.destroyImageView(imageView);
+    }
+
+
     m_VK_device.destroySwapchainKHR(m_VK_swapChain);
 
     m_VK_device.destroy();
 
     m_VK_instance.destroySurfaceKHR(m_VK_surface);
-    m_VK_instance.destroy();
 
     //Destroy the messenger/debugger
+    //Needs to be done before destroying the instance
 #if defined(_DEBUG)
     if (m_VK_debugMessenger) {
         auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
@@ -101,6 +108,10 @@ CraigError Craig::Renderer::terminate() {
         }
     }
 #endif
+
+    m_VK_instance.destroy();
+
+
 
 
 
@@ -428,4 +439,42 @@ void Craig::Renderer::createSwapChain() {
 
 void Craig::Renderer::createImageViews() {
 
+
+    m_VK_swapChainImageViews.resize(m_VK_swapChainImages.size());
+
+    for (size_t i = 0; i < m_VK_swapChainImages.size(); i++)
+    {
+
+        vk::ImageViewCreateInfo createInfo;
+        createInfo.setImage(m_VK_swapChainImages[i])
+            .setViewType(vk::ImageViewType::e2D)
+            .setFormat(m_VK_swapChainImageFormat)
+            .setComponents(vk::ComponentMapping{
+                vk::ComponentSwizzle::eIdentity,
+                vk::ComponentSwizzle::eIdentity,
+                vk::ComponentSwizzle::eIdentity,
+                vk::ComponentSwizzle::eIdentity
+                })
+            .setSubresourceRange(vk::ImageSubresourceRange{
+                vk::ImageAspectFlagBits::eColor, // aspectMask
+                0, 1, // baseMipLevel, levelCount
+                0, 1  // baseArrayLayer, layerCount
+                });
+
+
+        try {
+            m_VK_swapChainImageViews[i] = m_VK_device.createImageView(createInfo);
+        }
+        catch (const vk::SystemError& err) {
+            throw std::runtime_error("failed to create image views!");
+        }
+
+    }
+
+
+    
+
+    
+
+    
 }
