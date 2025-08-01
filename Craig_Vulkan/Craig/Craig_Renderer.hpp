@@ -67,6 +67,8 @@ namespace Craig {
 		vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
 		vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 
+
+		void createGraphicsPipeline();
 		
 
 		const std::vector<const char*> m_VK_deviceExtensions = {

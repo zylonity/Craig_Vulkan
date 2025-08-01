@@ -125,6 +125,8 @@ void Craig::Renderer::InitVulkan() {
 	createLogicalDevice(); // Create a logical device to interact with the physical device
     createSwapChain();
     createImageViews();
+
+    createGraphicsPipeline();
 }
 
 // This function is called by Vulkan to report debug messages.
@@ -470,11 +472,12 @@ void Craig::Renderer::createImageViews() {
         }
 
     }
-
-
     
+}
 
-    
+void Craig::Renderer::createGraphicsPipeline() {
 
-    
+
+
+
 }
