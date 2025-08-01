@@ -45,10 +45,10 @@ vk::ShaderModule Craig::ShaderCompilation::CompileHLSLToShaderModule(vk::Device 
 	if (idx != std::string::npos) {
 		std::wstring extension = filename.substr(idx + 1);
 		if (extension == L"vert") {
-			targetProfile = L"vs_6_1";
+			targetProfile = L"vs_6_4";
 		}
 		if (extension == L"frag") {
-			targetProfile = L"ps_6_1";
+			targetProfile = L"ps_6_4";
 		}
 		// Mapping for other file types go here (cs_x_y, lib_x_y, etc.)
 	}

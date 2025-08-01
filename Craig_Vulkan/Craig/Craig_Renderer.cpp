@@ -5,6 +5,7 @@
 
 #include "Craig_Renderer.hpp"
 #include "Craig_Window.hpp"
+#include "Craig_ShaderCompilation.hpp"
 
 CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 
@@ -62,8 +63,7 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
         InitVulkan();
     }
     catch (const std::exception& e) {
-        std::string message = std::string("Vulkan instance creation failed: ") + e.what();
-		assert(false && message.c_str()); // Technicallllyyy.. undefined behavior cos of the string, but we want to crash here anyways.
+        assert(("Vulkan instance creation failed: " + std::string(e.what())).c_str());
     }
 
 
@@ -82,7 +82,8 @@ CraigError Craig::Renderer::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-
+    m_VK_device.destroyShaderModule(vertShaderModule);
+    m_VK_device.destroyShaderModule(fragShaderModule);
 
     for (auto imageView : m_VK_swapChainImageViews) {
         m_VK_device.destroyImageView(imageView);
@@ -477,7 +478,7 @@ void Craig::Renderer::createImageViews() {
 
 void Craig::Renderer::createGraphicsPipeline() {
 
-
-
+    vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/VertexShader.vert");
+    fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/FragmentShader.frag");
 
 }

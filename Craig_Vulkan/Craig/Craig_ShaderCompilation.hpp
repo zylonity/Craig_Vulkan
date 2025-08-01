@@ -7,7 +7,7 @@ namespace Craig {
 	class ShaderCompilation {
 
 	public:
-		vk::ShaderModule CompileHLSLToShaderModule(vk::Device device, const std::wstring& filename);
+		static vk::ShaderModule CompileHLSLToShaderModule(vk::Device device, const std::wstring& filename);
 		
 	};
 

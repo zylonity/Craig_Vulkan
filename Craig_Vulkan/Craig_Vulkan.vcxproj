@@ -117,6 +117,9 @@
     <PostBuildEvent>
       <Command>xcopy /Y /D "$(VULKAN_SDK)\Bin\dxcompiler.dll" "$(OutDir)."</Command>
     </PostBuildEvent>
+    <FxCompile>
+      <ShaderModel>6.4</ShaderModel>
+    </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -163,6 +166,9 @@
     <PostBuildEvent>
       <Command>xcopy /Y /D "$(VULKAN_SDK)\Bin\dxcompiler.dll" "$(OutDir)."</Command>
     </PostBuildEvent>
+    <FxCompile>
+      <ShaderModel>6.4</ShaderModel>
+    </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Craig\Craig_Framework.cpp" />
@@ -181,8 +187,14 @@
     <ClInclude Include="Template.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="data\shaders\FragmentShader.hlsl" />
-    <FxCompile Include="data\shaders\VertexShader.hlsl" />
+    <FxCompile Include="data\shaders\FragmentShader.frag">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="data\shaders\VertexShader.vert">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+    </FxCompile>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

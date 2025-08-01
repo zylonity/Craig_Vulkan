@@ -62,10 +62,10 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="data\shaders\FragmentShader.hlsl">
+    <FxCompile Include="data\shaders\FragmentShader.frag">
       <Filter>Resource Files</Filter>
     </FxCompile>
-    <FxCompile Include="data\shaders\VertexShader.hlsl">
+    <FxCompile Include="data\shaders\VertexShader.vert">
       <Filter>Resource Files</Filter>
     </FxCompile>
   </ItemGroup>

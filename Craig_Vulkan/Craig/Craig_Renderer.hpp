@@ -100,7 +100,8 @@ namespace Craig {
 
 		std::vector<vk::ImageView> m_VK_swapChainImageViews;
 
-
+		vk::ShaderModule vertShaderModule;
+		vk::ShaderModule fragShaderModule;
 
 	};
 
