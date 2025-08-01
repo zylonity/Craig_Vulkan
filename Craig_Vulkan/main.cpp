@@ -29,7 +29,6 @@
 // Tell SDL not to mess with main()
 #define SDL_MAIN_HANDLED
 
-
 #include <cassert>
 
 #include "Craig/Craig_Framework.hpp"

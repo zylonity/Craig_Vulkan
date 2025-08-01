@@ -37,6 +37,9 @@
     <ClCompile Include="Craig\Craig_Renderer.cpp">
       <Filter>Source Files\Craig</Filter>
     </ClCompile>
+    <ClCompile Include="Craig\Craig_ShaderCompilation.cpp">
+      <Filter>Source Files\Craig</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Craig\Craig_Framework.hpp">
@@ -54,5 +57,16 @@
     <ClInclude Include="Craig\Craig_Renderer.hpp">
       <Filter>Header Files\Craig</Filter>
     </ClInclude>
+    <ClInclude Include="Craig\Craig_ShaderCompilation.hpp">
+      <Filter>Header Files\Craig</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="data\shaders\FragmentShader.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="data\shaders\VertexShader.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>
