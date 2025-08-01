@@ -7,6 +7,8 @@
 
 
 //refer to https://docs.vulkan.org/guide/latest/hlsl.html for why i wrote this
+//The reason i'm stubbornly sticking to HLSL is because it's the closest semantically to AGC, original craig.
+
 vk::ShaderModule Craig::ShaderCompilation::CompileHLSLToShaderModule(vk::Device device, const std::wstring& filename) {
 	HRESULT hres;
 

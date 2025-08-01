@@ -481,4 +481,18 @@ void Craig::Renderer::createGraphicsPipeline() {
     vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/VertexShader.vert");
     fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/FragmentShader.frag");
 
+    vk::PipelineShaderStageCreateInfo vertShaderStageInfo;
+
+    vertShaderStageInfo.setStage(vk::ShaderStageFlagBits::eVertex)
+        .setModule(vertShaderModule)
+        .setPName("main");
+
+    vk::PipelineShaderStageCreateInfo fragShaderStageInfo;
+
+    fragShaderStageInfo.setStage(vk::ShaderStageFlagBits::eFragment)
+        .setModule(fragShaderModule)
+        .setPName("main");
+
+    vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
 }
