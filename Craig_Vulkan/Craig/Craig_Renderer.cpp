@@ -83,6 +83,7 @@ CraigError Craig::Renderer::terminate() {
 	CraigError ret = CRAIG_SUCCESS;
 
     m_VK_device.destroyPipelineLayout(m_VK_pipelineLayout);
+    m_VK_device.destroyRenderPass(m_VK_renderPass);
 
     m_VK_device.destroyShaderModule(m_VK_vertShaderModule);
     m_VK_device.destroyShaderModule(m_VK_fragShaderModule);
@@ -128,7 +129,7 @@ void Craig::Renderer::InitVulkan() {
 	createLogicalDevice(); // Create a logical device to interact with the physical device
     createSwapChain();
     createImageViews();
-
+    createRenderPass();
     createGraphicsPipeline();
 }
 
@@ -558,7 +559,44 @@ void Craig::Renderer::createGraphicsPipeline() {
         m_VK_pipelineLayout = m_VK_device.createPipelineLayout(pipelineLayoutInfo);
     }
     catch (const vk::SystemError& err) {
-        throw std::runtime_error("failed to create image views!");
+        throw std::runtime_error("failed to createPipelineLayout!");
+    }
+
+}
+
+void Craig::Renderer::createRenderPass() {
+
+    vk::AttachmentDescription colourAttachment;
+    colourAttachment.setFormat(m_VK_swapChainImageFormat)
+        .setSamples(vk::SampleCountFlagBits::e1)
+        .setLoadOp(vk::AttachmentLoadOp::eClear)
+        .setStoreOp(vk::AttachmentStoreOp::eStore)
+        .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+        .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
+        .setInitialLayout(vk::ImageLayout::eUndefined)
+        .setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+
+    vk::AttachmentReference colourAttachmentRef;
+    colourAttachmentRef.setAttachment(0) //We only have one attachment description so it'll go to that
+        .setLayout(vk::ImageLayout::eColorAttachmentOptimal);
+
+    vk::SubpassDescription subpass;
+    subpass.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
+        .setColorAttachmentCount(1)
+        .setPColorAttachments(&colourAttachmentRef);
+
+    vk::RenderPassCreateInfo renderPassInfo;
+    renderPassInfo.setAttachmentCount(1)
+        .setPAttachments(&colourAttachment)
+        .setSubpassCount(1)
+        .setPSubpasses(&subpass);
+
+
+    try {
+        m_VK_renderPass = m_VK_device.createRenderPass(renderPassInfo);
+    }
+    catch (const vk::SystemError& err) {
+        throw std::runtime_error("failed to create render pass!");
     }
 
 }

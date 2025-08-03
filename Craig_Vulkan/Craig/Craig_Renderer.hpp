@@ -46,6 +46,9 @@ namespace Craig {
 		void createLogicalDevice(); //Logical device to interact with the physical device
 		void createSwapChain(); //Create double/triple buffer
 		void createImageViews();
+		void createRenderPass();
+		void createGraphicsPipeline();
+
 
 		// Debugging functions
 		void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo); // Fills the debug messenger config
@@ -68,7 +71,7 @@ namespace Craig {
 		vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 
 
-		void createGraphicsPipeline();
+		
 		
 
 		const std::vector<const char*> m_VK_deviceExtensions = {
@@ -103,7 +106,10 @@ namespace Craig {
 		vk::ShaderModule m_VK_vertShaderModule;
 		vk::ShaderModule m_VK_fragShaderModule;
 
+		vk::RenderPass m_VK_renderPass;
 		vk::PipelineLayout m_VK_pipelineLayout;
+
+		
 
 	};
 
