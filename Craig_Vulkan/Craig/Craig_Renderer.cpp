@@ -82,6 +82,7 @@ CraigError Craig::Renderer::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+    m_VK_device.destroyPipeline(m_VK_graphicsPipeline);
     m_VK_device.destroyPipelineLayout(m_VK_pipelineLayout);
     m_VK_device.destroyRenderPass(m_VK_renderPass);
 
@@ -561,6 +562,32 @@ void Craig::Renderer::createGraphicsPipeline() {
     catch (const vk::SystemError& err) {
         throw std::runtime_error("failed to createPipelineLayout!");
     }
+
+    vk::GraphicsPipelineCreateInfo pipelineInfo;
+
+    pipelineInfo.setStageCount(2)
+        .setPStages(shaderStages)
+        .setPVertexInputState(&vertexInputInfo)
+        .setPInputAssemblyState(&inputAssembly)
+        .setPViewportState(&viewportState)
+        .setPRasterizationState(&rasterizer)
+        .setPMultisampleState(&multisampling)
+        .setPDepthStencilState(nullptr)
+        .setPColorBlendState(&colourBlending)
+        .setPDynamicState(&dynamicState)
+        .setLayout(m_VK_pipelineLayout)
+        .setRenderPass(m_VK_renderPass)
+        .setSubpass(0);
+
+
+    //please tell me why this is the only function so far that returns the stupid vk::ResultValue<vk::Pipeline>
+    auto result = m_VK_device.createGraphicsPipeline(VK_NULL_HANDLE, pipelineInfo);
+
+    if (result.result != vk::Result::eSuccess) {
+        throw std::runtime_error("Failed to create graphics pipeline!");
+    }
+    m_VK_graphicsPipeline = result.value;
+
 
 }
 

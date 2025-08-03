@@ -108,7 +108,7 @@ namespace Craig {
 
 		vk::RenderPass m_VK_renderPass;
 		vk::PipelineLayout m_VK_pipelineLayout;
-
+		vk::Pipeline m_VK_graphicsPipeline;
 		
 
 	};
