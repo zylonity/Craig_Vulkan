@@ -82,8 +82,10 @@ CraigError Craig::Renderer::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-    m_VK_device.destroyShaderModule(vertShaderModule);
-    m_VK_device.destroyShaderModule(fragShaderModule);
+    m_VK_device.destroyPipelineLayout(m_VK_pipelineLayout);
+
+    m_VK_device.destroyShaderModule(m_VK_vertShaderModule);
+    m_VK_device.destroyShaderModule(m_VK_fragShaderModule);
 
     for (auto imageView : m_VK_swapChainImageViews) {
         m_VK_device.destroyImageView(imageView);
@@ -478,21 +480,85 @@ void Craig::Renderer::createImageViews() {
 
 void Craig::Renderer::createGraphicsPipeline() {
 
-    vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/VertexShader.vert");
-    fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/FragmentShader.frag");
+    m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/VertexShader.vert");
+    m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/FragmentShader.frag");
 
     vk::PipelineShaderStageCreateInfo vertShaderStageInfo;
 
     vertShaderStageInfo.setStage(vk::ShaderStageFlagBits::eVertex)
-        .setModule(vertShaderModule)
+        .setModule(m_VK_vertShaderModule)
         .setPName("main");
 
     vk::PipelineShaderStageCreateInfo fragShaderStageInfo;
 
     fragShaderStageInfo.setStage(vk::ShaderStageFlagBits::eFragment)
-        .setModule(fragShaderModule)
+        .setModule(m_VK_fragShaderModule)
         .setPName("main");
 
     vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+    //No vertex data to load for now since its hardcoded into the shader.
+    vertexInputInfo.setVertexBindingDescriptionCount(0)
+        .setPVertexBindingDescriptions(nullptr) //These should point to an array of structs w vertex descriptions
+        .setVertexAttributeDescriptionCount(0)
+        .setPVertexAttributeDescriptions(nullptr);
+
+
+    vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
+    inputAssembly.setTopology(vk::PrimitiveTopology::eTriangleList)
+        .setPrimitiveRestartEnable(vk::False);
+
+    vk::PipelineViewportStateCreateInfo viewportState;
+    viewportState.setViewportCount(1)
+        .setScissorCount(1);
+
+    vk::PipelineRasterizationStateCreateInfo rasterizer;
+    rasterizer.setDepthClampEnable(vk::False)
+        .setPolygonMode(vk::PolygonMode::eFill)
+        .setLineWidth(1.0f)
+        .setCullMode(vk::CullModeFlagBits::eBack)
+        .setFrontFace(vk::FrontFace::eClockwise)
+        .setDepthBiasEnable(false);
+
+    //Multisampling/Anti-Aliasing
+    //Keeping it disabled for now but will follow up later in the tutorial
+    vk::PipelineMultisampleStateCreateInfo multisampling;
+    multisampling.setSampleShadingEnable(vk::False)
+        .setRasterizationSamples(vk::SampleCountFlagBits::e1);
+
+    vk::PipelineColorBlendAttachmentState colourBlendAttachment;
+    colourBlendAttachment.setColorWriteMask(
+        vk::ColorComponentFlagBits::eR |
+        vk::ColorComponentFlagBits::eG |
+        vk::ColorComponentFlagBits::eB |
+        vk::ColorComponentFlagBits::eA)
+        .setBlendEnable(vk::False);
+
+    vk::PipelineColorBlendStateCreateInfo colourBlending;
+    colourBlending.setLogicOpEnable(vk::False)
+        .setLogicOp(vk::LogicOp::eCopy)
+        .setAttachmentCount(1)
+        .setPAttachments(&colourBlendAttachment);
+
+    //Some bits of the pipeline can be changed, like the viewport, without having to recreate the pipeline/bake them again
+    std::vector<vk::DynamicState> dynamicStates = {
+        vk::DynamicState::eViewport,
+        vk::DynamicState::eScissor
+    };
+
+    vk::PipelineDynamicStateCreateInfo dynamicState;
+    dynamicState.setDynamicStateCount(static_cast<uint32_t>(dynamicStates.size()))
+        .setPDynamicStates(dynamicStates.data());
+
+
+    vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
+
+    try {
+        m_VK_pipelineLayout = m_VK_device.createPipelineLayout(pipelineLayoutInfo);
+    }
+    catch (const vk::SystemError& err) {
+        throw std::runtime_error("failed to create image views!");
+    }
 
 }
