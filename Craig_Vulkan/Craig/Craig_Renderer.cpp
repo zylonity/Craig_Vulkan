@@ -7,6 +7,41 @@
 #include "Craig_Window.hpp"
 #include "Craig_ShaderCompilation.hpp"
 
+
+// This function is called by Vulkan to report debug messages.
+// TODO: Maybe switch this to a logger later on, avoiding std::cerr
+VKAPI_ATTR VkBool32 VKAPI_CALL Craig::Renderer::debugCallback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+    VkDebugUtilsMessageTypeFlagsEXT type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
+    void* userData) {
+    std::cerr << "Validation layer: " << callbackData->pMessage << std::endl;
+    return VK_FALSE;
+}
+
+// Fills out the configuration for the Vulkan debug messenger.
+void Craig::Renderer::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
+    createInfo = {}; // Zero out the struct to avoid uninitialized garbage
+
+    // Tell Vulkan this is a debug messenger creation struct
+    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+
+    // Choose the severity levels of messages you want to receive
+    createInfo.messageSeverity =
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | // Informational messages (can be spammy)
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | // Potential issues, not always fatal
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;    // Serious problems that likely break things
+
+    // Specify which types of messages you care about
+    createInfo.messageType =
+        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |     // Miscellaneous messages
+        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |  // Validation layer warnings/errors
+        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;  // Performance issues (e.g. suboptimal usage)
+
+    // Provide the callback function to handle these messages
+    createInfo.pfnUserCallback = debugCallback;
+}
+
 CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 
 	CraigError ret = CRAIG_SUCCESS;
@@ -78,51 +113,6 @@ CraigError Craig::Renderer::update() {
 }
 
 
-CraigError Craig::Renderer::terminate() {
-
-	CraigError ret = CRAIG_SUCCESS;
-
-    m_VK_device.destroyPipeline(m_VK_graphicsPipeline);
-    m_VK_device.destroyPipelineLayout(m_VK_pipelineLayout);
-    m_VK_device.destroyRenderPass(m_VK_renderPass);
-
-    m_VK_device.destroyShaderModule(m_VK_vertShaderModule);
-    m_VK_device.destroyShaderModule(m_VK_fragShaderModule);
-
-    for (auto imageView : m_VK_swapChainImageViews) {
-        m_VK_device.destroyImageView(imageView);
-    }
-
-
-    m_VK_device.destroySwapchainKHR(m_VK_swapChain);
-
-    m_VK_device.destroy();
-
-    m_VK_instance.destroySurfaceKHR(m_VK_surface);
-
-    //Destroy the messenger/debugger
-    //Needs to be done before destroying the instance
-#if defined(_DEBUG)
-    if (m_VK_debugMessenger) {
-        auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
-            m_VK_instance.getProcAddr("vkDestroyDebugUtilsMessengerEXT");
-
-        if (func) {
-            func(static_cast<VkInstance>(m_VK_instance),
-                static_cast<VkDebugUtilsMessengerEXT>(m_VK_debugMessenger), nullptr);
-        }
-    }
-#endif
-
-    m_VK_instance.destroy();
-
-
-
-
-
-	return ret;
-}
-
 void Craig::Renderer::InitVulkan() {
     
     setupDebugMessenger(); // Actually enable the messenger
@@ -132,40 +122,7 @@ void Craig::Renderer::InitVulkan() {
     createImageViews();
     createRenderPass();
     createGraphicsPipeline();
-}
-
-// This function is called by Vulkan to report debug messages.
-// TODO: Maybe switch this to a logger later on, avoiding std::cerr
-VKAPI_ATTR VkBool32 VKAPI_CALL Craig::Renderer::debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-    VkDebugUtilsMessageTypeFlagsEXT type,
-    const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
-    void* userData) {
-    std::cerr << "Validation layer: " << callbackData->pMessage << std::endl;
-    return VK_FALSE;
-}
-
-// Fills out the configuration for the Vulkan debug messenger.
-void Craig::Renderer::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
-    createInfo = {}; // Zero out the struct to avoid uninitialized garbage
-
-    // Tell Vulkan this is a debug messenger creation struct
-    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-
-    // Choose the severity levels of messages you want to receive
-    createInfo.messageSeverity =
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | // Informational messages (can be spammy)
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | // Potential issues, not always fatal
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;    // Serious problems that likely break things
-
-    // Specify which types of messages you care about
-    createInfo.messageType =
-        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |     // Miscellaneous messages
-        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |  // Validation layer warnings/errors
-        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;  // Performance issues (e.g. suboptimal usage)
-
-    // Provide the callback function to handle these messages
-    createInfo.pfnUserCallback = debugCallback;
+    createFrameBuffers();
 }
 
 // Registers the debug messenger with Vulkan using the previously filled-in struct
@@ -626,4 +583,105 @@ void Craig::Renderer::createRenderPass() {
         throw std::runtime_error("failed to create render pass!");
     }
 
+}
+
+void Craig::Renderer::createFrameBuffers() {
+
+    m_VK_swapChainFramebuffers.resize(m_VK_swapChainImageViews.size());
+
+    for (size_t i = 0; i < m_VK_swapChainImageViews.size(); i++)
+    {
+        vk::ImageView attachments[]{
+            m_VK_swapChainImageViews[i]
+        };
+
+        vk::FramebufferCreateInfo frameBufferInfo;
+        frameBufferInfo.setRenderPass(m_VK_renderPass)
+            .setAttachmentCount(1)
+            .setPAttachments(attachments)
+            .setWidth(m_VK_swapChainExtent.width)
+            .setHeight(m_VK_swapChainExtent.height)
+            .setLayers(1);
+
+        try {
+            m_VK_swapChainFramebuffers[i] = m_VK_device.createFramebuffer(frameBufferInfo);
+        }
+        catch (const vk::SystemError& err) {
+            throw std::runtime_error("failed to create framebuffer!");
+        }
+        
+
+
+    };
+
+}
+
+void Craig::Renderer::createCommandPool() {
+
+    QueueFamilyIndices queueFamilyIndices = findQueueFamilies(m_VK_physicalDevice);
+
+    vk::CommandPoolCreateInfo poolInfo;
+    poolInfo.setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer)
+        .setQueueFamilyIndex(queueFamilyIndices.graphicsFamily.value());
+
+    try {
+        m_VK_commandPool = m_VK_device.createCommandPool(poolInfo);
+    }
+    catch (const vk::SystemError& err) {
+        throw std::runtime_error("failed to create command pool!");
+    }
+    
+
+}
+
+
+CraigError Craig::Renderer::terminate() {
+
+    CraigError ret = CRAIG_SUCCESS;
+
+    m_VK_device.destroyCommandPool(m_VK_commandPool);
+
+    for (auto framebuffer : m_VK_swapChainFramebuffers) {
+        m_VK_device.destroyFramebuffer(framebuffer);
+    }
+
+    m_VK_device.destroyPipeline(m_VK_graphicsPipeline);
+    m_VK_device.destroyPipelineLayout(m_VK_pipelineLayout);
+    m_VK_device.destroyRenderPass(m_VK_renderPass);
+
+    m_VK_device.destroyShaderModule(m_VK_vertShaderModule);
+    m_VK_device.destroyShaderModule(m_VK_fragShaderModule);
+
+    for (auto imageView : m_VK_swapChainImageViews) {
+        m_VK_device.destroyImageView(imageView);
+    }
+
+
+    m_VK_device.destroySwapchainKHR(m_VK_swapChain);
+
+    m_VK_device.destroy();
+
+    m_VK_instance.destroySurfaceKHR(m_VK_surface);
+
+    //Destroy the messenger/debugger
+    //Needs to be done before destroying the instance
+#if defined(_DEBUG)
+    if (m_VK_debugMessenger) {
+        auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
+            m_VK_instance.getProcAddr("vkDestroyDebugUtilsMessengerEXT");
+
+        if (func) {
+            func(static_cast<VkInstance>(m_VK_instance),
+                static_cast<VkDebugUtilsMessengerEXT>(m_VK_debugMessenger), nullptr);
+        }
+    }
+#endif
+
+    m_VK_instance.destroy();
+
+
+
+
+
+    return ret;
 }

@@ -48,6 +48,8 @@ namespace Craig {
 		void createImageViews();
 		void createRenderPass();
 		void createGraphicsPipeline();
+		void createFrameBuffers();
+		void createCommandPool();
 
 
 		// Debugging functions
@@ -110,6 +112,10 @@ namespace Craig {
 		vk::PipelineLayout m_VK_pipelineLayout;
 		vk::Pipeline m_VK_graphicsPipeline;
 		
+
+		std::vector<vk::Framebuffer> m_VK_swapChainFramebuffers;
+
+		vk::CommandPool m_VK_commandPool;
 
 	};
 
