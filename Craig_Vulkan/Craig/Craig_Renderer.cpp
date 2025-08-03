@@ -123,6 +123,8 @@ void Craig::Renderer::InitVulkan() {
     createRenderPass();
     createGraphicsPipeline();
     createFrameBuffers();
+    createCommandPool();
+    createCommandBuffer();
 }
 
 // Registers the debug messenger with Vulkan using the previously filled-in struct
@@ -634,6 +636,26 @@ void Craig::Renderer::createCommandPool() {
 
 }
 
+void Craig::Renderer::createCommandBuffer() {
+
+    vk::CommandBufferAllocateInfo allocInfo;
+    allocInfo.setCommandPool(m_VK_commandPool)
+        .setLevel(vk::CommandBufferLevel::ePrimary)
+        .setCommandBufferCount(1);
+
+    try {
+        m_VK_commandBuffer = m_VK_device.allocateCommandBuffers(allocInfo).front();
+    }
+    catch (const vk::SystemError& err) {
+        throw std::runtime_error("failed to allocate command buffers!");
+    }
+
+
+}
+
+void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex) {
+
+}
 
 CraigError Craig::Renderer::terminate() {
 

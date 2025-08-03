@@ -50,6 +50,7 @@ namespace Craig {
 		void createGraphicsPipeline();
 		void createFrameBuffers();
 		void createCommandPool();
+		void createCommandBuffer();
 
 
 		// Debugging functions
@@ -72,7 +73,7 @@ namespace Craig {
 		vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
 		vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 
-
+		void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 		
 		
 
@@ -116,6 +117,9 @@ namespace Craig {
 		std::vector<vk::Framebuffer> m_VK_swapChainFramebuffers;
 
 		vk::CommandPool m_VK_commandPool;
+		vk::CommandBuffer m_VK_commandBuffer;
+
+		
 
 	};
 
