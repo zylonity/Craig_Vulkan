@@ -12,6 +12,7 @@ constexpr uint32_t kVK_AppVersion = 1;
 constexpr char kVK_EngineName[] = "Craig";
 constexpr uint32_t kVK_EngineVersion = 1;
 
+constexpr float kClearColour[4] = { 1.0f, 0.5f, 0.0f, 1.0f }; // Clear colour for the render target
 
 
 enum CraigError {

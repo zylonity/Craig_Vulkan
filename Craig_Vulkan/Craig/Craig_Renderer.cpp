@@ -655,6 +655,70 @@ void Craig::Renderer::createCommandBuffer() {
 
 void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex) {
 
+    vk::CommandBufferBeginInfo beginInfo;
+
+    if (commandBuffer.begin(&beginInfo) != vk::Result::eSuccess) {
+        throw std::runtime_error("failed to begin recording command buffer!");
+    }
+
+    vk::RenderPassBeginInfo renderPassInfo;
+
+    renderPassInfo.setRenderPass(m_VK_renderPass)
+        .setFramebuffer(m_VK_swapChainFramebuffers[imageIndex])
+        .renderArea.setOffset({ 0, 0 })
+                   .setExtent(m_VK_swapChainExtent);
+
+    vk::ClearValue clearValue;
+    clearValue.setColor({ kClearColour[0], kClearColour[1], kClearColour[2], kClearColour[3] });
+
+    renderPassInfo.setClearValueCount(1)
+        .setPClearValues(&clearValue);
+
+    commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_VK_graphicsPipeline);
+
+    vk::Viewport viewport;
+    viewport.setX(0.0f)
+        .setY(0.0f)
+        .setWidth(static_cast<float>(m_VK_swapChainExtent.width))
+        .setHeight(static_cast<float>(m_VK_swapChainExtent.height))
+        .setMinDepth(0.0f)
+        .setMaxDepth(1.0f);
+
+    commandBuffer.setViewport(0, viewport);
+
+    vk::Rect2D scissor;
+    scissor.setOffset({ 0, 0 })
+        .setExtent(m_VK_swapChainExtent);
+
+    commandBuffer.setScissor(0, scissor);
+
+
+    /*
+    vertexCount: Even though we don't have a vertex buffer, we technically still have 3 vertices to draw.
+    instanceCount: Used for instanced rendering, use 1 if you're not doing that.
+    firstVertex: Used as an offset into the vertex buffer, defines the lowest value of gl_VertexIndex.
+    firstInstance: Used as an offset for instanced rendering, defines the lowest value of gl_InstanceIndex.
+    */
+    commandBuffer.draw(3, 1, 0, 0);
+
+
+    commandBuffer.endRenderPass();
+
+
+    try {
+        commandBuffer.end();
+    }
+    catch (const vk::SystemError& err) {
+        throw std::runtime_error("failed to record command buffer!");
+    }
+
+    
+}
+
+void Craig::Renderer::drawFrame() {
+
 }
 
 CraigError Craig::Renderer::terminate() {

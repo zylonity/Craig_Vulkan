@@ -52,6 +52,8 @@ namespace Craig {
 		void createCommandPool();
 		void createCommandBuffer();
 
+		void drawFrame();
+
 
 		// Debugging functions
 		void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo); // Fills the debug messenger config
