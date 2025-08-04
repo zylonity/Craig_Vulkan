@@ -737,9 +737,15 @@ void Craig::Renderer::createSyncObjects() {
     vk::FenceCreateInfo fenceInfo;
     fenceInfo.setFlags(vk::FenceCreateFlagBits::eSignaled); //Means it won't run the first frame
 
+    m_VK_renderFinishedSemaphores.resize(m_VK_swapChainImages.size());
+
     try {
         m_VK_imageAvailableSemaphore = m_VK_device.createSemaphore(semaphoreInfo);
-        m_VK_renderFinishedSemaphore = m_VK_device.createSemaphore(semaphoreInfo);
+        
+        for (size_t i = 0; i < m_VK_swapChainImages.size(); i++) {
+            m_VK_renderFinishedSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
+        }
+
         m_VK_inFlightFence = m_VK_device.createFence(fenceInfo);
     }
     catch (const vk::SystemError& err) {
@@ -769,7 +775,7 @@ void Craig::Renderer::drawFrame() {
         .setCommandBufferCount(1)
         .setPCommandBuffers(&m_VK_commandBuffer);
 
-    vk::Semaphore signalSemaphores[] = { m_VK_renderFinishedSemaphore };
+    vk::Semaphore signalSemaphores[] = { m_VK_renderFinishedSemaphores[imageIndex] };
     submitInfo.setSignalSemaphoreCount(1)
         .setPSignalSemaphores(signalSemaphores);
 
@@ -802,7 +808,12 @@ CraigError Craig::Renderer::terminate() {
     m_VK_device.waitIdle();
 
     m_VK_device.destroySemaphore(m_VK_imageAvailableSemaphore);
-    m_VK_device.destroySemaphore(m_VK_renderFinishedSemaphore);
+
+    for (auto semaphore : m_VK_renderFinishedSemaphores) {
+        m_VK_device.destroySemaphore(semaphore);
+    }
+
+    
     m_VK_device.destroyFence(m_VK_inFlightFence);
 
     m_VK_device.destroyCommandPool(m_VK_commandPool);

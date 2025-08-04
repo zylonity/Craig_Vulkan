@@ -123,7 +123,7 @@ namespace Craig {
 		vk::CommandBuffer m_VK_commandBuffer;
 
 		vk::Semaphore m_VK_imageAvailableSemaphore;
-		vk::Semaphore m_VK_renderFinishedSemaphore;
+		std::vector<vk::Semaphore> m_VK_renderFinishedSemaphores;
 
 		vk::Fence m_VK_inFlightFence;
 
