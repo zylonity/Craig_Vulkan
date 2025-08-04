@@ -51,6 +51,7 @@ namespace Craig {
 		void createFrameBuffers();
 		void createCommandPool();
 		void createCommandBuffer();
+		void createSyncObjects();
 
 		void drawFrame();
 
@@ -121,7 +122,10 @@ namespace Craig {
 		vk::CommandPool m_VK_commandPool;
 		vk::CommandBuffer m_VK_commandBuffer;
 
-		
+		vk::Semaphore m_VK_imageAvailableSemaphore;
+		vk::Semaphore m_VK_renderFinishedSemaphore;
+
+		vk::Fence m_VK_inFlightFence;
 
 	};
 

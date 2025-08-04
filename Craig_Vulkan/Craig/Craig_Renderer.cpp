@@ -109,6 +109,8 @@ CraigError Craig::Renderer::update() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+    drawFrame();
+
 	return ret;
 }
 
@@ -125,6 +127,7 @@ void Craig::Renderer::InitVulkan() {
     createFrameBuffers();
     createCommandPool();
     createCommandBuffer();
+    createSyncObjects();
 }
 
 // Registers the debug messenger with Vulkan using the previously filled-in struct
@@ -571,11 +574,22 @@ void Craig::Renderer::createRenderPass() {
         .setColorAttachmentCount(1)
         .setPColorAttachments(&colourAttachmentRef);
 
+    vk::SubpassDependency dependency;
+    dependency.setSrcSubpass(vk::SubpassExternal)
+        .setDstSubpass(0)
+        .setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
+        .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
+        .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+
     vk::RenderPassCreateInfo renderPassInfo;
     renderPassInfo.setAttachmentCount(1)
         .setPAttachments(&colourAttachment)
         .setSubpassCount(1)
-        .setPSubpasses(&subpass);
+        .setPSubpasses(&subpass)
+        .setDependencyCount(1)
+        .setDependencies(dependency);
+
+
 
 
     try {
@@ -717,13 +731,79 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     
 }
 
+void Craig::Renderer::createSyncObjects() {
+
+    vk::SemaphoreCreateInfo semaphoreInfo;
+    vk::FenceCreateInfo fenceInfo;
+    fenceInfo.setFlags(vk::FenceCreateFlagBits::eSignaled); //Means it won't run the first frame
+
+    try {
+        m_VK_imageAvailableSemaphore = m_VK_device.createSemaphore(semaphoreInfo);
+        m_VK_renderFinishedSemaphore = m_VK_device.createSemaphore(semaphoreInfo);
+        m_VK_inFlightFence = m_VK_device.createFence(fenceInfo);
+    }
+    catch (const vk::SystemError& err) {
+        throw std::runtime_error("failed to record command buffer!");
+    }
+
+}
+
 void Craig::Renderer::drawFrame() {
+    m_VK_device.waitForFences(m_VK_inFlightFence, vk::True, UINT64_MAX); //Returns success or fail, idrk why.
+
+    m_VK_device.resetFences(m_VK_inFlightFence);
+
+    uint32_t imageIndex = m_VK_device.acquireNextImageKHR(m_VK_swapChain, UINT64_MAX, m_VK_imageAvailableSemaphore).value;
+
+    m_VK_commandBuffer.reset();
+    recordCommandBuffer(m_VK_commandBuffer, imageIndex);
+
+    vk::SubmitInfo submitInfo;
+
+    vk::Semaphore waitSemaphores[] = { m_VK_imageAvailableSemaphore };
+    vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
+
+    submitInfo.setWaitSemaphoreCount(1)
+        .setPWaitSemaphores(waitSemaphores)
+        .setPWaitDstStageMask(waitStages)
+        .setCommandBufferCount(1)
+        .setPCommandBuffers(&m_VK_commandBuffer);
+
+    vk::Semaphore signalSemaphores[] = { m_VK_renderFinishedSemaphore };
+    submitInfo.setSignalSemaphoreCount(1)
+        .setPSignalSemaphores(signalSemaphores);
+
+    try {
+        m_VK_graphicsQueue.submit(submitInfo, m_VK_inFlightFence);
+    }
+    catch (const vk::SystemError& err) {
+        throw std::runtime_error("failed to submit draw command buffer!");
+    }
+    
+    vk::PresentInfoKHR presentInfo;
+    presentInfo.setWaitSemaphoreCount(1)
+        .setPWaitSemaphores(signalSemaphores);
+
+    vk::SwapchainKHR swapChains[] = { m_VK_swapChain };
+    presentInfo.setSwapchainCount(1)
+        .setPSwapchains(swapChains)
+        .setPImageIndices(&imageIndex);
+
+    m_VK_presentationQueue.presentKHR(presentInfo);
+
+
 
 }
 
 CraigError Craig::Renderer::terminate() {
 
     CraigError ret = CRAIG_SUCCESS;
+
+    m_VK_device.waitIdle();
+
+    m_VK_device.destroySemaphore(m_VK_imageAvailableSemaphore);
+    m_VK_device.destroySemaphore(m_VK_renderFinishedSemaphore);
+    m_VK_device.destroyFence(m_VK_inFlightFence);
 
     m_VK_device.destroyCommandPool(m_VK_commandPool);
 
@@ -764,10 +844,6 @@ CraigError Craig::Renderer::terminate() {
 #endif
 
     m_VK_instance.destroy();
-
-
-
-
 
     return ret;
 }
