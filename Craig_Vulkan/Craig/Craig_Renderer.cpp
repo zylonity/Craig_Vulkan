@@ -110,11 +110,6 @@ CraigError Craig::Renderer::update() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-    if (mp_CurrentWindow->getResizeNeeded() == true) {
-        recreateSwapChain();
-        mp_CurrentWindow->finishedResize();
-    }
-
     drawFrame();
 
 	return ret;
@@ -651,6 +646,15 @@ void Craig::Renderer::cleanupSwapChain() {
 }
 
 void Craig::Renderer::recreateSwapChain() {
+
+    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_VK_physicalDevice);
+    vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+
+    if (extent.width <= 0 || extent.height <= 0) {
+        return; // Skip this frame
+    }
+
+
     m_VK_device.waitIdle();
 
     cleanupSwapChain();
@@ -793,21 +797,28 @@ void Craig::Renderer::drawFrame() {
     // Wait until the previous frame has finished
     m_VK_device.waitForFences(m_VK_inFlightFences[m_currentFrame], vk::True, UINT64_MAX);
 
+    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_VK_physicalDevice);
+    vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
-    // Acquire an image from the swapchain
-    auto nextImageResult = m_VK_device.acquireNextImageKHR(m_VK_swapChain, UINT64_MAX, m_VK_imageAvailableSemaphores[m_currentFrame]);
+    if (extent.width <= 0 || extent.height <= 0) {
+        return; // Skip this frame
+    }
 
-    if (nextImageResult.result == vk::Result::eErrorOutOfDateKHR) {
+    uint32_t imageIndex;
+    VkResult nextImageResult = vkAcquireNextImageKHR(m_VK_device, m_VK_swapChain, UINT64_MAX, m_VK_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+    if (nextImageResult == VK_ERROR_OUT_OF_DATE_KHR) {
         recreateSwapChain();
         return;
     }
-    else if (nextImageResult.result != vk::Result::eSuccess && nextImageResult.result != vk::Result::eSuboptimalKHR) {
+    else if (nextImageResult != VK_SUCCESS && nextImageResult != VK_SUBOPTIMAL_KHR) {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
+
     m_VK_device.resetFences(m_VK_inFlightFences[m_currentFrame]);
 
-    uint32_t imageIndex = nextImageResult.value;
+    
 
     // Record drawing commands into the command buffer
     m_VK_commandBuffers[m_currentFrame].reset();
@@ -848,12 +859,13 @@ void Craig::Renderer::drawFrame() {
 
 
     //We have to revert back to the original C code otherwise if it returns ERROR_OUT_OF_DATE, it throws an exception and messes up the code.
-    auto result = vkQueuePresentKHR(m_VK_presentationQueue, presentInfo);
+    auto presentResult = vkQueuePresentKHR(m_VK_presentationQueue, presentInfo);
 
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+    if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR || mp_CurrentWindow->isResizeNeeded()) {
         recreateSwapChain();
+        mp_CurrentWindow->finishedResize();
     }
-    else if (result != VK_SUCCESS) {
+    else if (presentResult != VK_SUCCESS) {
         throw std::runtime_error("failed to present swap chain image!");
     }
 

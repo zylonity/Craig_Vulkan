@@ -28,7 +28,6 @@ CraigError Craig::Window::init() {
 	assert(sdlRetBool && "Could not get the names of required instance extensions from SDL.");
 
 
-
 	return ret;
 }
 
@@ -46,7 +45,7 @@ CraigError Craig::Window::update() {
 			break;
 
 		case SDL_WINDOWEVENT:
-			if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
+			if (event.window.event == SDL_WINDOWEVENT_RESIZED || event.window.event == SDL_WINDOWEVENT_MINIMIZED) {
 				m_resizeNeeded = true;
 			}
 			break;
@@ -63,6 +62,11 @@ CraigError Craig::Window::update() {
 	return ret;
 }
 
+Craig::Window::WindowExtent Craig::Window::getDrawableExtent() const {
+	int w = 0, h = 0;
+	SDL_Vulkan_GetDrawableSize(mp_SDL_Window, &w, &h);
+	return { static_cast<uint32_t>(w), static_cast<uint32_t>(h) };
+}
 
 CraigError Craig::Window::terminate() {
 

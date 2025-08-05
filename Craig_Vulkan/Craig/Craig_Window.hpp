@@ -8,9 +8,16 @@
 
 namespace Craig {
 
+
 	class Window {
 
 	public:
+
+		struct WindowExtent {
+			uint32_t width;
+			uint32_t height;
+		};
+
 		CraigError init();
 		CraigError update();
 		CraigError terminate();
@@ -18,7 +25,8 @@ namespace Craig {
 		// Getters
 		std::vector<const char*>& getExtensionsVector() { return mv_SDL_Extensions; }
 		SDL_Window* getSDLWindow() const { return mp_SDL_Window; }
-		const bool getResizeNeeded() const { return m_resizeNeeded; }
+		WindowExtent getDrawableExtent() const;
+		const bool isResizeNeeded() const { return m_resizeNeeded; }
 		void finishedResize() { m_resizeNeeded = false; }
 
 	private:
