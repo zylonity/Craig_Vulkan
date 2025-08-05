@@ -170,6 +170,7 @@ CraigError Craig::Renderer::update() {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
+    ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
     ImGui::ShowDemoWindow(); // Show demo window! :)
 #endif
 
