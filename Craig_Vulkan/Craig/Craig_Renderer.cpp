@@ -3,6 +3,10 @@
 #include <set>
 #include <algorithm>
 
+#include "../External/Imgui/imgui.h"   
+#include "../External/Imgui/imgui_impl_vulkan.h"
+#include "../External/Imgui/imgui_impl_sdl2.h"
+
 #include "Craig_Renderer.hpp"
 #include "Craig_Window.hpp"
 #include "Craig_ShaderCompilation.hpp"
