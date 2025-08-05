@@ -39,6 +39,8 @@ namespace Craig {
 
 		};
 
+
+
 		// Encapsulates the Vulkan initialization process
 		void InitVulkan();
 		void setupDebugMessenger(); // Sets up the Vulkan debug messenger after instance creation
@@ -49,6 +51,7 @@ namespace Craig {
 		void createCommandPool();
 		void createCommandBuffers();
 		void createSyncObjects();
+
 
 		void recreateSwapChain();
 		void createSwapChain(); //Create double/triple buffer
@@ -135,6 +138,13 @@ namespace Craig {
 		std::vector<vk::Semaphore> m_VK_renderFinishedSemaphores;
 		std::vector<vk::Fence> m_VK_inFlightFences;
 
+
+#if defined(_DEBUG)
+		void InitImgui();
+		void createImguiDescriptorPool();
+
+		vk::DescriptorPool m_VK_imguiDescriptorPool;
+#endif
 	};
 
 

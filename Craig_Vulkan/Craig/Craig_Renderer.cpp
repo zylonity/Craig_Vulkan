@@ -3,13 +3,26 @@
 #include <set>
 #include <algorithm>
 
+#if defined(_DEBUG)
 #include "../External/Imgui/imgui.h"   
 #include "../External/Imgui/imgui_impl_vulkan.h"
 #include "../External/Imgui/imgui_impl_sdl2.h"
+#endif
 
 #include "Craig_Renderer.hpp"
 #include "Craig_Window.hpp"
 #include "Craig_ShaderCompilation.hpp"
+
+#if defined(_DEBUG)
+static void check_vk_result(VkResult err)
+{
+    if (err == 0)
+        return;
+    fprintf(stderr, "[vulkan-imgui] Error: VkResult = %d\n", err);
+    if (err < 0)
+        abort();
+}
+#endif
 
 
 // This function is called by Vulkan to report debug messages.
@@ -105,16 +118,64 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
         assert(("Vulkan instance creation failed: " + std::string(e.what())).c_str());
     }
 
+#if defined(_DEBUG)
+    InitImgui();
+#endif
 
 	return ret;
 }
 
+#if defined(_DEBUG)
+
+void Craig::Renderer::InitImgui() {
+
+
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // IF using Docking Branch
+
+    // Setup Platform/Renderer backends
+    ImGui_ImplSDL2_InitForVulkan(mp_CurrentWindow->getSDLWindow());
+    ImGui_ImplVulkan_InitInfo init_info = {};
+    init_info.Instance = m_VK_instance;
+    init_info.PhysicalDevice = m_VK_physicalDevice;
+    init_info.Device = m_VK_device;
+
+    QueueFamilyIndices indices = findQueueFamilies(m_VK_physicalDevice);
+    init_info.QueueFamily = indices.graphicsFamily.value();
+    init_info.Queue = m_VK_graphicsQueue;
+    init_info.DescriptorPool = m_VK_imguiDescriptorPool;
+    init_info.Subpass = 0;
+    init_info.MinImageCount = 2;
+    init_info.ImageCount = kMaxFramesInFlight;
+    init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    init_info.CheckVkResultFn = check_vk_result;
+    init_info.RenderPass = m_VK_renderPass;
+    ImGui_ImplVulkan_Init(&init_info);
+
+
+}
+#endif
 
 CraigError Craig::Renderer::update() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+#if defined(_DEBUG)
+// Start the Dear ImGui frame
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplSDL2_NewFrame();
+    ImGui::NewFrame();
+    ImGui::ShowDemoWindow(); // Show demo window! :)
+#endif
+
     drawFrame();
+
+
 
 	return ret;
 }
@@ -133,6 +194,9 @@ void Craig::Renderer::InitVulkan() {
     createCommandPool();
     createCommandBuffers();
     createSyncObjects();
+#if defined(_DEBUG)
+    createImguiDescriptorPool();
+#endif
 }
 
 // Registers the debug messenger with Vulkan using the previously filled-in struct
@@ -547,7 +611,6 @@ void Craig::Renderer::createGraphicsPipeline() {
         .setSubpass(0);
 
 
-    //please tell me why this is the only function so far that returns the stupid vk::ResultValue<vk::Pipeline>
     auto result = m_VK_device.createGraphicsPipeline(VK_NULL_HANDLE, pipelineInfo);
 
     if (result.result != vk::Result::eSuccess) {
@@ -755,6 +818,10 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     */
     commandBuffer.draw(3, 1, 0, 0);
 
+#if defined(_DEBUG)
+    ImGui::Render();
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+#endif
 
     commandBuffer.endRenderPass();
 
@@ -877,11 +944,36 @@ void Craig::Renderer::drawFrame() {
 
 }
 
+#if defined(_DEBUG)
+void Craig::Renderer::createImguiDescriptorPool() {
+
+    vk::DescriptorPoolSize poolSize = {
+    vk::DescriptorType::eCombinedImageSampler,
+    IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE
+    };
+
+    vk::DescriptorPoolCreateInfo poolInfo;
+    poolInfo.setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet)
+        .setMaxSets(poolSize.descriptorCount)
+        .setPoolSizeCount(1)
+        .setPoolSizes(poolSize);
+
+    vk::Result result = m_VK_device.createDescriptorPool(&poolInfo, nullptr, &m_VK_imguiDescriptorPool);
+    check_vk_result(static_cast<VkResult>(result));
+}
+#endif
+
 CraigError Craig::Renderer::terminate() {
 
     CraigError ret = CRAIG_SUCCESS;
 
     m_VK_device.waitIdle();
+
+#if defined(_DEBUG)
+    ImGui_ImplVulkan_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
+#endif
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
         m_VK_device.destroySemaphore(m_VK_imageAvailableSemaphores[i]);
