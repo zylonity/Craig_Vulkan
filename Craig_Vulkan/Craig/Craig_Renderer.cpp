@@ -126,7 +126,7 @@ void Craig::Renderer::InitVulkan() {
     createGraphicsPipeline();
     createFrameBuffers();
     createCommandPool();
-    createCommandBuffer();
+    createCommandBuffers();
     createSyncObjects();
 }
 
@@ -650,15 +650,16 @@ void Craig::Renderer::createCommandPool() {
 
 }
 
-void Craig::Renderer::createCommandBuffer() {
+void Craig::Renderer::createCommandBuffers() {
+    m_VK_commandBuffers.resize(kMaxFramesInFlight);
 
     vk::CommandBufferAllocateInfo allocInfo;
     allocInfo.setCommandPool(m_VK_commandPool)
         .setLevel(vk::CommandBufferLevel::ePrimary)
-        .setCommandBufferCount(1);
+        .setCommandBufferCount((uint32_t)m_VK_commandBuffers.size());
 
     try {
-        m_VK_commandBuffer = m_VK_device.allocateCommandBuffers(allocInfo).front();
+        m_VK_commandBuffers = m_VK_device.allocateCommandBuffers(allocInfo);
     }
     catch (const vk::SystemError& err) {
         throw std::runtime_error("failed to allocate command buffers!");
@@ -738,16 +739,20 @@ void Craig::Renderer::createSyncObjects() {
     vk::FenceCreateInfo fenceInfo;
     fenceInfo.setFlags(vk::FenceCreateFlagBits::eSignaled);  // Start signaled so the first frame doesn't block
 
-    m_VK_renderFinishedSemaphores.resize(m_VK_swapChainImages.size());
+    m_VK_renderFinishedSemaphores.resize(kMaxFramesInFlight);
+    m_VK_imageAvailableSemaphores.resize(kMaxFramesInFlight);
+    m_VK_inFlightFences.resize(kMaxFramesInFlight);
 
     try {
-        m_VK_imageAvailableSemaphore = m_VK_device.createSemaphore(semaphoreInfo);
         
-        for (size_t i = 0; i < m_VK_swapChainImages.size(); i++) {
+        
+        for (size_t i = 0; i < kMaxFramesInFlight; i++) {
+            m_VK_imageAvailableSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
             m_VK_renderFinishedSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
+            m_VK_inFlightFences[i] = m_VK_device.createFence(fenceInfo);
         }
 
-        m_VK_inFlightFence = m_VK_device.createFence(fenceInfo);
+       
     }
     catch (const vk::SystemError& err) {
         throw std::runtime_error("failed to record command buffer!");
@@ -758,34 +763,34 @@ void Craig::Renderer::createSyncObjects() {
 void Craig::Renderer::drawFrame() {
 
     // Wait until the previous frame has finished
-    m_VK_device.waitForFences(m_VK_inFlightFence, vk::True, UINT64_MAX); 
-    m_VK_device.resetFences(m_VK_inFlightFence);
+    m_VK_device.waitForFences(m_VK_inFlightFences[m_currentFrame], vk::True, UINT64_MAX);
+    m_VK_device.resetFences(m_VK_inFlightFences[m_currentFrame]);
 
     // Acquire an image from the swapchain
-    uint32_t imageIndex = m_VK_device.acquireNextImageKHR(m_VK_swapChain, UINT64_MAX, m_VK_imageAvailableSemaphore).value;
+    uint32_t imageIndex = m_VK_device.acquireNextImageKHR(m_VK_swapChain, UINT64_MAX, m_VK_imageAvailableSemaphores[m_currentFrame]).value;
 
     // Record drawing commands into the command buffer
-    m_VK_commandBuffer.reset();
-    recordCommandBuffer(m_VK_commandBuffer, imageIndex);
+    m_VK_commandBuffers[m_currentFrame].reset();
+    recordCommandBuffer(m_VK_commandBuffers[m_currentFrame], imageIndex);
 
     // Submit the command buffer for execution
     vk::SubmitInfo submitInfo;
 
-    vk::Semaphore waitSemaphores[] = { m_VK_imageAvailableSemaphore };
+    vk::Semaphore waitSemaphores[] = { m_VK_imageAvailableSemaphores[m_currentFrame]};
     vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 
     submitInfo.setWaitSemaphoreCount(1)
         .setPWaitSemaphores(waitSemaphores)
         .setPWaitDstStageMask(waitStages)
         .setCommandBufferCount(1)
-        .setPCommandBuffers(&m_VK_commandBuffer);
+        .setPCommandBuffers(&m_VK_commandBuffers[m_currentFrame]);
 
-    vk::Semaphore signalSemaphores[] = { m_VK_renderFinishedSemaphores[imageIndex] };
+    vk::Semaphore signalSemaphores[] = { m_VK_renderFinishedSemaphores[m_currentFrame] };
     submitInfo.setSignalSemaphoreCount(1)
         .setPSignalSemaphores(signalSemaphores);
 
     try {
-        m_VK_graphicsQueue.submit(submitInfo, m_VK_inFlightFence);
+        m_VK_graphicsQueue.submit(submitInfo, m_VK_inFlightFences[m_currentFrame]);
     }
     catch (const vk::SystemError& err) {
         throw std::runtime_error("failed to submit draw command buffer!");
@@ -801,9 +806,11 @@ void Craig::Renderer::drawFrame() {
         .setPSwapchains(swapChains)
         .setPImageIndices(&imageIndex);
 
-    m_VK_presentationQueue.presentKHR(presentInfo);
+    if (m_VK_presentationQueue.presentKHR(presentInfo) != vk::Result::eSuccess) {
+        throw std::runtime_error("failed to present the frame!");
+    }
 
-
+    m_currentFrame = (m_currentFrame + 1) % kMaxFramesInFlight;
 
 }
 
@@ -813,14 +820,11 @@ CraigError Craig::Renderer::terminate() {
 
     m_VK_device.waitIdle();
 
-    m_VK_device.destroySemaphore(m_VK_imageAvailableSemaphore);
-
-    for (auto semaphore : m_VK_renderFinishedSemaphores) {
-        m_VK_device.destroySemaphore(semaphore);
-    }
-
-    
-    m_VK_device.destroyFence(m_VK_inFlightFence);
+    for (size_t i = 0; i < kMaxFramesInFlight; i++) {
+        m_VK_device.destroySemaphore(m_VK_imageAvailableSemaphores[i]);
+        m_VK_device.destroySemaphore(m_VK_renderFinishedSemaphores[i]);
+        m_VK_device.destroyFence(m_VK_inFlightFences[i]);
+    }    
 
     m_VK_device.destroyCommandPool(m_VK_commandPool);
 

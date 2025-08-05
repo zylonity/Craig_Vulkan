@@ -44,14 +44,17 @@ namespace Craig {
 		void setupDebugMessenger(); // Sets up the Vulkan debug messenger after instance creation
 		void pickPhysicalDevice(); // Picks a suitable physical device for rendering
 		void createLogicalDevice(); //Logical device to interact with the physical device
-		void createSwapChain(); //Create double/triple buffer
-		void createImageViews();
 		void createRenderPass();
 		void createGraphicsPipeline();
-		void createFrameBuffers();
 		void createCommandPool();
-		void createCommandBuffer();
+		void createCommandBuffers();
 		void createSyncObjects();
+
+		void recreateSwapChain();
+		void createSwapChain(); //Create double/triple buffer
+		void createImageViews();
+		void createFrameBuffers();
+		void cleanupSwapChain();
 
 		void drawFrame();
 
@@ -120,12 +123,12 @@ namespace Craig {
 		std::vector<vk::Framebuffer> m_VK_swapChainFramebuffers;
 
 		vk::CommandPool m_VK_commandPool;
-		vk::CommandBuffer m_VK_commandBuffer;
+		std::vector <vk::CommandBuffer> m_VK_commandBuffers;
 
-		vk::Semaphore m_VK_imageAvailableSemaphore;
+		uint32_t m_currentFrame = 0;
+		std::vector<vk::Semaphore> m_VK_imageAvailableSemaphores;
 		std::vector<vk::Semaphore> m_VK_renderFinishedSemaphores;
-
-		vk::Fence m_VK_inFlightFence;
+		std::vector<vk::Fence> m_VK_inFlightFences;
 
 	};
 
