@@ -444,35 +444,35 @@ void Craig::Renderer::createImageViews() {
 
 void Craig::Renderer::createGraphicsPipeline() {
 
+    // Compile HLSL shaders to SPIR-V shader modules
     m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/VertexShader.vert");
     m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/FragmentShader.frag");
 
+    // Set up shader stages for the pipeline
     vk::PipelineShaderStageCreateInfo vertShaderStageInfo;
-
     vertShaderStageInfo.setStage(vk::ShaderStageFlagBits::eVertex)
         .setModule(m_VK_vertShaderModule)
         .setPName("main");
 
     vk::PipelineShaderStageCreateInfo fragShaderStageInfo;
-
     fragShaderStageInfo.setStage(vk::ShaderStageFlagBits::eFragment)
         .setModule(m_VK_fragShaderModule)
         .setPName("main");
 
     vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
     //No vertex data to load for now since its hardcoded into the shader.
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
     vertexInputInfo.setVertexBindingDescriptionCount(0)
         .setPVertexBindingDescriptions(nullptr) //These should point to an array of structs w vertex descriptions
         .setVertexAttributeDescriptionCount(0)
         .setPVertexAttributeDescriptions(nullptr);
 
-
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
     inputAssembly.setTopology(vk::PrimitiveTopology::eTriangleList)
         .setPrimitiveRestartEnable(vk::False);
 
+    // Viewport/scissor are dynamic (set later in the command buffer)
     vk::PipelineViewportStateCreateInfo viewportState;
     viewportState.setViewportCount(1)
         .setScissorCount(1);
@@ -675,23 +675,23 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
         throw std::runtime_error("failed to begin recording command buffer!");
     }
 
+    // Set up render pass for drawing to the framebuffer
     vk::RenderPassBeginInfo renderPassInfo;
-
     renderPassInfo.setRenderPass(m_VK_renderPass)
         .setFramebuffer(m_VK_swapChainFramebuffers[imageIndex])
         .renderArea.setOffset({ 0, 0 })
                    .setExtent(m_VK_swapChainExtent);
 
+    // Clear color for this frame
     vk::ClearValue clearValue;
     clearValue.setColor({ kClearColour[0], kClearColour[1], kClearColour[2], kClearColour[3] });
-
     renderPassInfo.setClearValueCount(1)
         .setPClearValues(&clearValue);
 
     commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_VK_graphicsPipeline);
 
+    // Set the dynamic viewport (covers the whole framebuffer)
     vk::Viewport viewport;
     viewport.setX(0.0f)
         .setY(0.0f)
@@ -702,6 +702,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     commandBuffer.setViewport(0, viewport);
 
+    // Set the dynamic scissor (no cropping — covers entire area)
     vk::Rect2D scissor;
     scissor.setOffset({ 0, 0 })
         .setExtent(m_VK_swapChainExtent);
@@ -735,7 +736,7 @@ void Craig::Renderer::createSyncObjects() {
 
     vk::SemaphoreCreateInfo semaphoreInfo;
     vk::FenceCreateInfo fenceInfo;
-    fenceInfo.setFlags(vk::FenceCreateFlagBits::eSignaled); //Means it won't run the first frame
+    fenceInfo.setFlags(vk::FenceCreateFlagBits::eSignaled);  // Start signaled so the first frame doesn't block
 
     m_VK_renderFinishedSemaphores.resize(m_VK_swapChainImages.size());
 
@@ -755,15 +756,19 @@ void Craig::Renderer::createSyncObjects() {
 }
 
 void Craig::Renderer::drawFrame() {
-    m_VK_device.waitForFences(m_VK_inFlightFence, vk::True, UINT64_MAX); //Returns success or fail, idrk why.
 
+    // Wait until the previous frame has finished
+    m_VK_device.waitForFences(m_VK_inFlightFence, vk::True, UINT64_MAX); 
     m_VK_device.resetFences(m_VK_inFlightFence);
 
+    // Acquire an image from the swapchain
     uint32_t imageIndex = m_VK_device.acquireNextImageKHR(m_VK_swapChain, UINT64_MAX, m_VK_imageAvailableSemaphore).value;
 
+    // Record drawing commands into the command buffer
     m_VK_commandBuffer.reset();
     recordCommandBuffer(m_VK_commandBuffer, imageIndex);
 
+    // Submit the command buffer for execution
     vk::SubmitInfo submitInfo;
 
     vk::Semaphore waitSemaphores[] = { m_VK_imageAvailableSemaphore };
@@ -786,6 +791,7 @@ void Craig::Renderer::drawFrame() {
         throw std::runtime_error("failed to submit draw command buffer!");
     }
     
+    // Present the rendered image to the screen
     vk::PresentInfoKHR presentInfo;
     presentInfo.setWaitSemaphoreCount(1)
         .setPWaitSemaphores(signalSemaphores);
