@@ -166,12 +166,17 @@ CraigError Craig::Renderer::update() {
 	CraigError ret = CRAIG_SUCCESS;
 
 #if defined(_DEBUG)
+    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_VK_physicalDevice);
+    vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 // Start the Dear ImGui frame
-    ImGui_ImplVulkan_NewFrame();
-    ImGui_ImplSDL2_NewFrame();
-    ImGui::NewFrame();
-    ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
-    ImGui::ShowDemoWindow(); // Show demo window! :)
+    if (extent.width > 0 || extent.height > 0) {
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+        ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode); //Lets transparency through the window
+        ImGui::ShowDemoWindow(); // Show demo window! :)
+    }
+   
 #endif
 
     drawFrame();
@@ -974,6 +979,7 @@ CraigError Craig::Renderer::terminate() {
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
+    m_VK_device.destroyDescriptorPool(m_VK_imguiDescriptorPool);
 #endif
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
