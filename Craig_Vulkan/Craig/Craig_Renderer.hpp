@@ -58,6 +58,7 @@ namespace Craig {
 
 		void drawFrame();
 
+		vk::detail::DispatchLoaderStatic onPresentationFail() { return vk::detail::DispatchLoaderStatic{}; };
 
 		// Debugging functions
 		void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo); // Fills the debug messenger config
@@ -105,11 +106,15 @@ namespace Craig {
 		vk::Queue m_VK_graphicsQueue; // Graphics queue for rendering
 		vk::Queue m_VK_presentationQueue; // Presentation queue for rendering
 
+
+		// The swapchain owns a rotating set of images that we render to and present to the screen.
+		// Think of it like a queue of framebuffers managed by the GPU/display system, but framebuffers are the complete image, after applying the imageview
 		vk::SwapchainKHR m_VK_swapChain; 
 		std::vector<vk::Image> m_VK_swapChainImages;
 		vk::Format m_VK_swapChainImageFormat;
 		vk::Extent2D m_VK_swapChainExtent;
 
+		// Image views describe how we access each swapchain image, like treating raw images as 2D textures.
 		std::vector<vk::ImageView> m_VK_swapChainImageViews;
 
 		vk::ShaderModule m_VK_vertShaderModule;

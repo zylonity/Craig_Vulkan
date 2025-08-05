@@ -15,7 +15,7 @@ CraigError Craig::Window::init() {
 	assert(sdlRetInt == 0 && "Could not initialize SDL.");
 
 	mp_SDL_Window = SDL_CreateWindow(kSDL_WindowName, SDL_WINDOWPOS_CENTERED,
-		SDL_WINDOWPOS_CENTERED, kSDL_WindowWidth, kSDL_WindowHeight, SDL_WINDOW_VULKAN);
+		SDL_WINDOWPOS_CENTERED, kSDL_WindowWidth, kSDL_WindowHeight, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
 	assert(mp_SDL_Window != NULL && "Could not create SDL window.");
 
 	// Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
@@ -43,6 +43,12 @@ CraigError Craig::Window::update() {
 
 		case SDL_QUIT:
 			ret = CRAIG_CLOSED; // Set the return code to fail to indicate that the window should close
+			break;
+
+		case SDL_WINDOWEVENT:
+			if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
+				m_resizeNeeded = true;
+			}
 			break;
 
 		default:

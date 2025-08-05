@@ -13,7 +13,7 @@ constexpr char kVK_EngineName[] = "Craig";
 constexpr uint32_t kVK_EngineVersion = 1;
 
 constexpr float kClearColour[4] = { 1.0f, 0.5f, 0.0f, 1.0f }; // Clear colour for the render target
-constexpr int kMaxFramesInFlight = 3;
+constexpr int kMaxFramesInFlight = 3; //How many frames the GPU should deal with at a time
 
 
 enum CraigError {

@@ -105,9 +105,15 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 	return ret;
 }
 
+
 CraigError Craig::Renderer::update() {
 
 	CraigError ret = CRAIG_SUCCESS;
+
+    if (mp_CurrentWindow->getResizeNeeded() == true) {
+        recreateSwapChain();
+        mp_CurrentWindow->finishedResize();
+    }
 
     drawFrame();
 
@@ -221,7 +227,7 @@ Craig::Renderer::SwapChainSupportDetails Craig::Renderer::querySwapChainSupport(
 bool Craig::Renderer::isDeviceSuitable(const vk::PhysicalDevice& device) {
     QueueFamilyIndices indices = findQueueFamilies(device); //Check gfx device can render and present to the screen
 
-    bool extensionsSupported = checkDeviceExtensionSupport(device); //Check it supports extensions, especifically the swapchain extension (AKA double buffering)
+    bool extensionsSupported = checkDeviceExtensionSupport(device); //Check it supports extensions, especifically the swapchain extension
 
     bool swapChainAdequate = false; 
     if (extensionsSupported) {
@@ -632,6 +638,28 @@ void Craig::Renderer::createFrameBuffers() {
 
 }
 
+void Craig::Renderer::cleanupSwapChain() {
+    for (auto framebuffer : m_VK_swapChainFramebuffers) {
+        m_VK_device.destroyFramebuffer(framebuffer);
+    }
+
+    for (auto imageView : m_VK_swapChainImageViews) {
+        m_VK_device.destroyImageView(imageView);
+    }
+
+    m_VK_device.destroySwapchainKHR(m_VK_swapChain);
+}
+
+void Craig::Renderer::recreateSwapChain() {
+    m_VK_device.waitIdle();
+
+    cleanupSwapChain();
+
+    createSwapChain();
+    createImageViews();
+    createFrameBuffers();
+}
+
 void Craig::Renderer::createCommandPool() {
 
     QueueFamilyIndices queueFamilyIndices = findQueueFamilies(m_VK_physicalDevice);
@@ -764,10 +792,22 @@ void Craig::Renderer::drawFrame() {
 
     // Wait until the previous frame has finished
     m_VK_device.waitForFences(m_VK_inFlightFences[m_currentFrame], vk::True, UINT64_MAX);
-    m_VK_device.resetFences(m_VK_inFlightFences[m_currentFrame]);
+
 
     // Acquire an image from the swapchain
-    uint32_t imageIndex = m_VK_device.acquireNextImageKHR(m_VK_swapChain, UINT64_MAX, m_VK_imageAvailableSemaphores[m_currentFrame]).value;
+    auto nextImageResult = m_VK_device.acquireNextImageKHR(m_VK_swapChain, UINT64_MAX, m_VK_imageAvailableSemaphores[m_currentFrame]);
+
+    if (nextImageResult.result == vk::Result::eErrorOutOfDateKHR) {
+        recreateSwapChain();
+        return;
+    }
+    else if (nextImageResult.result != vk::Result::eSuccess && nextImageResult.result != vk::Result::eSuboptimalKHR) {
+        throw std::runtime_error("failed to acquire swap chain image!");
+    }
+
+    m_VK_device.resetFences(m_VK_inFlightFences[m_currentFrame]);
+
+    uint32_t imageIndex = nextImageResult.value;
 
     // Record drawing commands into the command buffer
     m_VK_commandBuffers[m_currentFrame].reset();
@@ -806,8 +846,15 @@ void Craig::Renderer::drawFrame() {
         .setPSwapchains(swapChains)
         .setPImageIndices(&imageIndex);
 
-    if (m_VK_presentationQueue.presentKHR(presentInfo) != vk::Result::eSuccess) {
-        throw std::runtime_error("failed to present the frame!");
+
+    //We have to revert back to the original C code otherwise if it returns ERROR_OUT_OF_DATE, it throws an exception and messes up the code.
+    auto result = vkQueuePresentKHR(m_VK_presentationQueue, presentInfo);
+
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+        recreateSwapChain();
+    }
+    else if (result != VK_SUCCESS) {
+        throw std::runtime_error("failed to present swap chain image!");
     }
 
     m_currentFrame = (m_currentFrame + 1) % kMaxFramesInFlight;
