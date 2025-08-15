@@ -2,8 +2,10 @@
 
 #include <optional>
 #include <vector>
+#include <array>
 #include <vulkan/vulkan.hpp>
 #include <SDL2/SDL_vulkan.h>
+#include <glm/glm.hpp>
 
 #include "Craig_Constants.hpp"
 
@@ -38,8 +40,6 @@ namespace Craig {
 			std::vector<vk::PresentModeKHR> presentModes;
 
 		};
-
-
 
 		// Encapsulates the Vulkan initialization process
 		void InitVulkan();
@@ -145,6 +145,24 @@ namespace Craig {
 
 		vk::DescriptorPool m_VK_imguiDescriptorPool;
 #endif
+
+		//Vertex buffer stuff
+		struct Vertex {
+			glm::vec2 m_pos;
+			glm::vec3 m_color;
+
+			static vk::VertexInputBindingDescription getBindingDescription(); //A vertex binding describes at which rate to load data from memory throughout the vertices. It specifies the number of bytes between data entries and whether to move to the next data entry after each vertex or after each instance.
+			static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions(); //We have two attributes, position and color, so we need two attribute description structs.
+
+		};
+
+		const std::vector<Vertex> vertices = {
+			//  {{POSITIONS}, {COLOURS}}
+				{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+				{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+				{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+		};
+
 	};
 
 

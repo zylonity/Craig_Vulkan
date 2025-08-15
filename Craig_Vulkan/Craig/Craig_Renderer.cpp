@@ -536,12 +536,15 @@ void Craig::Renderer::createGraphicsPipeline() {
 
     vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
+    vk::VertexInputBindingDescription                   bindingDescription = Vertex::getBindingDescription();
+    std::array<vk::VertexInputAttributeDescription, 2>  attributeDescriptions = Vertex::getAttributeDescriptions();
+
     //No vertex data to load for now since its hardcoded into the shader.
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
-    vertexInputInfo.setVertexBindingDescriptionCount(0)
-        .setPVertexBindingDescriptions(nullptr) //These should point to an array of structs w vertex descriptions
-        .setVertexAttributeDescriptionCount(0)
-        .setPVertexAttributeDescriptions(nullptr);
+    vertexInputInfo.setVertexBindingDescriptionCount(1)
+        .setPVertexBindingDescriptions(&bindingDescription) //These should point to an array of structs w vertex descriptions
+        .setVertexAttributeDescriptionCount(static_cast<uint32_t>(attributeDescriptions.size()))
+        .setPVertexAttributeDescriptions(attributeDescriptions.data());
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
     inputAssembly.setTopology(vk::PrimitiveTopology::eTriangleList)
@@ -1029,4 +1032,32 @@ CraigError Craig::Renderer::terminate() {
     m_VK_instance.destroy();
 
     return ret;
+}
+
+vk::VertexInputBindingDescription Craig::Renderer::Vertex::getBindingDescription()  {
+    vk::VertexInputBindingDescription bindingDescription;
+
+    bindingDescription.setBinding(0)
+        .setStride(sizeof(Vertex))
+        .setInputRate(vk::VertexInputRate::eVertex);
+       
+
+    return bindingDescription;
+}
+
+std::array<vk::VertexInputAttributeDescription, 2> Craig::Renderer::Vertex::getAttributeDescriptions() {
+    std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions;
+
+    attributeDescriptions[0].setBinding(0) 
+        .setLocation(0)//Location0 = POSITION0
+        .setFormat(vk::Format::eR32G32Sfloat) //Not a colour, just uses the same format. Float2 = RG_float (Only 2 channels) 
+        .setOffset(offsetof(Vertex, m_pos));
+
+    attributeDescriptions[1].setBinding(0) 
+        .setLocation(1)//Location1 = COLOR1 <- ps fuck american spelling.
+        .setFormat(vk::Format::eR32G32B32Sfloat) //This time it IS a colour, so float3 = RGB_float
+        .setOffset(offsetof(Vertex, m_pos));
+
+
+    return attributeDescriptions;
 }
