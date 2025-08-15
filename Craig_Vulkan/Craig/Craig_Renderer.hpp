@@ -52,12 +52,13 @@ namespace Craig {
 		void createCommandBuffers();
 		void createSyncObjects();
 
-
 		void recreateSwapChain();
 		void createSwapChain(); //Create double/triple buffer
 		void createImageViews();
 		void createFrameBuffers();
 		void cleanupSwapChain();
+
+		void createVertexBuffer();
 
 		void drawFrame();
 
@@ -138,6 +139,7 @@ namespace Craig {
 		std::vector<vk::Semaphore> m_VK_renderFinishedSemaphores;
 		std::vector<vk::Fence> m_VK_inFlightFences;
 
+		vk::Buffer m_VK_vertexBuffer;
 
 #if defined(_DEBUG)
 		void InitImgui();
@@ -156,7 +158,7 @@ namespace Craig {
 
 		};
 
-		const std::vector<Vertex> vertices = {
+		const std::vector<Vertex> triangle_vertices = {
 			//  {{POSITIONS}, {COLOURS}}
 				{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
 				{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},

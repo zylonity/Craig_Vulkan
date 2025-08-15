@@ -198,11 +198,14 @@ void Craig::Renderer::InitVulkan() {
     createGraphicsPipeline();
     createFrameBuffers();
     createCommandPool();
+    createVertexBuffer();
     createCommandBuffers();
     createSyncObjects();
 #if defined(_DEBUG)
     createImguiDescriptorPool();
 #endif
+    
+
 }
 
 // Registers the debug messenger with Vulkan using the previously filled-in struct
@@ -953,6 +956,17 @@ void Craig::Renderer::drawFrame() {
 
 }
 
+void Craig::Renderer::createVertexBuffer() {
+    vk::BufferCreateInfo bufferInfo;
+    bufferInfo.setSize(sizeof(triangle_vertices[0]) * triangle_vertices.size()) //Size of the triangle
+        .setUsage(vk::BufferUsageFlagBits::eVertexBuffer)
+        .setSharingMode(vk::SharingMode::eExclusive); //Buffer's only going to be used by the graphics queue
+
+    m_VK_vertexBuffer = m_VK_device.createBuffer(bufferInfo);
+
+}
+
+
 #if defined(_DEBUG)
 void Craig::Renderer::createImguiDescriptorPool() {
 
@@ -984,6 +998,8 @@ CraigError Craig::Renderer::terminate() {
     ImGui::DestroyContext();
     m_VK_device.destroyDescriptorPool(m_VK_imguiDescriptorPool);
 #endif
+
+    m_VK_device.destroyBuffer(m_VK_vertexBuffer);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
         m_VK_device.destroySemaphore(m_VK_imageAvailableSemaphores[i]);
