@@ -37,6 +37,7 @@ namespace Craig {
 			bool hasDedicatedTransfer() {
 				return graphicsFamily && transferFamily && transferFamily != graphicsFamily;
 			}
+
 		};
 
 		struct SwapChainSupportDetails {
@@ -99,6 +100,7 @@ namespace Craig {
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
 		void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
+		void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
 
 		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
 

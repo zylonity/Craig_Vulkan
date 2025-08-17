@@ -110,12 +110,14 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>vulkan-1.lib;SDL2.lib;dxcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>vulkan-1.lib;SDL2d.lib;dxcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(VULKAN_SDK)\Lib;$(VULKAN_SDK)\Bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D "$(VULKAN_SDK)\Bin\dxcompiler.dll" "$(OutDir)."</Command>
+      <Command>xcopy /Y /D "$(VULKAN_SDK)\Bin\dxcompiler.dll" "$(OutDir)."
+xcopy /E /I /Y "$(ProjectDir)data" "$(OutDir)data"
+xcopy /Y /D "$(VULKAN_SDK)\Bin\SDL2d.dll" "$(OutDir)."</Command>
     </PostBuildEvent>
     <FxCompile>
       <ShaderModel>6.4</ShaderModel>
@@ -164,7 +166,9 @@
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D "$(VULKAN_SDK)\Bin\dxcompiler.dll" "$(OutDir)."</Command>
+      <Command>xcopy /Y /D "$(VULKAN_SDK)\Bin\dxcompiler.dll" "$(OutDir)."
+xcopy /E /I /Y "$(ProjectDir)data" "$(OutDir)data"
+xcopy /Y /D "$(VULKAN_SDK)\Bin\SDL2.dll" "$(OutDir)."</Command>
     </PostBuildEvent>
     <FxCompile>
       <ShaderModel>6.4</ShaderModel>
@@ -202,14 +206,14 @@
     <ClInclude Include="Template.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="data\shaders\FragmentShader.frag">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
-    </FxCompile>
-    <FxCompile Include="data\shaders\VertexShader.vert">
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
-      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
-    </FxCompile>
+    <None Include="data\shaders\FragmentShader.frag">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="data\shaders\VertexShader.vert">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </None>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

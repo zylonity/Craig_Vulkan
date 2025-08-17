@@ -951,18 +951,65 @@ void Craig::Renderer::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usa
 
 }
 
+void Craig::Renderer::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size) {
+
+    //Allocate a temporary command buffer
+    vk::CommandBufferAllocateInfo allocInfo;
+    allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
+        .setCommandPool(m_VK_transferCommandPool)
+        .setCommandBufferCount(1);
+
+    
+    std::vector<vk::CommandBuffer> commandBuffers = m_VK_device.allocateCommandBuffers(allocInfo);
+    vk::CommandBuffer commandBuffer = commandBuffers[0];
+
+    //Start recording the command buffer
+    vk::CommandBufferBeginInfo beginInfo;
+    beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+    commandBuffer.begin(beginInfo);
+
+    //Copy over the data
+    vk::BufferCopy copyRegion;
+    copyRegion.setSize(size);
+    commandBuffer.copyBuffer(srcBuffer, dstBuffer, copyRegion);
+
+    //Stop recording, we only have one command (copy)
+    commandBuffer.end();
+
+    vk::SubmitInfo submitInfo;
+    submitInfo.setCommandBufferCount(1)
+        .setCommandBuffers(commandBuffer);
+
+    m_VK_transferQueue.submit(submitInfo);
+    m_VK_transferQueue.waitIdle(); //We could use a fence instead to allow multiple transfers simultaniously.
+
+    m_VK_device.freeCommandBuffers(m_VK_transferCommandPool, commandBuffer);
+
+
+}
+
 void Craig::Renderer::createVertexBuffer() {
 
     vk::DeviceSize bufferSize = sizeof(triangle_vertices[0]) * triangle_vertices.size();
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, m_VK_vertexBuffer, m_VK_vertexBufferMemory);
+
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
 
 
     //Filling the vertex buffer in GPU memory
     void* data;
-    data = m_VK_device.mapMemory(m_VK_vertexBufferMemory, 0, bufferSize);
+    data = m_VK_device.mapMemory(stagingBufferMemory, 0, bufferSize);
     memcpy(data, triangle_vertices.data(), (size_t)bufferSize);
-    m_VK_device.unmapMemory(m_VK_vertexBufferMemory);
+    m_VK_device.unmapMemory(stagingBufferMemory);
 
+    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_vertexBuffer, m_VK_vertexBufferMemory);
+
+    copyBuffer(stagingBuffer, m_VK_vertexBuffer, bufferSize);
+
+    m_VK_device.destroyBuffer(stagingBuffer);
+    m_VK_device.freeMemory(stagingBufferMemory);
 }
 
 void Craig::Renderer::drawFrame() {
