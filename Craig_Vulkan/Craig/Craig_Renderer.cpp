@@ -821,6 +821,11 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     commandBuffer.setScissor(0, scissor);
 
+    //Binding the vertex buffer
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_VK_graphicsPipeline);
+    vk::Buffer vertexBuffers[] = { m_VK_vertexBuffer };
+    vk::DeviceSize offsets[] = { 0 };
+    commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
 
     /*
     vertexCount: Even though we don't have a vertex buffer, we technically still have 3 vertices to draw.
@@ -828,7 +833,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     firstVertex: Used as an offset into the vertex buffer, defines the lowest value of gl_VertexIndex.
     firstInstance: Used as an offset for instanced rendering, defines the lowest value of gl_InstanceIndex.
     */
-    commandBuffer.draw(3, 1, 0, 0);
+    commandBuffer.draw(static_cast<uint32_t>(triangle_vertices.size()), 1, 0, 0);
 
 #if defined(_DEBUG)
     ImGui::Render();
@@ -872,6 +877,35 @@ void Craig::Renderer::createSyncObjects() {
     catch (const vk::SystemError& err) {
         throw std::runtime_error("failed to record command buffer!");
     }
+
+}
+
+void Craig::Renderer::createVertexBuffer() {
+    vk::BufferCreateInfo bufferInfo;
+    bufferInfo.setSize(sizeof(triangle_vertices[0]) * triangle_vertices.size()) //Size of the triangle
+        .setUsage(vk::BufferUsageFlagBits::eVertexBuffer)
+        .setSharingMode(vk::SharingMode::eExclusive); //Buffer's only going to be used by the graphics queue
+
+    m_VK_vertexBuffer = m_VK_device.createBuffer(bufferInfo);
+
+    vk::MemoryRequirements memRequirements;
+    memRequirements = m_VK_device.getBufferMemoryRequirements(m_VK_vertexBuffer);
+
+    //Allocating memory for the vertex buffer
+    vk::MemoryAllocateInfo allocInfo;
+    allocInfo.setAllocationSize(memRequirements.size)
+        .setMemoryTypeIndex(findMemoryType(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent));
+    m_VK_vertexBufferMemory = m_VK_device.allocateMemory(allocInfo);
+
+    //Binding the memory to the buffer
+    //Since the memory is allocated specifically for the vertex buffer, the offset is 0. Otherwise the offset has to be divisble by memRequirements.alignment
+    m_VK_device.bindBufferMemory(m_VK_vertexBuffer, m_VK_vertexBufferMemory, 0);
+
+    //Filling the vertex buffer in GPU memory
+    void* data;
+    data = m_VK_device.mapMemory(m_VK_vertexBufferMemory, 0, bufferInfo.size);
+    memcpy(data, triangle_vertices.data(), (size_t)bufferInfo.size);
+    m_VK_device.unmapMemory(m_VK_vertexBufferMemory);
 
 }
 
@@ -956,16 +990,6 @@ void Craig::Renderer::drawFrame() {
 
 }
 
-void Craig::Renderer::createVertexBuffer() {
-    vk::BufferCreateInfo bufferInfo;
-    bufferInfo.setSize(sizeof(triangle_vertices[0]) * triangle_vertices.size()) //Size of the triangle
-        .setUsage(vk::BufferUsageFlagBits::eVertexBuffer)
-        .setSharingMode(vk::SharingMode::eExclusive); //Buffer's only going to be used by the graphics queue
-
-    m_VK_vertexBuffer = m_VK_device.createBuffer(bufferInfo);
-
-}
-
 
 #if defined(_DEBUG)
 void Craig::Renderer::createImguiDescriptorPool() {
@@ -1000,6 +1024,7 @@ CraigError Craig::Renderer::terminate() {
 #endif
 
     m_VK_device.destroyBuffer(m_VK_vertexBuffer);
+    m_VK_device.freeMemory(m_VK_vertexBufferMemory);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
         m_VK_device.destroySemaphore(m_VK_imageAvailableSemaphores[i]);
@@ -1076,4 +1101,26 @@ std::array<vk::VertexInputAttributeDescription, 2> Craig::Renderer::Vertex::getA
 
 
     return attributeDescriptions;
+}
+
+uint32_t Craig::Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
+    vk::PhysicalDeviceMemoryProperties memProperties;
+
+    memProperties = m_VK_physicalDevice.getMemoryProperties();
+
+    for (size_t i = 0; i < memProperties.memoryTypeCount; i++)
+    {
+
+        //VkMemoryRequirements::memoryTypeBits is a bitfield that sets a bit for every memoryType that is
+        //supported for the resource.Therefore we need to check if the bit at index i is set while also testing the
+        //required memory property flags while iterating over the memory types.
+
+        //i kinda get it (i lie)
+        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+
+    throw std::runtime_error("failed to find suitable memory type!");
+
 }

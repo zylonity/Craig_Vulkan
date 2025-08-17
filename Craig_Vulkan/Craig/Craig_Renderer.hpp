@@ -86,11 +86,12 @@ namespace Craig {
 
 		void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 		
-		
 
 		const std::vector<const char*> m_VK_deviceExtensions = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME // Required for swapchain support (Like a framebuffer)
 		};
+
+		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
 		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
 
@@ -140,6 +141,7 @@ namespace Craig {
 		std::vector<vk::Fence> m_VK_inFlightFences;
 
 		vk::Buffer m_VK_vertexBuffer;
+		vk::DeviceMemory m_VK_vertexBufferMemory;
 
 #if defined(_DEBUG)
 		void InitImgui();
@@ -160,7 +162,7 @@ namespace Craig {
 
 		const std::vector<Vertex> triangle_vertices = {
 			//  {{POSITIONS}, {COLOURS}}
-				{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+				{{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
 				{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
 				{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
 		};
