@@ -801,7 +801,12 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
         .setPClearValues(&clearValue);
 
     commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+    
+    //Binding the vertex buffer
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_VK_graphicsPipeline);
+    vk::Buffer vertexBuffers[] = { m_VK_vertexBuffer };
+    vk::DeviceSize offsets[] = { 0 };
+    commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
 
     // Set the dynamic viewport (covers the whole framebuffer)
     vk::Viewport viewport;
@@ -821,11 +826,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     commandBuffer.setScissor(0, scissor);
 
-    //Binding the vertex buffer
-    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_VK_graphicsPipeline);
-    vk::Buffer vertexBuffers[] = { m_VK_vertexBuffer };
-    vk::DeviceSize offsets[] = { 0 };
-    commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
+
 
     /*
     vertexCount: Even though we don't have a vertex buffer, we technically still have 3 vertices to draw.
@@ -1097,7 +1098,7 @@ std::array<vk::VertexInputAttributeDescription, 2> Craig::Renderer::Vertex::getA
     attributeDescriptions[1].setBinding(0) 
         .setLocation(1)//Location1 = COLOR1 <- ps fuck american spelling.
         .setFormat(vk::Format::eR32G32B32Sfloat) //This time it IS a colour, so float3 = RGB_float
-        .setOffset(offsetof(Vertex, m_pos));
+        .setOffset(offsetof(Vertex, m_color));
 
 
     return attributeDescriptions;
