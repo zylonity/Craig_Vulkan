@@ -3,7 +3,7 @@
 #include <set>
 #include <algorithm>
 
-#if defined(_DEBUG)
+#if defined(IMGUI_ENABLED)
 #include "../External/Imgui/imgui.h"   
 #include "../External/Imgui/imgui_impl_vulkan.h"
 #include "../External/Imgui/imgui_impl_sdl2.h"
@@ -13,7 +13,8 @@
 #include "Craig_Window.hpp"
 #include "Craig_ShaderCompilation.hpp"
 
-#if defined(_DEBUG)
+
+#if defined(IMGUI_ENABLED)
 static void check_vk_result(VkResult err)
 {
     if (err == 0)
@@ -73,7 +74,7 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 	assert(mp_CurrentWindow != nullptr && "mp_CurrentWindow is null, somehow didn't get passed to our member variable");
 
 	// Use validation layers if this is a debug build
-#if defined(_DEBUG)
+#if defined(IMGUI_ENABLED)
 	m_VK_Layers.push_back("VK_LAYER_KHRONOS_validation");
     mp_CurrentWindow->getExtensionsVector().push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
@@ -118,14 +119,14 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
         assert(("Vulkan instance creation failed: " + std::string(e.what())).c_str());
     }
 
-#if defined(_DEBUG)
+#if defined(IMGUI_ENABLED)
     InitImgui();
 #endif
 
 	return ret;
 }
 
-#if defined(_DEBUG)
+#if defined(IMGUI_ENABLED)
 
 void Craig::Renderer::InitImgui() {
 
@@ -165,7 +166,7 @@ CraigError Craig::Renderer::update() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-#if defined(_DEBUG)
+#if defined(IMGUI_ENABLED)
     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_VK_physicalDevice);
     vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 // Start the Dear ImGui frame
@@ -202,7 +203,7 @@ void Craig::Renderer::InitVulkan() {
     createIndexBuffer();
     createCommandBuffers();
     createSyncObjects();
-#if defined(_DEBUG)
+#if defined(IMGUI_ENABLED)
     createImguiDescriptorPool();
 #endif
     
@@ -873,7 +874,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     */
     commandBuffer.drawIndexed(static_cast<uint32_t>(m_indices.size()), 1, 0, 0, 0);
 
-#if defined(_DEBUG)
+#if defined(IMGUI_ENABLED)
     ImGui::Render();
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 #endif
@@ -1010,7 +1011,7 @@ void Craig::Renderer::createVertexBuffer() {
     createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_vertexBuffer, m_VK_vertexBufferMemory);
 
     copyBuffer(stagingBuffer, m_VK_vertexBuffer, bufferSize);
-
+     
     m_VK_device.destroyBuffer(stagingBuffer);
     m_VK_device.freeMemory(stagingBufferMemory);
 }
@@ -1120,7 +1121,7 @@ void Craig::Renderer::drawFrame() {
 }
 
 
-#if defined(_DEBUG)
+#if defined(IMGUI_ENABLED)
 void Craig::Renderer::createImguiDescriptorPool() {
 
     vk::DescriptorPoolSize poolSize = {
@@ -1145,7 +1146,7 @@ CraigError Craig::Renderer::terminate() {
 
     m_VK_device.waitIdle();
 
-#if defined(_DEBUG)
+#if defined(IMGUI_ENABLED)
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();

@@ -5,7 +5,7 @@
 #include <SDL2/SDL_vulkan.h>
 #include <vulkan/vulkan.hpp>
 
-#if defined(_DEBUG)
+#if defined(IMGUI_ENABLED)
 #include "../External/Imgui/imgui.h"   
 #include "../External/Imgui/imgui_impl_sdl2.h"
 #endif
@@ -42,7 +42,7 @@ CraigError Craig::Window::update() {
 
 	SDL_Event event;
 	while (SDL_PollEvent(&event)) {
-#if defined(_DEBUG)
+#if defined(IMGUI_ENABLED)
 		ImGui_ImplSDL2_ProcessEvent(&event);
 #endif
 

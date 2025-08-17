@@ -157,7 +157,7 @@ namespace Craig {
 		vk::Buffer m_VK_indexBuffer;
 		vk::DeviceMemory m_VK_indexBufferMemory;
 
-#if defined(_DEBUG)
+#if defined(IMGUI_ENABLED)
 		void InitImgui();
 		void createImguiDescriptorPool();
 
