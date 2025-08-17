@@ -199,6 +199,7 @@ void Craig::Renderer::InitVulkan() {
     createFrameBuffers();
     createCommandPool();
     createVertexBuffer();
+    createIndexBuffer();
     createCommandBuffers();
     createSyncObjects();
 #if defined(_DEBUG)
@@ -841,6 +842,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     vk::Buffer vertexBuffers[] = { m_VK_vertexBuffer };
     vk::DeviceSize offsets[] = { 0 };
     commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
+    commandBuffer.bindIndexBuffer(m_VK_indexBuffer, 0, vk::IndexType::eUint16);
 
     // Set the dynamic viewport (covers the whole framebuffer)
     vk::Viewport viewport;
@@ -863,12 +865,13 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
 
     /*
-    vertexCount: Even though we don't have a vertex buffer, we technically still have 3 vertices to draw.
+    indexCount: Even though we don't have a vertex buffer, we technically still have 3 vertices to draw.
     instanceCount: Used for instanced rendering, use 1 if you're not doing that.
-    firstVertex: Used as an offset into the vertex buffer, defines the lowest value of gl_VertexIndex.
+    firstIndex: Used as an offset into the index buffer
+    vertexOffset: used as an offset into the vertex buffer?
     firstInstance: Used as an offset for instanced rendering, defines the lowest value of gl_InstanceIndex.
     */
-    commandBuffer.draw(static_cast<uint32_t>(triangle_vertices.size()), 1, 0, 0);
+    commandBuffer.drawIndexed(static_cast<uint32_t>(m_indices.size()), 1, 0, 0, 0);
 
 #if defined(_DEBUG)
     ImGui::Render();
@@ -991,7 +994,7 @@ void Craig::Renderer::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk:
 
 void Craig::Renderer::createVertexBuffer() {
 
-    vk::DeviceSize bufferSize = sizeof(triangle_vertices[0]) * triangle_vertices.size();
+    vk::DeviceSize bufferSize = sizeof(m_vertices[0]) * m_vertices.size();
 
     vk::Buffer stagingBuffer;
     vk::DeviceMemory stagingBufferMemory;
@@ -1001,12 +1004,35 @@ void Craig::Renderer::createVertexBuffer() {
     //Filling the vertex buffer in GPU memory
     void* data;
     data = m_VK_device.mapMemory(stagingBufferMemory, 0, bufferSize);
-    memcpy(data, triangle_vertices.data(), (size_t)bufferSize);
+    memcpy(data, m_vertices.data(), (size_t)bufferSize);
     m_VK_device.unmapMemory(stagingBufferMemory);
 
     createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_vertexBuffer, m_VK_vertexBufferMemory);
 
     copyBuffer(stagingBuffer, m_VK_vertexBuffer, bufferSize);
+
+    m_VK_device.destroyBuffer(stagingBuffer);
+    m_VK_device.freeMemory(stagingBufferMemory);
+}
+
+void Craig::Renderer::createIndexBuffer() {
+
+    vk::DeviceSize bufferSize = sizeof(m_indices[0]) * m_indices.size();
+
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+
+
+    //Filling the vertex buffer in GPU memory
+    void* data;
+    data = m_VK_device.mapMemory(stagingBufferMemory, 0, bufferSize);
+    memcpy(data, m_indices.data(), (size_t)bufferSize);
+    m_VK_device.unmapMemory(stagingBufferMemory);
+
+    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_indexBuffer, m_VK_indexBufferMemory);
+
+    copyBuffer(stagingBuffer, m_VK_indexBuffer, bufferSize);
 
     m_VK_device.destroyBuffer(stagingBuffer);
     m_VK_device.freeMemory(stagingBufferMemory);
@@ -1125,6 +1151,8 @@ CraigError Craig::Renderer::terminate() {
     ImGui::DestroyContext();
     m_VK_device.destroyDescriptorPool(m_VK_imguiDescriptorPool);
 #endif
+    m_VK_device.destroyBuffer(m_VK_indexBuffer);
+    m_VK_device.freeMemory(m_VK_indexBufferMemory);
 
     m_VK_device.destroyBuffer(m_VK_vertexBuffer);
     m_VK_device.freeMemory(m_VK_vertexBufferMemory);

@@ -65,6 +65,7 @@ namespace Craig {
 		void cleanupSwapChain();
 
 		void createVertexBuffer();
+		void createIndexBuffer();
 
 		void drawFrame();
 
@@ -153,6 +154,8 @@ namespace Craig {
 
 		vk::Buffer m_VK_vertexBuffer;
 		vk::DeviceMemory m_VK_vertexBufferMemory;
+		vk::Buffer m_VK_indexBuffer;
+		vk::DeviceMemory m_VK_indexBufferMemory;
 
 #if defined(_DEBUG)
 		void InitImgui();
@@ -171,11 +174,15 @@ namespace Craig {
 
 		};
 
-		const std::vector<Vertex> triangle_vertices = {
-			//  {{POSITIONS}, {COLOURS}}
-				{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-				{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-				{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+		const std::vector<Vertex> m_vertices = {
+			{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+			{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+			{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+			{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+		};
+
+		const std::vector<uint16_t> m_indices = {
+			0, 1, 2, 2, 3, 0
 		};
 
 	};
