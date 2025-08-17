@@ -28,9 +28,14 @@ namespace Craig {
 		struct QueueFamilyIndices {
 			std::optional<uint32_t> graphicsFamily;
 			std::optional<uint32_t> presentFamily;
+			std::optional<uint32_t> transferFamily;
 
 			bool isComplete() {
 				return graphicsFamily.has_value() && presentFamily.has_value();
+			}
+
+			bool hasDedicatedTransfer() {
+				return graphicsFamily && transferFamily && transferFamily != graphicsFamily;
 			}
 		};
 
@@ -93,6 +98,8 @@ namespace Craig {
 
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
+		void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
+
 		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
 
 		std::vector<const char*> m_VK_Layers; //Validation layers for debugging
@@ -110,7 +117,7 @@ namespace Craig {
 
 		vk::Queue m_VK_graphicsQueue; // Graphics queue for rendering
 		vk::Queue m_VK_presentationQueue; // Presentation queue for rendering
-
+		vk::Queue m_VK_transferQueue;
 
 		// The swapchain owns a rotating set of images that we render to and present to the screen.
 		// Think of it like a queue of framebuffers managed by the GPU/display system, but framebuffers are the complete image, after applying the imageview
@@ -133,6 +140,8 @@ namespace Craig {
 		std::vector<vk::Framebuffer> m_VK_swapChainFramebuffers;
 
 		vk::CommandPool m_VK_commandPool;
+		vk::CommandPool m_VK_transferCommandPool;
+
 		std::vector <vk::CommandBuffer> m_VK_commandBuffers;
 
 		uint32_t m_currentFrame = 0;

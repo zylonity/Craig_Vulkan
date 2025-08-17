@@ -265,23 +265,41 @@ Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(const vk:
 
 
 	//Find at least one queue family that supports graphics operations
-    int i = 0;
+    uint32_t i = 0;
     for (const auto& queueFamily : queueFamilies) {
-        if (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) {
+        //Skip if the queuecount is 0
+        if (queueFamily.queueCount == 0) continue;
+
+        //Skip if we already assigned the graphics family queue index
+        if (!indices.graphicsFamily && (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics)) {
             indices.graphicsFamily = i;
         }
 
-        if(device.getSurfaceSupportKHR(i, m_VK_surface)) {
+        //Skip if we already assigned the presentation family queue index
+        if(!indices.presentFamily && device.getSurfaceSupportKHR(i, m_VK_surface)) {
             indices.presentFamily = i; // If the queue family supports presentation to the surface, set the present family
 		}
 
-        if (indices.isComplete()) {
+
+        if ((queueFamily.queueFlags & vk::QueueFlagBits::eTransfer) && 
+            !(queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) &&
+            !(queueFamily.queueFlags & vk::QueueFlagBits::eCompute) &&
+            !indices.transferFamily) {
+            indices.transferFamily = i;
+        }
+
+        if (indices.isComplete() && indices.hasDedicatedTransfer()) {
 			break; // If we already found a suitable family, no need to keep searching
         }
 
         i++;
     }
 
+    // Fallback: if no dedicated transfer, use graphics (it’s implicitly transfer-capable)
+    if (!indices.transferFamily && indices.graphicsFamily) {
+        indices.transferFamily = indices.graphicsFamily;
+    }
+        
     return indices;
 }
 
@@ -308,6 +326,7 @@ bool Craig::Renderer::isDeviceSuitable(const vk::PhysicalDevice& device) {
     }
 
     printf("Found graphics and presentation indices: %s\n", indices.isComplete() ? "True" : "False");
+    printf("Found dedicated transfer index: %s\n", indices.hasDedicatedTransfer() ? "True" : "False");
     printf("Extensions (Like swapchain/double buffers) are supported: %s\n", extensionsSupported ? "True" : "False");
     printf("The swapchain extension is adequate for our use: %s\n", swapChainAdequate ? "True" : "False");
 
@@ -335,7 +354,8 @@ void Craig::Renderer::createLogicalDevice() {
 
     std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
     // Use a set to avoid duplicating queue create info if graphics == presentation
-    std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+    std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value(), indices.transferFamily.value() };
+    
 
     float queuePriority = 1.0f; // Priority for the queue(s) we are creating (range: 0.0 to 1.0)
 
@@ -368,6 +388,13 @@ void Craig::Renderer::createLogicalDevice() {
     // Retrieve the queue handles for rendering and presentation
     m_VK_graphicsQueue = m_VK_device.getQueue(indices.graphicsFamily.value(), 0);
     m_VK_presentationQueue = m_VK_device.getQueue(indices.presentFamily.value(), 0);
+
+    if (indices.hasDedicatedTransfer()) {
+        m_VK_transferQueue = m_VK_device.getQueue(indices.transferFamily.value(), 0);
+    }
+    else {
+        m_VK_transferQueue = m_VK_graphicsQueue;
+    }
 }
 vk::SurfaceFormatKHR Craig::Renderer::chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) {
 
@@ -446,6 +473,7 @@ void Craig::Renderer::createSwapChain() {
         .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
 
     QueueFamilyIndices indices = findQueueFamilies(m_VK_physicalDevice);
+
     uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
 
     //In case we have separate graphics and presentation queues.
@@ -751,13 +779,19 @@ void Craig::Renderer::createCommandPool() {
     poolInfo.setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer)
         .setQueueFamilyIndex(queueFamilyIndices.graphicsFamily.value());
 
-    try {
-        m_VK_commandPool = m_VK_device.createCommandPool(poolInfo);
+    m_VK_commandPool = m_VK_device.createCommandPool(poolInfo);
+
+    if (queueFamilyIndices.hasDedicatedTransfer()) {
+        vk::CommandPoolCreateInfo info;
+        info.setQueueFamilyIndex(queueFamilyIndices.transferFamily.value())
+            .setFlags(vk::CommandPoolCreateFlagBits::eTransient); // copies are short-lived
+
+        m_VK_transferCommandPool = m_VK_device.createCommandPool(info);
     }
-    catch (const vk::SystemError& err) {
-        throw std::runtime_error("failed to create command pool!");
+    else {
+        // No dedicated transfer family — reuse graphics pool
+        m_VK_transferCommandPool = m_VK_commandPool;
     }
-    
 
 }
 
@@ -881,31 +915,52 @@ void Craig::Renderer::createSyncObjects() {
 
 }
 
-void Craig::Renderer::createVertexBuffer() {
-    vk::BufferCreateInfo bufferInfo;
-    bufferInfo.setSize(sizeof(triangle_vertices[0]) * triangle_vertices.size()) //Size of the triangle
-        .setUsage(vk::BufferUsageFlagBits::eVertexBuffer)
-        .setSharingMode(vk::SharingMode::eExclusive); //Buffer's only going to be used by the graphics queue
+void Craig::Renderer::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory) {
+    QueueFamilyIndices indices = findQueueFamilies(m_VK_physicalDevice);
 
-    m_VK_vertexBuffer = m_VK_device.createBuffer(bufferInfo);
+    vk::BufferCreateInfo bufferInfo;
+
+    if (indices.hasDedicatedTransfer()) {
+        uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.transferFamily.value() };
+        bufferInfo.setSize(size) //Size of the triangle
+            .setUsage(usage)
+            .setSharingMode(vk::SharingMode::eConcurrent)
+            .setQueueFamilyIndexCount(2)
+            .setPQueueFamilyIndices(queueFamilyIndices);
+    }
+    else {
+        bufferInfo.setSize(size) //Size of the triangle
+            .setUsage(usage)
+            .setSharingMode(vk::SharingMode::eExclusive); //Buffer's only going to be used by the graphics queue
+    }
+
+    buffer = m_VK_device.createBuffer(bufferInfo);
 
     vk::MemoryRequirements memRequirements;
-    memRequirements = m_VK_device.getBufferMemoryRequirements(m_VK_vertexBuffer);
+    memRequirements = m_VK_device.getBufferMemoryRequirements(buffer);
 
     //Allocating memory for the vertex buffer
     vk::MemoryAllocateInfo allocInfo;
     allocInfo.setAllocationSize(memRequirements.size)
-        .setMemoryTypeIndex(findMemoryType(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent));
-    m_VK_vertexBufferMemory = m_VK_device.allocateMemory(allocInfo);
+        .setMemoryTypeIndex(findMemoryType(memRequirements.memoryTypeBits, properties));
+    bufferMemory = m_VK_device.allocateMemory(allocInfo);
 
     //Binding the memory to the buffer
     //Since the memory is allocated specifically for the vertex buffer, the offset is 0. Otherwise the offset has to be divisble by memRequirements.alignment
-    m_VK_device.bindBufferMemory(m_VK_vertexBuffer, m_VK_vertexBufferMemory, 0);
+    m_VK_device.bindBufferMemory(buffer, bufferMemory, 0);
+
+}
+
+void Craig::Renderer::createVertexBuffer() {
+
+    vk::DeviceSize bufferSize = sizeof(triangle_vertices[0]) * triangle_vertices.size();
+    createBuffer(bufferSize, vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, m_VK_vertexBuffer, m_VK_vertexBufferMemory);
+
 
     //Filling the vertex buffer in GPU memory
     void* data;
-    data = m_VK_device.mapMemory(m_VK_vertexBufferMemory, 0, bufferInfo.size);
-    memcpy(data, triangle_vertices.data(), (size_t)bufferInfo.size);
+    data = m_VK_device.mapMemory(m_VK_vertexBufferMemory, 0, bufferSize);
+    memcpy(data, triangle_vertices.data(), (size_t)bufferSize);
     m_VK_device.unmapMemory(m_VK_vertexBufferMemory);
 
 }
@@ -1033,6 +1088,10 @@ CraigError Craig::Renderer::terminate() {
         m_VK_device.destroyFence(m_VK_inFlightFences[i]);
     }    
 
+    if (m_VK_transferCommandPool && m_VK_transferCommandPool != m_VK_commandPool) {
+        m_VK_device.destroyCommandPool(m_VK_transferCommandPool);
+    }
+       
     m_VK_device.destroyCommandPool(m_VK_commandPool);
 
     for (auto framebuffer : m_VK_swapChainFramebuffers) {
