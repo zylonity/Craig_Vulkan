@@ -75,7 +75,7 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 
 	// Use validation layers if this is a debug build
 #if defined(IMGUI_ENABLED)
-	m_VK_Layers.push_back("VK_LAYER_KHRONOS_validation");
+	mv_VK_Layers.push_back("VK_LAYER_KHRONOS_validation");
     mp_CurrentWindow->getExtensionsVector().push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
@@ -95,8 +95,8 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
         .setPApplicationInfo(&m_VK_appInfo)
         .setEnabledExtensionCount(static_cast<uint32_t>(mp_CurrentWindow->getExtensionsVector().size()))
         .setPpEnabledExtensionNames(mp_CurrentWindow->getExtensionsVector().data())
-        .setEnabledLayerCount(static_cast<uint32_t>(m_VK_Layers.size()))
-        .setPpEnabledLayerNames(m_VK_Layers.data());
+        .setEnabledLayerCount(static_cast<uint32_t>(mv_VK_Layers.size()))
+        .setPpEnabledLayerNames(mv_VK_Layers.data());
 
 	//Create the Vulkan instance/Initialize Vulkan
     try {
@@ -342,7 +342,7 @@ bool Craig::Renderer::checkDeviceExtensionSupport(const vk::PhysicalDevice& devi
 
     std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
 
-	std::set<std::string> requiredExtensions(m_VK_deviceExtensions.begin(), m_VK_deviceExtensions.end());
+	std::set<std::string> requiredExtensions(mv_VK_deviceExtensions.begin(), mv_VK_deviceExtensions.end());
 
     for (const auto& extension : availableExtensions) {
         requiredExtensions.erase(extension.extensionName);
@@ -378,7 +378,7 @@ void Craig::Renderer::createLogicalDevice() {
     vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
         .setQueueCreateInfos(queueCreateInfos)
         .setPEnabledFeatures(&deviceFeatures)
-        .setPEnabledExtensionNames(m_VK_deviceExtensions);
+        .setPEnabledExtensionNames(mv_VK_deviceExtensions);
 
     // Create the logical device for the selected physical device
     try {
@@ -509,7 +509,7 @@ void Craig::Renderer::createSwapChain() {
         throw std::runtime_error("failed to create swap chain!");
     }
 
-    m_VK_swapChainImages = m_VK_device.getSwapchainImagesKHR(m_VK_swapChain);
+    mv_VK_swapChainImages = m_VK_device.getSwapchainImagesKHR(m_VK_swapChain);
     m_VK_swapChainImageFormat = surfaceFormat.format;
     m_VK_swapChainExtent = extent;
 
@@ -518,13 +518,13 @@ void Craig::Renderer::createSwapChain() {
 void Craig::Renderer::createImageViews() {
 
 
-    m_VK_swapChainImageViews.resize(m_VK_swapChainImages.size());
+    mv_VK_swapChainImageViews.resize(mv_VK_swapChainImages.size());
 
-    for (size_t i = 0; i < m_VK_swapChainImages.size(); i++)
+    for (size_t i = 0; i < mv_VK_swapChainImages.size(); i++)
     {
 
         vk::ImageViewCreateInfo createInfo;
-        createInfo.setImage(m_VK_swapChainImages[i])
+        createInfo.setImage(mv_VK_swapChainImages[i])
             .setViewType(vk::ImageViewType::e2D)
             .setFormat(m_VK_swapChainImageFormat)
             .setComponents(vk::ComponentMapping{
@@ -541,7 +541,7 @@ void Craig::Renderer::createImageViews() {
 
 
         try {
-            m_VK_swapChainImageViews[i] = m_VK_device.createImageView(createInfo);
+            mv_VK_swapChainImageViews[i] = m_VK_device.createImageView(createInfo);
         }
         catch (const vk::SystemError& err) {
             throw std::runtime_error("failed to create image views!");
@@ -716,12 +716,12 @@ void Craig::Renderer::createRenderPass() {
 
 void Craig::Renderer::createFrameBuffers() {
 
-    m_VK_swapChainFramebuffers.resize(m_VK_swapChainImageViews.size());
+    mv_VK_swapChainFramebuffers.resize(mv_VK_swapChainImageViews.size());
 
-    for (size_t i = 0; i < m_VK_swapChainImageViews.size(); i++)
+    for (size_t i = 0; i < mv_VK_swapChainImageViews.size(); i++)
     {
         vk::ImageView attachments[]{
-            m_VK_swapChainImageViews[i]
+            mv_VK_swapChainImageViews[i]
         };
 
         vk::FramebufferCreateInfo frameBufferInfo;
@@ -733,7 +733,7 @@ void Craig::Renderer::createFrameBuffers() {
             .setLayers(1);
 
         try {
-            m_VK_swapChainFramebuffers[i] = m_VK_device.createFramebuffer(frameBufferInfo);
+            mv_VK_swapChainFramebuffers[i] = m_VK_device.createFramebuffer(frameBufferInfo);
         }
         catch (const vk::SystemError& err) {
             throw std::runtime_error("failed to create framebuffer!");
@@ -746,11 +746,11 @@ void Craig::Renderer::createFrameBuffers() {
 }
 
 void Craig::Renderer::cleanupSwapChain() {
-    for (auto framebuffer : m_VK_swapChainFramebuffers) {
+    for (auto framebuffer : mv_VK_swapChainFramebuffers) {
         m_VK_device.destroyFramebuffer(framebuffer);
     }
 
-    for (auto imageView : m_VK_swapChainImageViews) {
+    for (auto imageView : mv_VK_swapChainImageViews) {
         m_VK_device.destroyImageView(imageView);
     }
 
@@ -801,15 +801,15 @@ void Craig::Renderer::createCommandPool() {
 }
 
 void Craig::Renderer::createCommandBuffers() {
-    m_VK_commandBuffers.resize(kMaxFramesInFlight);
+    mv_VK_commandBuffers.resize(kMaxFramesInFlight);
 
     vk::CommandBufferAllocateInfo allocInfo;
     allocInfo.setCommandPool(m_VK_commandPool)
         .setLevel(vk::CommandBufferLevel::ePrimary)
-        .setCommandBufferCount((uint32_t)m_VK_commandBuffers.size());
+        .setCommandBufferCount((uint32_t)mv_VK_commandBuffers.size());
 
     try {
-        m_VK_commandBuffers = m_VK_device.allocateCommandBuffers(allocInfo);
+        mv_VK_commandBuffers = m_VK_device.allocateCommandBuffers(allocInfo);
     }
     catch (const vk::SystemError& err) {
         throw std::runtime_error("failed to allocate command buffers!");
@@ -829,7 +829,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     // Set up render pass for drawing to the framebuffer
     vk::RenderPassBeginInfo renderPassInfo;
     renderPassInfo.setRenderPass(m_VK_renderPass)
-        .setFramebuffer(m_VK_swapChainFramebuffers[imageIndex])
+        .setFramebuffer(mv_VK_swapChainFramebuffers[imageIndex])
         .renderArea.setOffset({ 0, 0 })
                    .setExtent(m_VK_swapChainExtent);
 
@@ -901,17 +901,17 @@ void Craig::Renderer::createSyncObjects() {
     vk::FenceCreateInfo fenceInfo;
     fenceInfo.setFlags(vk::FenceCreateFlagBits::eSignaled);  // Start signaled so the first frame doesn't block
 
-    m_VK_renderFinishedSemaphores.resize(kMaxFramesInFlight);
-    m_VK_imageAvailableSemaphores.resize(kMaxFramesInFlight);
-    m_VK_inFlightFences.resize(kMaxFramesInFlight);
+    mv_VK_renderFinishedSemaphores.resize(kMaxFramesInFlight);
+    mv_VK_imageAvailableSemaphores.resize(kMaxFramesInFlight);
+    mv_VK_inFlightFences.resize(kMaxFramesInFlight);
 
     try {
         
         
         for (size_t i = 0; i < kMaxFramesInFlight; i++) {
-            m_VK_imageAvailableSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
-            m_VK_renderFinishedSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
-            m_VK_inFlightFences[i] = m_VK_device.createFence(fenceInfo);
+            mv_VK_imageAvailableSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
+            mv_VK_renderFinishedSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
+            mv_VK_inFlightFences[i] = m_VK_device.createFence(fenceInfo);
         }
 
        
@@ -1045,7 +1045,7 @@ void Craig::Renderer::createIndexBuffer() {
 void Craig::Renderer::drawFrame() {
 
     // Wait until the previous frame has finished
-    m_VK_device.waitForFences(m_VK_inFlightFences[m_currentFrame], vk::True, UINT64_MAX);
+    m_VK_device.waitForFences(mv_VK_inFlightFences[m_currentFrame], vk::True, UINT64_MAX);
 
     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_VK_physicalDevice);
     vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
@@ -1055,7 +1055,7 @@ void Craig::Renderer::drawFrame() {
     }
 
     uint32_t imageIndex;
-    VkResult nextImageResult = vkAcquireNextImageKHR(m_VK_device, m_VK_swapChain, UINT64_MAX, m_VK_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult nextImageResult = vkAcquireNextImageKHR(m_VK_device, m_VK_swapChain, UINT64_MAX, mv_VK_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (nextImageResult == VK_ERROR_OUT_OF_DATE_KHR) {
         recreateSwapChain();
@@ -1066,32 +1066,32 @@ void Craig::Renderer::drawFrame() {
     }
 
 
-    m_VK_device.resetFences(m_VK_inFlightFences[m_currentFrame]);
+    m_VK_device.resetFences(mv_VK_inFlightFences[m_currentFrame]);
 
     
 
     // Record drawing commands into the command buffer
-    m_VK_commandBuffers[m_currentFrame].reset();
-    recordCommandBuffer(m_VK_commandBuffers[m_currentFrame], imageIndex);
+    mv_VK_commandBuffers[m_currentFrame].reset();
+    recordCommandBuffer(mv_VK_commandBuffers[m_currentFrame], imageIndex);
 
     // Submit the command buffer for execution
     vk::SubmitInfo submitInfo;
 
-    vk::Semaphore waitSemaphores[] = { m_VK_imageAvailableSemaphores[m_currentFrame]};
+    vk::Semaphore waitSemaphores[] = { mv_VK_imageAvailableSemaphores[m_currentFrame]};
     vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 
     submitInfo.setWaitSemaphoreCount(1)
         .setPWaitSemaphores(waitSemaphores)
         .setPWaitDstStageMask(waitStages)
         .setCommandBufferCount(1)
-        .setPCommandBuffers(&m_VK_commandBuffers[m_currentFrame]);
+        .setPCommandBuffers(&mv_VK_commandBuffers[m_currentFrame]);
 
-    vk::Semaphore signalSemaphores[] = { m_VK_renderFinishedSemaphores[m_currentFrame] };
+    vk::Semaphore signalSemaphores[] = { mv_VK_renderFinishedSemaphores[m_currentFrame] };
     submitInfo.setSignalSemaphoreCount(1)
         .setPSignalSemaphores(signalSemaphores);
 
     try {
-        m_VK_graphicsQueue.submit(submitInfo, m_VK_inFlightFences[m_currentFrame]);
+        m_VK_graphicsQueue.submit(submitInfo, mv_VK_inFlightFences[m_currentFrame]);
     }
     catch (const vk::SystemError& err) {
         throw std::runtime_error("failed to submit draw command buffer!");
@@ -1184,9 +1184,9 @@ CraigError Craig::Renderer::terminate() {
     m_VK_device.freeMemory(m_VK_vertexBufferMemory);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
-        m_VK_device.destroySemaphore(m_VK_imageAvailableSemaphores[i]);
-        m_VK_device.destroySemaphore(m_VK_renderFinishedSemaphores[i]);
-        m_VK_device.destroyFence(m_VK_inFlightFences[i]);
+        m_VK_device.destroySemaphore(mv_VK_imageAvailableSemaphores[i]);
+        m_VK_device.destroySemaphore(mv_VK_renderFinishedSemaphores[i]);
+        m_VK_device.destroyFence(mv_VK_inFlightFences[i]);
     }    
 
     if (m_VK_transferCommandPool && m_VK_transferCommandPool != m_VK_commandPool) {
@@ -1195,7 +1195,7 @@ CraigError Craig::Renderer::terminate() {
        
     m_VK_device.destroyCommandPool(m_VK_commandPool);
 
-    for (auto framebuffer : m_VK_swapChainFramebuffers) {
+    for (auto framebuffer : mv_VK_swapChainFramebuffers) {
         m_VK_device.destroyFramebuffer(framebuffer);
     }
 
@@ -1206,7 +1206,7 @@ CraigError Craig::Renderer::terminate() {
     m_VK_device.destroyShaderModule(m_VK_vertShaderModule);
     m_VK_device.destroyShaderModule(m_VK_fragShaderModule);
 
-    for (auto imageView : m_VK_swapChainImageViews) {
+    for (auto imageView : mv_VK_swapChainImageViews) {
         m_VK_device.destroyImageView(imageView);
     }
 

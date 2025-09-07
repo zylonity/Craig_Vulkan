@@ -105,7 +105,7 @@ namespace Craig {
 		void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 		
 
-		const std::vector<const char*> m_VK_deviceExtensions = {
+		const std::vector<const char*> mv_VK_deviceExtensions = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME // Required for swapchain support (Like a framebuffer)
 		};
 
@@ -116,7 +116,7 @@ namespace Craig {
 
 		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
 
-		std::vector<const char*> m_VK_Layers; //Validation layers for debugging
+		std::vector<const char*> mv_VK_Layers; //Validation layers for debugging
 
 		vk::Instance m_VK_instance; // Vulkan instance for rendering
 
@@ -136,12 +136,12 @@ namespace Craig {
 		// The swapchain owns a rotating set of images that we render to and present to the screen.
 		// Think of it like a queue of framebuffers managed by the GPU/display system, but framebuffers are the complete image, after applying the imageview
 		vk::SwapchainKHR m_VK_swapChain; 
-		std::vector<vk::Image> m_VK_swapChainImages;
+		std::vector<vk::Image> mv_VK_swapChainImages;
 		vk::Format m_VK_swapChainImageFormat;
 		vk::Extent2D m_VK_swapChainExtent;
 
 		// Image views describe how we access each swapchain image, like treating raw images as 2D textures.
-		std::vector<vk::ImageView> m_VK_swapChainImageViews;
+		std::vector<vk::ImageView> mv_VK_swapChainImageViews;
 
 		vk::ShaderModule m_VK_vertShaderModule;
 		vk::ShaderModule m_VK_fragShaderModule;
@@ -152,22 +152,24 @@ namespace Craig {
 		vk::Pipeline m_VK_graphicsPipeline;
 		
 
-		std::vector<vk::Framebuffer> m_VK_swapChainFramebuffers;
+		std::vector<vk::Framebuffer> mv_VK_swapChainFramebuffers;
 
 		vk::CommandPool m_VK_commandPool;
 		vk::CommandPool m_VK_transferCommandPool;
 
-		std::vector <vk::CommandBuffer> m_VK_commandBuffers;
+		std::vector <vk::CommandBuffer> mv_VK_commandBuffers;
 
 		uint32_t m_currentFrame = 0;
-		std::vector<vk::Semaphore> m_VK_imageAvailableSemaphores;
-		std::vector<vk::Semaphore> m_VK_renderFinishedSemaphores;
-		std::vector<vk::Fence> m_VK_inFlightFences;
+		std::vector<vk::Semaphore> mv_VK_imageAvailableSemaphores;
+		std::vector<vk::Semaphore> mv_VK_renderFinishedSemaphores;
+		std::vector<vk::Fence> mv_VK_inFlightFences;
 
 		vk::Buffer m_VK_vertexBuffer;
 		vk::DeviceMemory m_VK_vertexBufferMemory;
 		vk::Buffer m_VK_indexBuffer;
 		vk::DeviceMemory m_VK_indexBufferMemory;
+
+		std::vector<vk::Buffer> mv_VK_uniformBuffers;
 
 #if defined(IMGUI_ENABLED)
 		void InitImgui();
