@@ -196,6 +196,7 @@ void Craig::Renderer::InitVulkan() {
     createSwapChain();
     createImageViews();
     createRenderPass();
+    createDescriptorSetLayout();
     createGraphicsPipeline();
     createFrameBuffers();
     createCommandPool();
@@ -628,6 +629,8 @@ void Craig::Renderer::createGraphicsPipeline() {
 
 
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
+    pipelineLayoutInfo.setSetLayoutCount(1)
+        .setSetLayouts(m_VK_descriptorSetLayout);
 
     try {
         m_VK_pipelineLayout = m_VK_device.createPipelineLayout(pipelineLayoutInfo);
@@ -1140,6 +1143,28 @@ void Craig::Renderer::createImguiDescriptorPool() {
 }
 #endif
 
+//From vulkan-tutorial.com
+//The descriptor set layout specifies the types of resources that are going to be accessed by the pipeline, just like a render pass specifies the types of attachments that will be accessed. 
+//
+//A descriptor set specifies the actual buffer or image resources that will be bound to the descriptors, just like a framebuffer specifies the actual image views to bind to render pass attachments.
+void Craig::Renderer::createDescriptorSetLayout() {
+
+    vk::DescriptorSetLayoutBinding uboLayoutBinding;
+
+    uboLayoutBinding.setBinding(0)
+        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+        .setDescriptorCount(1)
+        .setStageFlags(vk::ShaderStageFlagBits::eVertex);
+
+    vk::DescriptorSetLayoutCreateInfo layoutInfo;
+    layoutInfo.setBindingCount(1)
+        .setBindings(uboLayoutBinding);
+
+    m_VK_descriptorSetLayout = m_VK_device.createDescriptorSetLayout(layoutInfo);
+
+
+}
+
 CraigError Craig::Renderer::terminate() {
 
     CraigError ret = CRAIG_SUCCESS;
@@ -1187,6 +1212,8 @@ CraigError Craig::Renderer::terminate() {
 
 
     m_VK_device.destroySwapchainKHR(m_VK_swapChain);
+
+    m_VK_device.destroyDescriptorSetLayout(m_VK_descriptorSetLayout);
 
     m_VK_device.destroy();
 

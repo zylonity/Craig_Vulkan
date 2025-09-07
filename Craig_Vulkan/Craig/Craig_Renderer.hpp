@@ -23,6 +23,12 @@ namespace Craig {
 		CraigError terminate();
 	private:
 
+		struct UniformBufferObject {
+			glm::mat4 model;
+			glm::mat4 view;
+			glm::mat4 proj;
+		};
+
 		//Essentially (from what I understand) it's the index (or like ID) of WHERE the queue is, 
 		// so the queue for graphics rendering could be at place 0, and the queue for presenting could be at place 2
 		struct QueueFamilyIndices {
@@ -53,6 +59,9 @@ namespace Craig {
 		void pickPhysicalDevice(); // Picks a suitable physical device for rendering
 		void createLogicalDevice(); //Logical device to interact with the physical device
 		void createRenderPass();
+
+		void createDescriptorSetLayout();
+
 		void createGraphicsPipeline();
 		void createCommandPool();
 		void createCommandBuffers();
@@ -66,6 +75,8 @@ namespace Craig {
 
 		void createVertexBuffer();
 		void createIndexBuffer();
+
+
 
 		void drawFrame();
 
@@ -136,6 +147,7 @@ namespace Craig {
 		vk::ShaderModule m_VK_fragShaderModule;
 
 		vk::RenderPass m_VK_renderPass;
+		vk::DescriptorSetLayout m_VK_descriptorSetLayout;
 		vk::PipelineLayout m_VK_pipelineLayout;
 		vk::Pipeline m_VK_graphicsPipeline;
 		
