@@ -202,6 +202,7 @@ void Craig::Renderer::InitVulkan() {
     createCommandPool();
     createVertexBuffer();
     createIndexBuffer();
+    createUniformBuffers();
     createCommandBuffers();
     createSyncObjects();
 #if defined(IMGUI_ENABLED)
@@ -1042,6 +1043,49 @@ void Craig::Renderer::createIndexBuffer() {
     m_VK_device.freeMemory(stagingBufferMemory);
 }
 
+//From vulkan-tutorial.com
+//The descriptor set layout specifies the types of resources that are going to be accessed by the pipeline, just like a render pass specifies the types of attachments that will be accessed. 
+//
+//A descriptor set specifies the actual buffer or image resources that will be bound to the descriptors, just like a framebuffer specifies the actual image views to bind to render pass attachments.
+void Craig::Renderer::createDescriptorSetLayout() {
+
+    vk::DescriptorSetLayoutBinding uboLayoutBinding;
+
+    uboLayoutBinding.setBinding(0)
+        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+        .setDescriptorCount(1)
+        .setStageFlags(vk::ShaderStageFlagBits::eVertex);
+
+    vk::DescriptorSetLayoutCreateInfo layoutInfo;
+    layoutInfo.setBindingCount(1)
+        .setBindings(uboLayoutBinding);
+
+    m_VK_descriptorSetLayout = m_VK_device.createDescriptorSetLayout(layoutInfo);
+
+
+}
+
+
+void Craig::Renderer::createUniformBuffers() {
+
+    vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+    
+    mv_VK_uniformBuffers.resize(kMaxFramesInFlight);
+    mv_VK_uniformBuffersMemory.resize(kMaxFramesInFlight);
+    mv_VK_uniformBuffersMapped.resize(kMaxFramesInFlight);
+
+    for (size_t i = 0; i < kMaxFramesInFlight; i++)
+    {
+        createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersMemory[i]);
+
+        mv_VK_uniformBuffersMapped[i] = m_VK_device.mapMemory(mv_VK_uniformBuffersMemory[i], 0, bufferSize);
+
+    }
+
+
+}
+
 void Craig::Renderer::drawFrame() {
 
     // Wait until the previous frame has finished
@@ -1143,28 +1187,6 @@ void Craig::Renderer::createImguiDescriptorPool() {
 }
 #endif
 
-//From vulkan-tutorial.com
-//The descriptor set layout specifies the types of resources that are going to be accessed by the pipeline, just like a render pass specifies the types of attachments that will be accessed. 
-//
-//A descriptor set specifies the actual buffer or image resources that will be bound to the descriptors, just like a framebuffer specifies the actual image views to bind to render pass attachments.
-void Craig::Renderer::createDescriptorSetLayout() {
-
-    vk::DescriptorSetLayoutBinding uboLayoutBinding;
-
-    uboLayoutBinding.setBinding(0)
-        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-        .setDescriptorCount(1)
-        .setStageFlags(vk::ShaderStageFlagBits::eVertex);
-
-    vk::DescriptorSetLayoutCreateInfo layoutInfo;
-    layoutInfo.setBindingCount(1)
-        .setBindings(uboLayoutBinding);
-
-    m_VK_descriptorSetLayout = m_VK_device.createDescriptorSetLayout(layoutInfo);
-
-
-}
-
 CraigError Craig::Renderer::terminate() {
 
     CraigError ret = CRAIG_SUCCESS;
@@ -1212,6 +1234,11 @@ CraigError Craig::Renderer::terminate() {
 
 
     m_VK_device.destroySwapchainKHR(m_VK_swapChain);
+
+    for (size_t i = 0; i < kMaxFramesInFlight; i++) {
+        m_VK_device.destroyBuffer(mv_VK_uniformBuffers[i]);
+        m_VK_device.freeMemory(mv_VK_uniformBuffersMemory[i]);
+    }
 
     m_VK_device.destroyDescriptorSetLayout(m_VK_descriptorSetLayout);
 
