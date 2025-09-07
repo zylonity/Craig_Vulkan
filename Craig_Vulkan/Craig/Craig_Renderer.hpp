@@ -115,6 +115,8 @@ namespace Craig {
 		void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
 		void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
 
+		void updateUniformBuffer(uint32_t currentImage);
+
 		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
 
 		std::vector<const char*> mv_VK_Layers; //Validation layers for debugging

@@ -1,7 +1,13 @@
+#define GLM_FORCE_RADIANS
+
 #include <cassert>
 #include <iostream>
 #include <set>
 #include <algorithm>
+#include <chrono>
+#include <glm/gtc/matrix_transform.hpp>
+
+
 
 #if defined(IMGUI_ENABLED)
 #include "../External/Imgui/imgui.h"   
@@ -1086,6 +1092,33 @@ void Craig::Renderer::createUniformBuffers() {
 
 }
 
+void Craig::Renderer::updateUniformBuffer(uint32_t currentImage) {
+
+    static auto startTime = std::chrono::high_resolution_clock::now();
+
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+    UniformBufferObject ubo;
+
+    //lets rotate the model around the z axis dependent on time
+    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
+    //Look at geomtry from above at 45 degree angle
+    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
+    //45 degree FOV perspective projection.
+    ubo.proj = glm::perspective(glm::radians(45.0f), m_VK_swapChainExtent.width / (float)m_VK_swapChainExtent.height, 0.1f, 10.0f);
+
+    //from vulkan-tutorial
+    /*GLM was originally designed for OpenGL, where the Y coordinate of the clip coordinates is inverted. 
+    The easiest way to compensate for that is to flip the sign on the scaling factor of the Y axis in the projection matrix. 
+    If you don't do this, then the image will be rendered upside down.*/
+    ubo.proj[1][1] *= -1;
+
+    memcpy(mv_VK_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+}
+
 void Craig::Renderer::drawFrame() {
 
     // Wait until the previous frame has finished
@@ -1117,6 +1150,8 @@ void Craig::Renderer::drawFrame() {
     // Record drawing commands into the command buffer
     mv_VK_commandBuffers[m_currentFrame].reset();
     recordCommandBuffer(mv_VK_commandBuffers[m_currentFrame], imageIndex);
+
+    updateUniformBuffer(m_currentFrame);
 
     // Submit the command buffer for execution
     vk::SubmitInfo submitInfo;
