@@ -30,8 +30,7 @@ VSOutput main(VSInput input)
     worldPos = mul(view, worldPos); //Apply view matrix
     worldPos = mul(proj, worldPos); //Apply projection matrix
     
-    
-    output.pos = float4(input.pos, 0.0f, 1.0f);
+    output.pos = worldPos;
     output.color = input.color;
     return output;
 }

@@ -209,6 +209,8 @@ void Craig::Renderer::InitVulkan() {
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
+    createDescriptorPool();
+    createDescriptorSets();
     createCommandBuffers();
     createSyncObjects();
 #if defined(IMGUI_ENABLED)
@@ -601,7 +603,7 @@ void Craig::Renderer::createGraphicsPipeline() {
         .setPolygonMode(vk::PolygonMode::eFill)
         .setLineWidth(1.0f)
         .setCullMode(vk::CullModeFlagBits::eBack)
-        .setFrontFace(vk::FrontFace::eClockwise)
+        .setFrontFace(vk::FrontFace::eCounterClockwise)
         .setDepthBiasEnable(false);
 
     //Multisampling/Anti-Aliasing
@@ -873,7 +875,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     commandBuffer.setScissor(0, scissor);
 
-
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_VK_pipelineLayout, 0, m_VK_descriptorSets[m_currentFrame], nullptr);
 
     /*
     indexCount: Even though we don't have a vertex buffer, we technically still have 3 vertices to draw.
@@ -1092,6 +1094,52 @@ void Craig::Renderer::createUniformBuffers() {
 
 }
 
+void Craig::Renderer::createDescriptorPool() {
+
+    vk::DescriptorPoolSize poolSize;
+    poolSize.setType(vk::DescriptorType::eUniformBuffer)
+    .setDescriptorCount(static_cast<uint32_t>(kMaxFramesInFlight));
+
+    vk::DescriptorPoolCreateInfo poolInfo;
+    poolInfo.setPoolSizes(poolSize)
+        .setPoolSizeCount(1)
+        .setMaxSets(static_cast<uint32_t>(kMaxFramesInFlight));
+   
+    m_VK_descriptorPool = m_VK_device.createDescriptorPool(poolInfo);
+
+}
+
+void Craig::Renderer::createDescriptorSets() {
+
+    std::vector<vk::DescriptorSetLayout> layouts(kMaxFramesInFlight, m_VK_descriptorSetLayout);
+    vk::DescriptorSetAllocateInfo allocInfo;
+    allocInfo.setDescriptorPool(m_VK_descriptorPool)
+        .setDescriptorSetCount(static_cast<uint32_t>(kMaxFramesInFlight))
+        .setSetLayouts(layouts);
+
+    m_VK_descriptorSets.resize(kMaxFramesInFlight);
+    m_VK_descriptorSets = m_VK_device.allocateDescriptorSets(allocInfo);
+
+    for (size_t i = 0; i < kMaxFramesInFlight; i++) {
+        vk::DescriptorBufferInfo bufferInfo;
+        bufferInfo.setBuffer(mv_VK_uniformBuffers[i])
+            .setOffset(0)
+            .setRange(sizeof(UniformBufferObject));
+
+        vk::WriteDescriptorSet descriptorWrite;
+        descriptorWrite.setDstSet(m_VK_descriptorSets[i])
+            .setDstBinding(0)
+            .setDstArrayElement(0)
+            .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+            .setDescriptorCount(1)
+            .setBufferInfo(bufferInfo);
+
+        m_VK_device.updateDescriptorSets(descriptorWrite, nullptr);
+
+    }
+
+}
+
 void Craig::Renderer::updateUniformBuffer(uint32_t currentImage) {
 
     static auto startTime = std::chrono::high_resolution_clock::now();
@@ -1275,6 +1323,7 @@ CraigError Craig::Renderer::terminate() {
         m_VK_device.freeMemory(mv_VK_uniformBuffersMemory[i]);
     }
 
+    m_VK_device.destroyDescriptorPool(m_VK_descriptorPool);
     m_VK_device.destroyDescriptorSetLayout(m_VK_descriptorSetLayout);
 
     m_VK_device.destroy();

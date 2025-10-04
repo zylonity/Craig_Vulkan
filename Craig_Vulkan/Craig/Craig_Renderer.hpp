@@ -76,6 +76,8 @@ namespace Craig {
 		void createVertexBuffer();
 		void createIndexBuffer();
 		void createUniformBuffers();
+		void createDescriptorPool();
+		void createDescriptorSets();
 
 
 
@@ -175,6 +177,9 @@ namespace Craig {
 		std::vector<vk::Buffer> mv_VK_uniformBuffers;
 		std::vector<vk::DeviceMemory> mv_VK_uniformBuffersMemory;
 		std::vector<void*> mv_VK_uniformBuffersMapped;
+
+		vk::DescriptorPool m_VK_descriptorPool;
+		std::vector<vk::DescriptorSet> m_VK_descriptorSets;
 
 #if defined(IMGUI_ENABLED)
 		void InitImgui();
