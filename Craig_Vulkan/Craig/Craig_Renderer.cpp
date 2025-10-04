@@ -1,5 +1,6 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define STB_IMAGE_IMPLEMENTATION
 
 #include <cassert>
 #include <iostream>
@@ -7,7 +8,7 @@
 #include <algorithm>
 #include <chrono>
 #include <glm/gtc/matrix_transform.hpp>
-
+#include "../External/stb_image.h"
 
 
 #if defined(IMGUI_ENABLED)
@@ -207,6 +208,7 @@ void Craig::Renderer::InitVulkan() {
     createGraphicsPipeline();
     createFrameBuffers();
     createCommandPool();
+    createTextureImage();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
@@ -1141,6 +1143,7 @@ void Craig::Renderer::createDescriptorSets() {
 
 }
 
+//TODO: Separate camera
 void Craig::Renderer::updateUniformBuffer(uint32_t currentImage) {
 
     static auto startTime = std::chrono::high_resolution_clock::now();
@@ -1166,6 +1169,16 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage) {
     ubo.proj[1][1] *= -1;
 
     memcpy(mv_VK_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+}
+
+void Craig::Renderer::createTextureImage() {
+    int texWidth, texHeight, texChannels;
+    stbi_uc* pixels = stbi_load("data/textures/ugo_cube.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    vk::DeviceSize image = texWidth * texHeight * 4;
+
+    if (!pixels) {
+        throw std::runtime_error("failed to load texture image!");
+    }
 }
 
 void Craig::Renderer::drawFrame() {

@@ -82,6 +82,7 @@ namespace Craig {
 		void createDescriptorPool();
 		void createDescriptorSets();
 
+		void createTextureImage();
 
 
 		void drawFrame();

@@ -6,6 +6,7 @@
 #include "Craig_Framework.hpp"
 #include "Craig_Window.hpp"
 #include "Craig_Renderer.hpp"
+#include "Craig_ResourceManager.hpp"
 
 CraigError Craig::Framework::init() {
 
@@ -23,6 +24,9 @@ CraigError Craig::Framework::init() {
 	assert(mp_Renderer != nullptr && "mp_Renderer failed to allocate memory");
 	ret = mp_Renderer->init(mp_Window);
 	assert(ret == CRAIG_SUCCESS);											
+
+	// Initialize the Resource Manager Singleton
+	Craig::ResourceManager::getInstance().init();
 
 	return ret;
 }
@@ -58,6 +62,7 @@ CraigError Craig::Framework::terminate() {
 	delete mp_Renderer; //Delete the scene manager
 	mp_Renderer = nullptr; //Set the pointer to null (Might not be done by default, just in case)
 
+	Craig::ResourceManager::getInstance().terminate();
 
 	return ret;
 }

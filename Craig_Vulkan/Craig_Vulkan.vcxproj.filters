@@ -26,6 +26,12 @@
     <Filter Include="Source Files\External\Imgui">
       <UniqueIdentifier>{20f8c493-eb3b-4a53-b496-469008daf6c3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\External">
+      <UniqueIdentifier>{44856455-5e87-4019-a128-d08d52ff2e3d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\External\Imgui">
+      <UniqueIdentifier>{ae107197-2936-49c9-87fc-7af118442194}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -67,6 +73,9 @@
     <ClCompile Include="External\Imgui\imgui_widgets.cpp">
       <Filter>Source Files\External\Imgui</Filter>
     </ClCompile>
+    <ClCompile Include="Craig\Craig_ResourceManager.cpp">
+      <Filter>Source Files\Craig</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Craig\Craig_Framework.hpp">
@@ -87,29 +96,35 @@
     <ClInclude Include="Craig\Craig_ShaderCompilation.hpp">
       <Filter>Header Files\Craig</Filter>
     </ClInclude>
+    <ClInclude Include="Craig\Craig_ResourceManager.hpp">
+      <Filter>Header Files\Craig</Filter>
+    </ClInclude>
     <ClInclude Include="External\Imgui\imconfig.h">
-      <Filter>Source Files\External\Imgui</Filter>
+      <Filter>Header Files\External\Imgui</Filter>
     </ClInclude>
     <ClInclude Include="External\Imgui\imgui.h">
-      <Filter>Source Files\External\Imgui</Filter>
+      <Filter>Header Files\External\Imgui</Filter>
     </ClInclude>
     <ClInclude Include="External\Imgui\imgui_impl_sdl2.h">
-      <Filter>Source Files\External\Imgui</Filter>
+      <Filter>Header Files\External\Imgui</Filter>
     </ClInclude>
     <ClInclude Include="External\Imgui\imgui_impl_vulkan.h">
-      <Filter>Source Files\External\Imgui</Filter>
+      <Filter>Header Files\External\Imgui</Filter>
     </ClInclude>
     <ClInclude Include="External\Imgui\imgui_internal.h">
-      <Filter>Source Files\External\Imgui</Filter>
+      <Filter>Header Files\External\Imgui</Filter>
     </ClInclude>
     <ClInclude Include="External\Imgui\imstb_rectpack.h">
-      <Filter>Source Files\External\Imgui</Filter>
+      <Filter>Header Files\External\Imgui</Filter>
     </ClInclude>
     <ClInclude Include="External\Imgui\imstb_textedit.h">
-      <Filter>Source Files\External\Imgui</Filter>
+      <Filter>Header Files\External\Imgui</Filter>
     </ClInclude>
     <ClInclude Include="External\Imgui\imstb_truetype.h">
-      <Filter>Source Files\External\Imgui</Filter>
+      <Filter>Header Files\External\Imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="External\stb_image.h">
+      <Filter>Header Files\External</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

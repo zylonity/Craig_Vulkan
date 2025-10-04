@@ -178,6 +178,7 @@ xcopy /Y /D "$(VULKAN_SDK)\Bin\SDL2.dll" "$(OutDir)."</Command>
   <ItemGroup>
     <ClCompile Include="Craig\Craig_Framework.cpp" />
     <ClCompile Include="Craig\Craig_Renderer.cpp" />
+    <ClCompile Include="Craig\Craig_ResourceManager.cpp" />
     <ClCompile Include="Craig\Craig_ShaderCompilation.cpp" />
     <ClCompile Include="Craig\Craig_Window.cpp" />
     <ClCompile Include="External\Imgui\imgui.cpp" />
@@ -194,6 +195,7 @@ xcopy /Y /D "$(VULKAN_SDK)\Bin\SDL2.dll" "$(OutDir)."</Command>
     <ClInclude Include="Craig\Craig_Constants.hpp" />
     <ClInclude Include="Craig\Craig_Framework.hpp" />
     <ClInclude Include="Craig\Craig_Renderer.hpp" />
+    <ClInclude Include="Craig\Craig_ResourceManager.hpp" />
     <ClInclude Include="Craig\Craig_ShaderCompilation.hpp" />
     <ClInclude Include="Craig\Craig_Window.hpp" />
     <ClInclude Include="External\Imgui\imconfig.h" />
@@ -204,6 +206,7 @@ xcopy /Y /D "$(VULKAN_SDK)\Bin\SDL2.dll" "$(OutDir)."</Command>
     <ClInclude Include="External\Imgui\imstb_rectpack.h" />
     <ClInclude Include="External\Imgui\imstb_textedit.h" />
     <ClInclude Include="External\Imgui\imstb_truetype.h" />
+    <ClInclude Include="External\stb_image.h" />
     <ClInclude Include="Template.hpp" />
   </ItemGroup>
   <ItemGroup>
