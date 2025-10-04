@@ -1,5 +1,8 @@
 #pragma once
 
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+
 #include <optional>
 #include <vector>
 #include <array>
