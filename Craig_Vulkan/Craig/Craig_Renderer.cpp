@@ -1174,11 +1174,51 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage) {
 void Craig::Renderer::createTextureImage() {
     int texWidth, texHeight, texChannels;
     stbi_uc* pixels = stbi_load("data/textures/ugo_cube.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-    vk::DeviceSize image = texWidth * texHeight * 4;
+    vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
     if (!pixels) {
         throw std::runtime_error("failed to load texture image!");
     }
+
+    vk::Buffer stagingBuffer;
+    vk::DeviceMemory stagingBufferMemory;
+
+    createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+
+    void* data = m_VK_device.mapMemory(stagingBufferMemory, 0, imageSize);
+    memcpy(data, pixels, static_cast<size_t>(imageSize));
+    m_VK_device.unmapMemory(stagingBufferMemory);
+
+    stbi_image_free(pixels);
+
+    vk::ImageCreateInfo imageInfo;
+    imageInfo.setImageType(vk::ImageType::e2D);
+    imageInfo.extent.setWidth(static_cast<uint32_t>(texWidth));
+    imageInfo.extent.setHeight(static_cast<uint32_t>(texHeight));
+    imageInfo.extent.setDepth(1);
+    imageInfo.setMipLevels(1);
+    imageInfo.setArrayLayers(1);
+    imageInfo.setFormat(vk::Format::eR8G8B8A8Srgb);
+    imageInfo.setTiling(vk::ImageTiling::eOptimal); /*
+        VK_IMAGE_TILING_LINEAR: Texels are laid out in row - major order like our pixels array
+        VK_IMAGE_TILING_OPTIMAL : Texels are laid out in an implementation defined order for optimal access */
+    imageInfo.setInitialLayout(vk::ImageLayout::eUndefined);
+    imageInfo.setUsage(vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled);
+    imageInfo.setSharingMode(vk::SharingMode::eExclusive);
+    imageInfo.setSamples(vk::SampleCountFlagBits::e1); //From Vulkan-Tutorial.com - The samples flag is related to multisampling. This is only relevant for images that will be used as attachments, so stick to one sample.
+    
+    m_VK_textureImage = m_VK_device.createImage(imageInfo);
+
+
+    vk::MemoryRequirements memRequirements = m_VK_device.getImageMemoryRequirements(m_VK_textureImage);
+    vk::MemoryAllocateInfo allocInfo;
+    allocInfo.setAllocationSize(memRequirements.size);
+    allocInfo.setMemoryTypeIndex(findMemoryType(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal));
+
+    m_VK_textureImageMemory = m_VK_device.allocateMemory(allocInfo);
+    m_VK_device.bindImageMemory(m_VK_textureImage, m_VK_textureImageMemory, 0);
+
+
 }
 
 void Craig::Renderer::drawFrame() {

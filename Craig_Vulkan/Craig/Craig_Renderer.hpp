@@ -185,6 +185,10 @@ namespace Craig {
 		vk::DescriptorPool m_VK_descriptorPool;
 		std::vector<vk::DescriptorSet> m_VK_descriptorSets;
 
+		vk::Image m_VK_textureImage;
+		vk::DeviceMemory m_VK_textureImageMemory;
+
+
 #if defined(IMGUI_ENABLED)
 		void InitImgui();
 		void createImguiDescriptorPool();
