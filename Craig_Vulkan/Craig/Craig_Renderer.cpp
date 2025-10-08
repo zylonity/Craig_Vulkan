@@ -1191,33 +1191,39 @@ void Craig::Renderer::createTextureImage() {
 
     stbi_image_free(pixels);
 
+    createImage(texWidth, texHeight, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_textureImage, m_VK_textureImageMemory);
+
+
+}
+
+void Craig::Renderer::createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory) {
+
     vk::ImageCreateInfo imageInfo;
     imageInfo.setImageType(vk::ImageType::e2D);
-    imageInfo.extent.setWidth(static_cast<uint32_t>(texWidth));
-    imageInfo.extent.setHeight(static_cast<uint32_t>(texHeight));
+    imageInfo.extent.setWidth(width);
+    imageInfo.extent.setHeight(height);
     imageInfo.extent.setDepth(1);
     imageInfo.setMipLevels(1);
     imageInfo.setArrayLayers(1);
-    imageInfo.setFormat(vk::Format::eR8G8B8A8Srgb);
-    imageInfo.setTiling(vk::ImageTiling::eOptimal); /*
+    imageInfo.setFormat(format);
+    imageInfo.setTiling(tiling); /*
         VK_IMAGE_TILING_LINEAR: Texels are laid out in row - major order like our pixels array
         VK_IMAGE_TILING_OPTIMAL : Texels are laid out in an implementation defined order for optimal access */
     imageInfo.setInitialLayout(vk::ImageLayout::eUndefined);
-    imageInfo.setUsage(vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled);
+    imageInfo.setUsage(usage);
     imageInfo.setSharingMode(vk::SharingMode::eExclusive);
     imageInfo.setSamples(vk::SampleCountFlagBits::e1); //From Vulkan-Tutorial.com - The samples flag is related to multisampling. This is only relevant for images that will be used as attachments, so stick to one sample.
-    
+
     m_VK_textureImage = m_VK_device.createImage(imageInfo);
 
 
-    vk::MemoryRequirements memRequirements = m_VK_device.getImageMemoryRequirements(m_VK_textureImage);
+    vk::MemoryRequirements memRequirements = m_VK_device.getImageMemoryRequirements(image);
     vk::MemoryAllocateInfo allocInfo;
     allocInfo.setAllocationSize(memRequirements.size);
-    allocInfo.setMemoryTypeIndex(findMemoryType(memRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal));
+    allocInfo.setMemoryTypeIndex(findMemoryType(memRequirements.memoryTypeBits, properties));
 
-    m_VK_textureImageMemory = m_VK_device.allocateMemory(allocInfo);
-    m_VK_device.bindImageMemory(m_VK_textureImage, m_VK_textureImageMemory, 0);
-
+    imageMemory = m_VK_device.allocateMemory(allocInfo);
+    m_VK_device.bindImageMemory(image, imageMemory, 0);
 
 }
 

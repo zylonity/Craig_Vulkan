@@ -123,6 +123,8 @@ namespace Craig {
 
 		void updateUniformBuffer(uint32_t currentImage);
 
+		void createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory);
+
 		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
 
 		std::vector<const char*> mv_VK_Layers; //Validation layers for debugging
