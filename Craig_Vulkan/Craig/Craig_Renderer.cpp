@@ -235,7 +235,6 @@ void Craig::Renderer::setupDebugMessenger() {
     // If the function was loaded successfully, call it to create the messenger
     if (func && func(static_cast<VkInstance>(m_VK_instance), &createInfo, nullptr,
         reinterpret_cast<VkDebugUtilsMessengerEXT*>(&m_VK_debugMessenger)) != VK_SUCCESS) {
-        // Throw if something went wrong setting it up
         throw std::runtime_error("failed to set up debug messenger!");
     }
 }
@@ -970,15 +969,14 @@ void Craig::Renderer::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usa
 
 }
 
-void Craig::Renderer::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size) {
-
+vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommands() {
     //Allocate a temporary command buffer
     vk::CommandBufferAllocateInfo allocInfo;
     allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
         .setCommandPool(m_VK_transferCommandPool)
         .setCommandBufferCount(1);
 
-    
+
     std::vector<vk::CommandBuffer> commandBuffers = m_VK_device.allocateCommandBuffers(allocInfo);
     vk::CommandBuffer commandBuffer = commandBuffers[0];
 
@@ -988,12 +986,12 @@ void Craig::Renderer::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk:
 
     commandBuffer.begin(beginInfo);
 
-    //Copy over the data
-    vk::BufferCopy copyRegion;
-    copyRegion.setSize(size);
-    commandBuffer.copyBuffer(srcBuffer, dstBuffer, copyRegion);
+    return commandBuffer;
+}
 
-    //Stop recording, we only have one command (copy)
+void Craig::Renderer::buffer_endSingleTimeCommands(vk::CommandBuffer commandBuffer) {
+
+    //Stop recording
     commandBuffer.end();
 
     vk::SubmitInfo submitInfo;
@@ -1004,8 +1002,83 @@ void Craig::Renderer::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk:
     m_VK_transferQueue.waitIdle(); //We could use a fence instead to allow multiple transfers simultaniously.
 
     m_VK_device.freeCommandBuffers(m_VK_transferCommandPool, commandBuffer);
+}
+
+void Craig::Renderer::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size) {
+
+    //Begin recording to buffer
+    vk::CommandBuffer tempBuffer = buffer_beginSingleTimeCommands();
+
+    //Copy over the data
+    vk::BufferCopy copyRegion;
+    copyRegion.setSize(size);
+    tempBuffer.copyBuffer(srcBuffer, dstBuffer, copyRegion);
+
+    //End recording and submit buffer
+    buffer_endSingleTimeCommands(tempBuffer);
 
 
+}
+
+
+//For us to copy the buffer that contains the picture data to the vulkan image, we need to make sure it's the right layout first
+void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
+    //Begin recording to buffer
+    vk::CommandBuffer tempBuffer = buffer_beginSingleTimeCommands();
+
+    vk::ImageMemoryBarrier barrier;
+    barrier.setOldLayout(oldLayout)
+        .setNewLayout(newLayout)
+        .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+        .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+        /*From vulkan-tutorial.com 
+        The image and subresourceRange specify the image that is affected and the specific part of the image.
+        Our image is not an array and does not have mipmapping levels, so only one level and layer are specified.*/
+        .setImage(image)
+        .subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor)
+                         .setBaseMipLevel(0)
+                         .setLevelCount(1)
+                         .setBaseArrayLayer(0)
+                         .setLayerCount(1);
+
+    //TODO
+    barrier.setSrcAccessMask({})
+        .setDstAccessMask({});
+
+    tempBuffer.pipelineBarrier({}, {}, //TODO
+        {},
+        nullptr,
+        nullptr,
+        barrier);
+
+    buffer_endSingleTimeCommands(tempBuffer);
+
+}
+
+void Craig::Renderer::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height) {
+    vk::CommandBuffer tempBuffer = buffer_beginSingleTimeCommands();
+
+    vk::BufferImageCopy region;
+    region.setBufferOffset(0)
+        .setBufferRowLength(0)
+        .setBufferImageHeight(0);
+
+    region.imageSubresource.setAspectMask(vk::ImageAspectFlagBits::eColor)
+        .setMipLevel(0)
+        .setBaseArrayLayer(0)
+        .setLayerCount(1);
+
+    region.setImageOffset({ 0, 0, 0 })
+        .setImageExtent({
+            width,
+            height,
+            1
+            });
+
+    tempBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, region);
+
+
+    buffer_endSingleTimeCommands(tempBuffer);
 }
 
 void Craig::Renderer::createVertexBuffer() {
