@@ -1041,14 +1041,30 @@ void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, 
                          .setBaseArrayLayer(0)
                          .setLayerCount(1);
 
-    //TODO
-    barrier.setSrcAccessMask({})
-        .setDstAccessMask({});
+    vk::PipelineStageFlags sourceStage, destinationStage;
 
-    tempBuffer.pipelineBarrier({}, {}, //TODO
-        {},
-        nullptr,
-        nullptr,
+    if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal) {
+        //TODO
+        barrier.setDstAccessMask(vk::AccessFlagBits::eTransferWrite);
+
+        sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+        destinationStage = vk::PipelineStageFlagBits::eTransfer;
+    }
+    else if(oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal){
+        barrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite)
+            .setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+
+        sourceStage = vk::PipelineStageFlagBits::eTransfer;
+        destinationStage = vk::PipelineStageFlagBits::eTransfer;
+    }
+    else {
+        throw std::invalid_argument("unsupported layout transition!");
+    }
+
+    tempBuffer.pipelineBarrier(sourceStage, destinationStage,
+        vk::DependencyFlagBits::eByRegion, 
+        nullptr, 
+        nullptr, 
         barrier);
 
     buffer_endSingleTimeCommands(tempBuffer);
@@ -1266,9 +1282,17 @@ void Craig::Renderer::createTextureImage() {
 
     createImage(texWidth, texHeight, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_textureImage, m_VK_textureImageMemory);
 
+    transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+    copyBufferToImage(stagingBuffer, m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
+    transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    m_VK_device.destroyBuffer(stagingBuffer);
+    m_VK_device.freeMemory(stagingBufferMemory);
 }
 
+
+//URGENT TODO. REMEMBER DIFFERENT GFX AND TRANSFER QUEUES, ADAPT FOR THIS HERE
 void Craig::Renderer::createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory) {
 
     vk::ImageCreateInfo imageInfo;
@@ -1287,7 +1311,7 @@ void Craig::Renderer::createImage(uint32_t width, uint32_t height, vk::Format fo
     imageInfo.setSharingMode(vk::SharingMode::eExclusive);
     imageInfo.setSamples(vk::SampleCountFlagBits::e1); //From Vulkan-Tutorial.com - The samples flag is related to multisampling. This is only relevant for images that will be used as attachments, so stick to one sample.
 
-    m_VK_textureImage = m_VK_device.createImage(imageInfo);
+    image = m_VK_device.createImage(imageInfo);
 
 
     vk::MemoryRequirements memRequirements = m_VK_device.getImageMemoryRequirements(image);
@@ -1436,6 +1460,9 @@ CraigError Craig::Renderer::terminate() {
     for (auto framebuffer : mv_VK_swapChainFramebuffers) {
         m_VK_device.destroyFramebuffer(framebuffer);
     }
+
+    m_VK_device.destroyImage(m_VK_textureImage);
+    m_VK_device.freeMemory(m_VK_textureImageMemory);
 
     m_VK_device.destroyPipeline(m_VK_graphicsPipeline);
     m_VK_device.destroyPipelineLayout(m_VK_pipelineLayout);
