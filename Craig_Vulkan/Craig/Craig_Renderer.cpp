@@ -386,6 +386,7 @@ void Craig::Renderer::createLogicalDevice() {
     }
 
     vk::PhysicalDeviceFeatures deviceFeatures; // Enable desired features (none yet, placeholder)
+    deviceFeatures.setSamplerAnisotropy(vk::True);
 
     // Fill in device creation info with queue setup and feature requirements
     vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
@@ -1358,7 +1359,42 @@ void Craig::Renderer::createTextureImageView() {
     }
 }
 
+void Craig::Renderer::createTextureSampler() {
+    
+    vk::PhysicalDeviceProperties physicalDeviceProperties;
+    physicalDeviceProperties = m_VK_physicalDevice.getProperties();
 
+    vk::SamplerCreateInfo samplerInfo;
+
+    samplerInfo
+        //How to interpolate texels that are magnified or minified
+        .setMagFilter(vk::Filter::eLinear)
+        .setMinFilter(vk::Filter::eLinear)
+        //What to do when we try to read texels outside the image
+        .setAddressModeU(vk::SamplerAddressMode::eRepeat)
+        .setAddressModeV(vk::SamplerAddressMode::eRepeat)
+        .setAddressModeW(vk::SamplerAddressMode::eRepeat)
+        //Enable anisotropic filtering
+        .setAnisotropyEnable(vk::True)
+        .setMaxAnisotropy(physicalDeviceProperties.limits.maxSamplerAnisotropy) //We can set it to whatever the max the gpu supports
+        //Specify colour returned when sampling beyond the image with clamp to border mode
+        .setBorderColor(vk::BorderColor::eFloatOpaqueBlack)
+        //Clamp coordinates to 0-1 or 0-texSize
+        .setUnnormalizedCoordinates(vk::False)
+        //Something about comparing the texels
+        .setCompareEnable(vk::False)
+        .setCompareOp(vk::CompareOp::eAlways)
+        //Mimapping
+        .setMipmapMode(vk::SamplerMipmapMode::eLinear)
+        .setMipLodBias(0.0f)
+        .setMinLod(0.0f)
+        .setMaxLod(0.0f);
+    
+    m_VK_textureSampler = m_VK_device.createSampler(samplerInfo);
+
+
+
+}
 
 //URGENT TODO. REMEMBER DIFFERENT GFX AND TRANSFER QUEUES, ADAPT FOR THIS HERE
 void Craig::Renderer::createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory) {
@@ -1539,6 +1575,8 @@ CraigError Craig::Renderer::terminate() {
     for (auto framebuffer : mv_VK_swapChainFramebuffers) {
         m_VK_device.destroyFramebuffer(framebuffer);
     }
+
+    m_VK_device.destroySampler(m_VK_textureSampler);
 
     m_VK_device.destroyImageView(m_VK_textureImageView);
 

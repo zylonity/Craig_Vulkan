@@ -199,7 +199,7 @@ namespace Craig {
 		vk::DeviceMemory m_VK_textureImageMemory;
 
 		vk::ImageView m_VK_textureImageView;
-
+		vk::Sampler m_VK_textureSampler;
 
 #if defined(IMGUI_ENABLED)
 		void InitImgui();
