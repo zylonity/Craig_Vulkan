@@ -209,6 +209,8 @@ void Craig::Renderer::InitVulkan() {
     createFrameBuffers();
     createCommandPool();
     createTextureImage();
+    createTextureImageView();
+    createTextureSampler();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
@@ -1329,6 +1331,34 @@ void Craig::Renderer::createTextureImage() {
     m_VK_device.freeMemory(stagingBufferMemory);
 }
 
+void Craig::Renderer::createTextureImageView() {
+    mv_VK_swapChainImageViews.resize(mv_VK_swapChainImages.size());
+
+    for (size_t i = 0; i < mv_VK_swapChainImages.size(); i++)
+    {
+
+        vk::ImageViewCreateInfo viewInfo;
+        viewInfo.setImage(m_VK_textureImage)
+            .setViewType(vk::ImageViewType::e2D)
+            .setFormat(vk::Format::eR8G8B8A8Srgb)
+            .setSubresourceRange(vk::ImageSubresourceRange{
+                vk::ImageAspectFlagBits::eColor, // aspectMask
+                0, 1, // baseMipLevel, levelCount
+                0, 1  // baseArrayLayer, layerCount
+                });
+
+
+        try {
+            mv_VK_swapChainImageViews[i] = m_VK_device.createImageView(viewInfo);
+        }
+        catch (const vk::SystemError& err) {
+            throw std::runtime_error("failed to create image views!");
+        }
+
+    }
+}
+
+
 
 //URGENT TODO. REMEMBER DIFFERENT GFX AND TRANSFER QUEUES, ADAPT FOR THIS HERE
 void Craig::Renderer::createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory) {
@@ -1509,6 +1539,8 @@ CraigError Craig::Renderer::terminate() {
     for (auto framebuffer : mv_VK_swapChainFramebuffers) {
         m_VK_device.destroyFramebuffer(framebuffer);
     }
+
+    m_VK_device.destroyImageView(m_VK_textureImageView);
 
     m_VK_device.destroyImage(m_VK_textureImage);
     m_VK_device.freeMemory(m_VK_textureImageMemory);

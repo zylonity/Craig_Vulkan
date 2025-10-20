@@ -83,7 +83,8 @@ namespace Craig {
 		void createDescriptorSets();
 
 		void createTextureImage();
-
+		void createTextureImageView();
+		void createTextureSampler();
 
 		void drawFrame();
 
@@ -120,10 +121,10 @@ namespace Craig {
 
 		void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
 		void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
+
 		vk::CommandBuffer buffer_beginSingleTimeCommands();
 		void buffer_endSingleTimeCommands(vk::CommandBuffer commandBuffer);
-
-		vk::CommandBuffer buffer_beginSingleTimeCommandsGFX();
+		vk::CommandBuffer buffer_beginSingleTimeCommandsGFX(); //Uses the graphis queue and command buffer
 		void buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandBuffer);
 
 		void updateUniformBuffer(uint32_t currentImage);
@@ -196,6 +197,8 @@ namespace Craig {
 
 		vk::Image m_VK_textureImage;
 		vk::DeviceMemory m_VK_textureImageMemory;
+
+		vk::ImageView m_VK_textureImageView;
 
 
 #if defined(IMGUI_ENABLED)
