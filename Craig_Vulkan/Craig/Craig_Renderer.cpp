@@ -977,8 +977,7 @@ vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommands() {
         .setCommandBufferCount(1);
 
 
-    std::vector<vk::CommandBuffer> commandBuffers = m_VK_device.allocateCommandBuffers(allocInfo);
-    vk::CommandBuffer commandBuffer = commandBuffers[0];
+    vk::CommandBuffer commandBuffer = m_VK_device.allocateCommandBuffers(allocInfo)[0];
 
     //Start recording the command buffer
     vk::CommandBufferBeginInfo beginInfo;
@@ -1004,6 +1003,40 @@ void Craig::Renderer::buffer_endSingleTimeCommands(vk::CommandBuffer commandBuff
     m_VK_device.freeCommandBuffers(m_VK_transferCommandPool, commandBuffer);
 }
 
+vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommandsGFX() {
+    //Allocate a temporary command buffer
+    vk::CommandBufferAllocateInfo allocInfo;
+    allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
+        .setCommandPool(m_VK_commandPool)
+        .setCommandBufferCount(1);
+
+
+    vk::CommandBuffer commandBuffer = m_VK_device.allocateCommandBuffers(allocInfo)[0];
+
+    //Start recording the command buffer
+    vk::CommandBufferBeginInfo beginInfo;
+    beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
+
+    commandBuffer.begin(beginInfo);
+
+    return commandBuffer;
+}
+
+void Craig::Renderer::buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandBuffer) {
+
+    //Stop recording
+    commandBuffer.end();
+
+    vk::SubmitInfo submitInfo;
+    submitInfo.setCommandBufferCount(1)
+        .setCommandBuffers(commandBuffer);
+
+    m_VK_graphicsQueue.submit(submitInfo);
+    m_VK_graphicsQueue.waitIdle(); //We could use a fence instead to allow multiple transfers simultaniously.
+
+    m_VK_device.freeCommandBuffers(m_VK_commandPool, commandBuffer);
+}
+
 void Craig::Renderer::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size) {
 
     //Begin recording to buffer
@@ -1022,9 +1055,9 @@ void Craig::Renderer::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk:
 
 
 //For us to copy the buffer that contains the picture data to the vulkan image, we need to make sure it's the right layout first
-void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
+void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, bool useTransferQueue) {
     //Begin recording to buffer
-    vk::CommandBuffer tempBuffer = buffer_beginSingleTimeCommands();
+    vk::CommandBuffer tempBuffer = useTransferQueue ? buffer_beginSingleTimeCommands() : buffer_beginSingleTimeCommandsGFX();
 
     vk::ImageMemoryBarrier barrier;
     barrier.setOldLayout(oldLayout)
@@ -1051,11 +1084,15 @@ void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, 
         destinationStage = vk::PipelineStageFlagBits::eTransfer;
     }
     else if(oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal){
-        barrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite)
-            .setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+
+        barrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
+
+        barrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
 
         sourceStage = vk::PipelineStageFlagBits::eTransfer;
-        destinationStage = vk::PipelineStageFlagBits::eTransfer;
+        destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+
+        
     }
     else {
         throw std::invalid_argument("unsupported layout transition!");
@@ -1067,7 +1104,8 @@ void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, 
         nullptr, 
         barrier);
 
-    buffer_endSingleTimeCommands(tempBuffer);
+
+    useTransferQueue ? buffer_endSingleTimeCommands(tempBuffer) : buffer_endSingleTimeCommandsGFX(tempBuffer);
 
 }
 
@@ -1285,7 +1323,7 @@ void Craig::Renderer::createTextureImage() {
     transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
     copyBufferToImage(stagingBuffer, m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
-    transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal);
+    transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, false);
 
     m_VK_device.destroyBuffer(stagingBuffer);
     m_VK_device.freeMemory(stagingBufferMemory);
@@ -1308,8 +1346,19 @@ void Craig::Renderer::createImage(uint32_t width, uint32_t height, vk::Format fo
         VK_IMAGE_TILING_OPTIMAL : Texels are laid out in an implementation defined order for optimal access */
     imageInfo.setInitialLayout(vk::ImageLayout::eUndefined);
     imageInfo.setUsage(usage);
-    imageInfo.setSharingMode(vk::SharingMode::eExclusive);
     imageInfo.setSamples(vk::SampleCountFlagBits::e1); //From Vulkan-Tutorial.com - The samples flag is related to multisampling. This is only relevant for images that will be used as attachments, so stick to one sample.
+
+    QueueFamilyIndices q = findQueueFamilies(m_VK_physicalDevice);
+    if (q.hasDedicatedTransfer()) {
+        uint32_t families[] = { q.graphicsFamily.value(), q.transferFamily.value() };
+
+        imageInfo.setSharingMode(vk::SharingMode::eConcurrent);
+        imageInfo.setQueueFamilyIndexCount(2);
+        imageInfo.setQueueFamilyIndices(families);
+    }
+    else {
+        imageInfo.setSharingMode(vk::SharingMode::eExclusive);
+    }
 
     image = m_VK_device.createImage(imageInfo);
 

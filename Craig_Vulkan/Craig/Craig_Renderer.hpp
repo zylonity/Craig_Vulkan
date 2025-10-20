@@ -123,10 +123,13 @@ namespace Craig {
 		vk::CommandBuffer buffer_beginSingleTimeCommands();
 		void buffer_endSingleTimeCommands(vk::CommandBuffer commandBuffer);
 
+		vk::CommandBuffer buffer_beginSingleTimeCommandsGFX();
+		void buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandBuffer);
+
 		void updateUniformBuffer(uint32_t currentImage);
 
 		void createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory);
-		void transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+		void transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, bool useTransferQueue = true);
 		void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
 
 		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
