@@ -108,8 +108,24 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 
 	//Create the Vulkan instance/Initialize Vulkan
     try {
+        //VkValidationFeatureEnableEXT enabledFeatures[] = {
+        //    VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
+        //    // Optional extras:
+        //    // VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
+        //    // VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
+        //};
+
+        //VkValidationFeaturesEXT featuresInfo{};
+        //featuresInfo.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+        //featuresInfo.enabledValidationFeatureCount = static_cast<uint32_t>(std::size(enabledFeatures));
+        //featuresInfo.pEnabledValidationFeatures = enabledFeatures;
+
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
         populateDebugMessengerCreateInfo(debugCreateInfo);
+
+        //featuresInfo.pNext = &debugCreateInfo;
+        //m_VK_instInfo.setPNext(&featuresInfo);
+
         m_VK_instInfo.setPNext(&debugCreateInfo); // Attach debug info to the instance creation
 
 		m_VK_instance = vk::createInstance(m_VK_instInfo); //Now that we have the instance created, we can initialize Vulkan
@@ -585,7 +601,7 @@ void Craig::Renderer::createGraphicsPipeline() {
     vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
     vk::VertexInputBindingDescription                   bindingDescription = Vertex::getBindingDescription();
-    std::array<vk::VertexInputAttributeDescription, 2>  attributeDescriptions = Vertex::getAttributeDescriptions();
+    std::array<vk::VertexInputAttributeDescription, 3>  attributeDescriptions = Vertex::getAttributeDescriptions();
 
     //No vertex data to load for now since its hardcoded into the shader.
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
@@ -1191,15 +1207,26 @@ void Craig::Renderer::createIndexBuffer() {
 void Craig::Renderer::createDescriptorSetLayout() {
 
     vk::DescriptorSetLayoutBinding uboLayoutBinding;
-
-    uboLayoutBinding.setBinding(0)
+    uboLayoutBinding
+        .setBinding(0)
         .setDescriptorType(vk::DescriptorType::eUniformBuffer)
         .setDescriptorCount(1)
         .setStageFlags(vk::ShaderStageFlagBits::eVertex);
 
+    vk::DescriptorSetLayoutBinding samplerLayourBinding;
+    samplerLayourBinding
+        .setBinding(1)
+        .setDescriptorCount(1)
+        .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+        .setPImmutableSamplers(nullptr)
+        .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+
+    std::array<vk::DescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayourBinding };
+
     vk::DescriptorSetLayoutCreateInfo layoutInfo;
-    layoutInfo.setBindingCount(1)
-        .setBindings(uboLayoutBinding);
+    layoutInfo
+        .setBindingCount(static_cast<uint32_t>(bindings.size()))
+        .setBindings(bindings);
 
     m_VK_descriptorSetLayout = m_VK_device.createDescriptorSetLayout(layoutInfo);
 
@@ -1229,13 +1256,18 @@ void Craig::Renderer::createUniformBuffers() {
 
 void Craig::Renderer::createDescriptorPool() {
 
-    vk::DescriptorPoolSize poolSize;
-    poolSize.setType(vk::DescriptorType::eUniformBuffer)
-    .setDescriptorCount(static_cast<uint32_t>(kMaxFramesInFlight));
+    std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+    poolSizes[0]
+        .setType(vk::DescriptorType::eUniformBuffer)
+        .setDescriptorCount(static_cast<uint32_t>(kMaxFramesInFlight));
+    poolSizes[1]
+        .setType(vk::DescriptorType::eCombinedImageSampler)
+        .setDescriptorCount(static_cast<uint32_t>(kMaxFramesInFlight));
 
     vk::DescriptorPoolCreateInfo poolInfo;
-    poolInfo.setPoolSizes(poolSize)
-        .setPoolSizeCount(1)
+    poolInfo
+        .setPoolSizeCount(static_cast<uint32_t>(poolSizes.size()))
+        .setPoolSizes(poolSizes)
         .setMaxSets(static_cast<uint32_t>(kMaxFramesInFlight));
    
     m_VK_descriptorPool = m_VK_device.createDescriptorPool(poolInfo);
@@ -1259,15 +1291,30 @@ void Craig::Renderer::createDescriptorSets() {
             .setOffset(0)
             .setRange(sizeof(UniformBufferObject));
 
-        vk::WriteDescriptorSet descriptorWrite;
-        descriptorWrite.setDstSet(m_VK_descriptorSets[i])
+        vk::DescriptorImageInfo imageInfo;
+        imageInfo
+            .setImageView(m_VK_textureImageView)
+            .setSampler(m_VK_textureSampler)
+            .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        std::array<vk::WriteDescriptorSet, 2> descriptorWrites{};
+        descriptorWrites[0]
+            .setDstSet(m_VK_descriptorSets[i])
             .setDstBinding(0)
             .setDstArrayElement(0)
             .setDescriptorType(vk::DescriptorType::eUniformBuffer)
             .setDescriptorCount(1)
             .setBufferInfo(bufferInfo);
 
-        m_VK_device.updateDescriptorSets(descriptorWrite, nullptr);
+        descriptorWrites[1]
+            .setDstSet(m_VK_descriptorSets[i])
+            .setDstBinding(1)
+            .setDstArrayElement(0)
+            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+            .setDescriptorCount(1)
+            .setImageInfo(imageInfo);
+
+        m_VK_device.updateDescriptorSets(descriptorWrites, nullptr);
 
     }
 
@@ -1333,30 +1380,20 @@ void Craig::Renderer::createTextureImage() {
 }
 
 void Craig::Renderer::createTextureImageView() {
-    mv_VK_swapChainImageViews.resize(mv_VK_swapChainImages.size());
 
-    for (size_t i = 0; i < mv_VK_swapChainImages.size(); i++)
-    {
-
-        vk::ImageViewCreateInfo viewInfo;
-        viewInfo.setImage(m_VK_textureImage)
-            .setViewType(vk::ImageViewType::e2D)
-            .setFormat(vk::Format::eR8G8B8A8Srgb)
-            .setSubresourceRange(vk::ImageSubresourceRange{
-                vk::ImageAspectFlagBits::eColor, // aspectMask
-                0, 1, // baseMipLevel, levelCount
-                0, 1  // baseArrayLayer, layerCount
-                });
+    vk::ImageViewCreateInfo viewInfo;
+    viewInfo.setImage(m_VK_textureImage)
+        .setViewType(vk::ImageViewType::e2D)
+        .setFormat(vk::Format::eR8G8B8A8Srgb)
+        .setSubresourceRange(vk::ImageSubresourceRange{
+            vk::ImageAspectFlagBits::eColor, // aspectMask
+            0, 1, // baseMipLevel, levelCount
+            0, 1  // baseArrayLayer, layerCount
+            });
 
 
-        try {
-            mv_VK_swapChainImageViews[i] = m_VK_device.createImageView(viewInfo);
-        }
-        catch (const vk::SystemError& err) {
-            throw std::runtime_error("failed to create image views!");
-        }
-
-    }
+    m_VK_textureImageView = m_VK_device.createImageView(viewInfo);
+        
 }
 
 void Craig::Renderer::createTextureSampler() {
@@ -1631,7 +1668,8 @@ CraigError Craig::Renderer::terminate() {
 vk::VertexInputBindingDescription Craig::Renderer::Vertex::getBindingDescription()  {
     vk::VertexInputBindingDescription bindingDescription;
 
-    bindingDescription.setBinding(0)
+    bindingDescription
+        .setBinding(0)
         .setStride(sizeof(Vertex))
         .setInputRate(vk::VertexInputRate::eVertex);
        
@@ -1639,18 +1677,26 @@ vk::VertexInputBindingDescription Craig::Renderer::Vertex::getBindingDescription
     return bindingDescription;
 }
 
-std::array<vk::VertexInputAttributeDescription, 2> Craig::Renderer::Vertex::getAttributeDescriptions() {
-    std::array<vk::VertexInputAttributeDescription, 2> attributeDescriptions;
+std::array<vk::VertexInputAttributeDescription, 3> Craig::Renderer::Vertex::getAttributeDescriptions() {
+    std::array<vk::VertexInputAttributeDescription, 3> attributeDescriptions;
 
-    attributeDescriptions[0].setBinding(0) 
+    attributeDescriptions[0]
+        .setBinding(0) 
         .setLocation(0)//Location0 = POSITION0
         .setFormat(vk::Format::eR32G32Sfloat) //Not a colour, just uses the same format. Float2 = RG_float (Only 2 channels) 
         .setOffset(offsetof(Vertex, m_pos));
 
-    attributeDescriptions[1].setBinding(0) 
+    attributeDescriptions[1]
+        .setBinding(0) 
         .setLocation(1)//Location1 = COLOR1 <- ps fuck american spelling.
         .setFormat(vk::Format::eR32G32B32Sfloat) //This time it IS a colour, so float3 = RGB_float
         .setOffset(offsetof(Vertex, m_color));
+
+    attributeDescriptions[2]
+        .setBinding(0)
+        .setLocation(2)
+        .setFormat(vk::Format::eR32G32Sfloat) 
+        .setOffset(offsetof(Vertex, m_texCoord));
 
 
     return attributeDescriptions;

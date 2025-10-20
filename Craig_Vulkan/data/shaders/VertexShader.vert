@@ -9,6 +9,7 @@ struct VSInput
 {
     float2 pos : POSITION0; // so a float2 is 32bits, which means it only uses 1 location slot, which is why it's COLOR1 after
     float3 color : COLOR1; // If the position was a double2, it would use 2 location slots, so COLOR1 would become COLOR2
+    float2 texCoord : TEXCOORD2;
 };
 
 
@@ -16,6 +17,7 @@ struct VSOutput
 {
     float4 pos : SV_Position; // Output to rasterizer
     float3 color : COLOR0; // Passed to fragment shader
+    float2 texCoord : TEXCOORD1; // UVs to fragment
 };
 
 
@@ -32,5 +34,7 @@ VSOutput main(VSInput input)
     
     output.pos = worldPos;
     output.color = input.color;
+    output.texCoord = input.texCoord;
+    
     return output;
 }
