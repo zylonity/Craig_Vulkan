@@ -207,8 +207,7 @@ namespace Craig {
 		vk::ImageView m_VK_textureImageView;
 		vk::Sampler m_VK_textureSampler;
 
-		VmaPool m_VMA_deviceLocalPool;
-		VmaPool m_VMA_hostVisiblePool;
+		VmaPool m_VMA_smallItemsPool;
 
 #if defined(IMGUI_ENABLED)
 		void InitImgui();

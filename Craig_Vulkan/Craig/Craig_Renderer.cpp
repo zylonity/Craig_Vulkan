@@ -214,7 +214,9 @@ void Craig::Renderer::InitVulkan() {
     setupDebugMessenger(); // Actually enable the messenger
 	pickPhysicalDevice(); // Pick a suitable physical device for rendering
 	createLogicalDevice(); // Create a logical device to interact with the physical device
+
     initVMA();
+
     createSwapChain();
     createImageViews();
     createRenderPass();
@@ -243,49 +245,20 @@ void Craig::Renderer::initVMA() {
 
     vk::PhysicalDeviceProperties props = m_VK_physicalDevice.getProperties();
 
-    //Basic allocator setup
     VmaAllocatorCreateInfo vmaCreateInfo{};
     vmaCreateInfo.instance = m_VK_instance;
     vmaCreateInfo.physicalDevice = m_VK_physicalDevice;
     vmaCreateInfo.device = m_VK_device;
     vmaCreateInfo.vulkanApiVersion = VK_API_VERSION_1_4;
+    //printf("Using vulkan api version: %i\n", props.apiVersion);
 
-    //Link my vulkan functions to vma stuff
-    VmaVulkanFunctions vmaFunctions{};                 
+    VmaVulkanFunctions vmaFunctions{};                 // <-- important
     vmaFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
     vmaFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
     vmaCreateInfo.pVulkanFunctions = &vmaFunctions;
 
     VkResult r = vmaCreateAllocator(&vmaCreateInfo, &m_VMA_allocator);
     if (r != VK_SUCCESS) throw std::runtime_error("vmaCreateAllocator failed");
-
-    //Create shared pools for small stufff (less than 1mb)
-
-    vk::PhysicalDeviceMemoryProperties memProps = m_VK_physicalDevice.getMemoryProperties();
-
-    uint32_t devLocalType = UINT32_MAX;
-    uint32_t hostVisibleType = UINT32_MAX;
-
-    for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
-        auto flags = memProps.memoryTypes[i].propertyFlags;
-        if ((flags & vk::MemoryPropertyFlagBits::eDeviceLocal) && devLocalType == UINT32_MAX)
-            devLocalType = i;
-        if ((flags & vk::MemoryPropertyFlagBits::eHostVisible) && hostVisibleType == UINT32_MAX)
-            hostVisibleType = i;
-    }
-
-    if (devLocalType == UINT32_MAX || hostVisibleType == UINT32_MAX)
-        throw std::runtime_error("Failed to find suitable memory types for VMA pools!");
-
-    VmaPoolCreateInfo gpuPoolInfo{};
-    gpuPoolInfo.memoryTypeIndex = devLocalType;
-    gpuPoolInfo.blockSize = 16 * 1024 * 1024; // 16MB
-    vmaCreatePool(m_VMA_allocator, &gpuPoolInfo, &m_VMA_deviceLocalPool);
-
-    VmaPoolCreateInfo cpuPoolInfo{};
-    cpuPoolInfo.memoryTypeIndex = hostVisibleType;
-    cpuPoolInfo.blockSize = 16 * 1024 * 1024;
-    vmaCreatePool(m_VMA_allocator, &cpuPoolInfo, &m_VMA_hostVisiblePool);
 
 }
 
@@ -1201,7 +1174,6 @@ void Craig::Renderer::createVertexBuffer() {
     VmaAllocationCreateInfo stagingAci{};
     stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
     stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-    if (bufferSize < kmaxSizeForMemoryPool) stagingAci.pool = m_VMA_hostVisiblePool;
 
     createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
 
@@ -1214,7 +1186,6 @@ void Craig::Renderer::createVertexBuffer() {
     VmaAllocationCreateInfo gpuAci{};
     gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
     gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    if (bufferSize < kmaxSizeForMemoryPool) gpuAci.pool = m_VMA_deviceLocalPool;
 
     createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, gpuAci, m_VK_vertexBuffer, m_VMA_vertexAllocation);
 
@@ -1231,8 +1202,6 @@ void Craig::Renderer::createIndexBuffer() {
     VmaAllocationCreateInfo stagingAci{};
     stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
     stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-    if (bufferSize < kmaxSizeForMemoryPool) stagingAci.pool = m_VMA_hostVisiblePool;
-    //stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
     createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
 
@@ -1245,7 +1214,6 @@ void Craig::Renderer::createIndexBuffer() {
     VmaAllocationCreateInfo gpuAci{};
     gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
     gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    if (bufferSize < kmaxSizeForMemoryPool) gpuAci.pool = m_VMA_deviceLocalPool;
 
     createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, gpuAci, m_VK_indexBuffer, m_VMA_indexAllocation);
 
@@ -1299,7 +1267,6 @@ void Craig::Renderer::createUniformBuffers() {
     VmaAllocationCreateInfo stagingAci{};
     stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
     stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    if (bufferSize < kmaxSizeForMemoryPool) stagingAci.pool = m_VMA_hostVisiblePool;
 
     mv_VK_uniformBuffers.resize(kMaxFramesInFlight);
     mv_VK_uniformBuffersAllocations.resize(kMaxFramesInFlight);
@@ -1426,7 +1393,6 @@ void Craig::Renderer::createTextureImage() {
     VmaAllocationCreateInfo stagingAci{};
     stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
     stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-    if (imageSize < kmaxSizeForMemoryPool) stagingAci.pool = m_VMA_hostVisiblePool;
 
     createBufferVMA(imageSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
 
@@ -1531,22 +1497,14 @@ void Craig::Renderer::createImage(uint32_t width, uint32_t height, vk::Format fo
         imageInfo.setSharingMode(vk::SharingMode::eExclusive);
     }
 
-
-    vk::DeviceSize imageSize = width * height * 4;
-
     VmaAllocationCreateInfo aci{};
     aci.usage = VMA_MEMORY_USAGE_AUTO;
 
-    if (properties & vk::MemoryPropertyFlagBits::eDeviceLocal) {
+    if (properties & vk::MemoryPropertyFlagBits::eDeviceLocal)
         aci.requiredFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-        if (imageSize < kmaxSizeForMemoryPool) aci.pool = m_VMA_deviceLocalPool;
-    }
-        
-    if (properties & vk::MemoryPropertyFlagBits::eHostVisible) {
+
+    if (properties & vk::MemoryPropertyFlagBits::eHostVisible)
         aci.requiredFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-        if (imageSize < kmaxSizeForMemoryPool) aci.pool = m_VMA_hostVisiblePool;
-    }
-        
 
     VkResult result = vmaCreateImage(m_VMA_allocator, imageInfo, &aci, reinterpret_cast<VkImage*>(&image), &allocation, nullptr);
 
