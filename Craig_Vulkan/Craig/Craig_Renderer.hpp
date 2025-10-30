@@ -192,9 +192,9 @@ namespace Craig {
 
 		vk::Buffer m_VK_vertexBuffer;
 		VmaAllocation m_VMA_vertexAllocation;
-		vk::DeviceMemory m_VK_vertexBufferMemory;
+
 		vk::Buffer m_VK_indexBuffer;
-		vk::DeviceMemory m_VK_indexBufferMemory;
+		VmaAllocation m_VMA_indexAllocation;
 
 		std::vector<vk::Buffer> mv_VK_uniformBuffers;
 		std::vector<vk::DeviceMemory> mv_VK_uniformBuffersMemory;

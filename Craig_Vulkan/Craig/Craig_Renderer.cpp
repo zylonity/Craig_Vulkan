@@ -1223,6 +1223,29 @@ void Craig::Renderer::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint
 //    m_VK_device.freeMemory(stagingBufferMemory);
 //}
 
+//void Craig::Renderer::createIndexBuffer() {
+//
+//    vk::DeviceSize bufferSize = sizeof(m_indices[0]) * m_indices.size();
+//
+//    vk::Buffer stagingBuffer;
+//    vk::DeviceMemory stagingBufferMemory;
+//    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+//
+//
+//    //Filling the vertex buffer in GPU memory
+//    void* data;
+//    data = m_VK_device.mapMemory(stagingBufferMemory, 0, bufferSize);
+//    memcpy(data, m_indices.data(), (size_t)bufferSize);
+//    m_VK_device.unmapMemory(stagingBufferMemory);
+//
+//    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_indexBuffer, m_VK_indexBufferMemory);
+//
+//    copyBuffer(stagingBuffer, m_VK_indexBuffer, bufferSize);
+//
+//    m_VK_device.destroyBuffer(stagingBuffer);
+//    m_VK_device.freeMemory(stagingBufferMemory);
+//}
+
 void Craig::Renderer::createVertexBuffer() {
     vk::DeviceSize bufferSize = sizeof(m_vertices[0]) * m_vertices.size();
 
@@ -1251,29 +1274,35 @@ void Craig::Renderer::createVertexBuffer() {
     vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
 }
 
-
 void Craig::Renderer::createIndexBuffer() {
-
     vk::DeviceSize bufferSize = sizeof(m_indices[0]) * m_indices.size();
 
     vk::Buffer stagingBuffer;
-    vk::DeviceMemory stagingBufferMemory;
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+    VmaAllocation stagingAlloc{};
 
+    VmaAllocationCreateInfo stagingAci{};
+    stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
+    stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-    //Filling the vertex buffer in GPU memory
+    createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
+
     void* data;
-    data = m_VK_device.mapMemory(stagingBufferMemory, 0, bufferSize);
+    vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
     memcpy(data, m_indices.data(), (size_t)bufferSize);
-    m_VK_device.unmapMemory(stagingBufferMemory);
+    vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, bufferSize);
+    vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
 
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_indexBuffer, m_VK_indexBufferMemory);
+    VmaAllocationCreateInfo gpuAci{};
+    gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
+    gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, gpuAci, m_VK_indexBuffer, m_VMA_indexAllocation);
 
     copyBuffer(stagingBuffer, m_VK_indexBuffer, bufferSize);
-
-    m_VK_device.destroyBuffer(stagingBuffer);
-    m_VK_device.freeMemory(stagingBufferMemory);
+    vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
 }
+
+
 
 //From vulkan-tutorial.com
 //The descriptor set layout specifies the types of resources that are going to be accessed by the pipeline, just like a render pass specifies the types of attachments that will be accessed. 
@@ -1667,10 +1696,10 @@ CraigError Craig::Renderer::terminate() {
     m_VK_device.destroyDescriptorPool(m_VK_imguiDescriptorPool);
 #endif
     m_VK_device.destroyBuffer(m_VK_indexBuffer);
-    m_VK_device.freeMemory(m_VK_indexBufferMemory);
+    vmaFreeMemory(m_VMA_allocator, m_VMA_indexAllocation);
 
     m_VK_device.destroyBuffer(m_VK_vertexBuffer);
-    m_VK_device.freeMemory(m_VK_vertexBufferMemory);
+    vmaFreeMemory(m_VMA_allocator, m_VMA_vertexAllocation);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
         m_VK_device.destroySemaphore(mv_VK_imageAvailableSemaphores[i]);
