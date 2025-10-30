@@ -126,6 +126,9 @@
     <ClInclude Include="External\stb_image.h">
       <Filter>Header Files\External</Filter>
     </ClInclude>
+    <ClInclude Include="External\vk_mem_alloc.h">
+      <Filter>Header Files\External</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="data\shaders\FragmentShader.frag">
