@@ -123,8 +123,6 @@ namespace Craig {
 
 		VmaAllocator m_VMA_allocator = VK_NULL_HANDLE;
 
-		void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
-		//void createBufferVMA(vk::DeviceSize size, vk::BufferUsageFlags usage, VmaMemoryUsage memUsage, vk::Buffer& buffer, VmaAllocation& alloc);
 		void createBufferVMA(vk::DeviceSize size, vk::BufferUsageFlags usage, const VmaAllocationCreateInfo& aci, vk::Buffer& buffer,VmaAllocation& alloc, VmaAllocationInfo* outInfo = nullptr);
 
 		void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
@@ -136,7 +134,7 @@ namespace Craig {
 
 		void updateUniformBuffer(uint32_t currentImage);
 
-		void createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory);
+		void createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, VmaAllocation& allocation);
 		void transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, bool useTransferQueue = true);
 		void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
 
@@ -197,17 +195,19 @@ namespace Craig {
 		VmaAllocation m_VMA_indexAllocation;
 
 		std::vector<vk::Buffer> mv_VK_uniformBuffers;
-		std::vector<vk::DeviceMemory> mv_VK_uniformBuffersMemory;
+		std::vector<VmaAllocation> mv_VK_uniformBuffersAllocations;
 		std::vector<void*> mv_VK_uniformBuffersMapped;
 
 		vk::DescriptorPool m_VK_descriptorPool;
 		std::vector<vk::DescriptorSet> m_VK_descriptorSets;
 
 		vk::Image m_VK_textureImage;
-		vk::DeviceMemory m_VK_textureImageMemory;
+		VmaAllocation m_VMA_textureImageAllocation;
 
 		vk::ImageView m_VK_textureImageView;
 		vk::Sampler m_VK_textureSampler;
+
+		VmaPool m_VMA_smallItemsPool;
 
 #if defined(IMGUI_ENABLED)
 		void InitImgui();

@@ -973,42 +973,6 @@ void Craig::Renderer::createSyncObjects() {
 
 }
 
-void Craig::Renderer::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory) {
-    QueueFamilyIndices indices = findQueueFamilies(m_VK_physicalDevice);
-
-    vk::BufferCreateInfo bufferInfo;
-
-    if (indices.hasDedicatedTransfer()) {
-        uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.transferFamily.value() };
-        bufferInfo.setSize(size) //Size of the triangle
-            .setUsage(usage)
-            .setSharingMode(vk::SharingMode::eConcurrent)
-            .setQueueFamilyIndexCount(2)
-            .setPQueueFamilyIndices(queueFamilyIndices);
-    }
-    else {
-        bufferInfo.setSize(size) //Size of the triangle
-            .setUsage(usage)
-            .setSharingMode(vk::SharingMode::eExclusive); //Buffer's only going to be used by the graphics queue
-    }
-
-    buffer = m_VK_device.createBuffer(bufferInfo);
-
-    vk::MemoryRequirements memRequirements;
-    memRequirements = m_VK_device.getBufferMemoryRequirements(buffer);
-
-    //Allocating memory for the vertex buffer
-    vk::MemoryAllocateInfo allocInfo;
-    allocInfo.setAllocationSize(memRequirements.size)
-        .setMemoryTypeIndex(findMemoryType(memRequirements.memoryTypeBits, properties));
-    bufferMemory = m_VK_device.allocateMemory(allocInfo);
-
-    //Binding the memory to the buffer
-    //Since the memory is allocated specifically for the vertex buffer, the offset is 0. Otherwise the offset has to be divisble by memRequirements.alignment
-    m_VK_device.bindBufferMemory(buffer, bufferMemory, 0);
-
-}
-
 void Craig::Renderer::createBufferVMA(
     vk::DeviceSize size,
     vk::BufferUsageFlags usage,
@@ -1201,51 +1165,6 @@ void Craig::Renderer::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint
     buffer_endSingleTimeCommands(tempBuffer);
 }
 
-//void Craig::Renderer::createVertexBuffer() {
-//
-//    vk::DeviceSize bufferSize = sizeof(m_vertices[0]) * m_vertices.size();
-//
-//    vk::Buffer stagingBuffer;
-//    vk::DeviceMemory stagingBufferMemory;
-//    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
-//
-//    //Filling the vertex buffer in GPU memory
-//    void* data;
-//    data = m_VK_device.mapMemory(stagingBufferMemory, 0, bufferSize);
-//    memcpy(data, m_vertices.data(), (size_t)bufferSize);
-//    m_VK_device.unmapMemory(stagingBufferMemory);
-//
-//    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_vertexBuffer, m_VK_vertexBufferMemory);
-//
-//    copyBuffer(stagingBuffer, m_VK_vertexBuffer, bufferSize);
-//     
-//    m_VK_device.destroyBuffer(stagingBuffer);
-//    m_VK_device.freeMemory(stagingBufferMemory);
-//}
-
-//void Craig::Renderer::createIndexBuffer() {
-//
-//    vk::DeviceSize bufferSize = sizeof(m_indices[0]) * m_indices.size();
-//
-//    vk::Buffer stagingBuffer;
-//    vk::DeviceMemory stagingBufferMemory;
-//    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
-//
-//
-//    //Filling the vertex buffer in GPU memory
-//    void* data;
-//    data = m_VK_device.mapMemory(stagingBufferMemory, 0, bufferSize);
-//    memcpy(data, m_indices.data(), (size_t)bufferSize);
-//    m_VK_device.unmapMemory(stagingBufferMemory);
-//
-//    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_indexBuffer, m_VK_indexBufferMemory);
-//
-//    copyBuffer(stagingBuffer, m_VK_indexBuffer, bufferSize);
-//
-//    m_VK_device.destroyBuffer(stagingBuffer);
-//    m_VK_device.freeMemory(stagingBufferMemory);
-//}
-
 void Craig::Renderer::createVertexBuffer() {
     vk::DeviceSize bufferSize = sizeof(m_vertices[0]) * m_vertices.size();
 
@@ -1342,16 +1261,23 @@ void Craig::Renderer::createUniformBuffers() {
 
     vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
     
+    vk::Buffer stagingBuffer;
+    VmaAllocation stagingAlloc{};
+
+    VmaAllocationCreateInfo stagingAci{};
+    stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
+    stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
     mv_VK_uniformBuffers.resize(kMaxFramesInFlight);
-    mv_VK_uniformBuffersMemory.resize(kMaxFramesInFlight);
+    mv_VK_uniformBuffersAllocations.resize(kMaxFramesInFlight);
     mv_VK_uniformBuffersMapped.resize(kMaxFramesInFlight);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++)
     {
-        createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersMemory[i]);
+        VmaAllocationInfo info{};
+        createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, stagingAci, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i], &info);
 
-        mv_VK_uniformBuffersMapped[i] = m_VK_device.mapMemory(mv_VK_uniformBuffersMemory[i], 0, bufferSize);
+        mv_VK_uniformBuffersMapped[i] = info.pMappedData;
 
     }
 
@@ -1462,25 +1388,30 @@ void Craig::Renderer::createTextureImage() {
     }
 
     vk::Buffer stagingBuffer;
-    vk::DeviceMemory stagingBufferMemory;
+    VmaAllocation stagingAlloc{};
 
-    createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+    VmaAllocationCreateInfo stagingAci{};
+    stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
+    stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-    void* data = m_VK_device.mapMemory(stagingBufferMemory, 0, imageSize);
+    createBufferVMA(imageSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
+
+    void* data;
+    vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
     memcpy(data, pixels, static_cast<size_t>(imageSize));
-    m_VK_device.unmapMemory(stagingBufferMemory);
+    vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, imageSize);
+    vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
 
     stbi_image_free(pixels);
 
-    createImage(texWidth, texHeight, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_textureImage, m_VK_textureImageMemory);
+    createImage(texWidth, texHeight, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_textureImage, m_VMA_textureImageAllocation);
 
     transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
     copyBufferToImage(stagingBuffer, m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
     transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, false);
 
-    m_VK_device.destroyBuffer(stagingBuffer);
-    m_VK_device.freeMemory(stagingBufferMemory);
+    vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
 }
 
 void Craig::Renderer::createTextureImageView() {
@@ -1537,8 +1468,7 @@ void Craig::Renderer::createTextureSampler() {
 
 }
 
-//URGENT TODO. REMEMBER DIFFERENT GFX AND TRANSFER QUEUES, ADAPT FOR THIS HERE
-void Craig::Renderer::createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, vk::DeviceMemory& imageMemory) {
+void Craig::Renderer::createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, VmaAllocation& allocation) {
 
     vk::ImageCreateInfo imageInfo;
     imageInfo.setImageType(vk::ImageType::e2D);
@@ -1567,16 +1497,21 @@ void Craig::Renderer::createImage(uint32_t width, uint32_t height, vk::Format fo
         imageInfo.setSharingMode(vk::SharingMode::eExclusive);
     }
 
-    image = m_VK_device.createImage(imageInfo);
+    VmaAllocationCreateInfo aci{};
+    aci.usage = VMA_MEMORY_USAGE_AUTO;
 
+    if (properties & vk::MemoryPropertyFlagBits::eDeviceLocal)
+        aci.requiredFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-    vk::MemoryRequirements memRequirements = m_VK_device.getImageMemoryRequirements(image);
-    vk::MemoryAllocateInfo allocInfo;
-    allocInfo.setAllocationSize(memRequirements.size);
-    allocInfo.setMemoryTypeIndex(findMemoryType(memRequirements.memoryTypeBits, properties));
+    if (properties & vk::MemoryPropertyFlagBits::eHostVisible)
+        aci.requiredFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
 
-    imageMemory = m_VK_device.allocateMemory(allocInfo);
-    m_VK_device.bindImageMemory(image, imageMemory, 0);
+    VkResult result = vmaCreateImage(m_VMA_allocator, imageInfo, &aci, reinterpret_cast<VkImage*>(&image), &allocation, nullptr);
+
+    if (result != VK_SUCCESS)
+        throw std::runtime_error("vmaCreateImage failed");
+
+  
 
 }
 
@@ -1695,11 +1630,9 @@ CraigError Craig::Renderer::terminate() {
     ImGui::DestroyContext();
     m_VK_device.destroyDescriptorPool(m_VK_imguiDescriptorPool);
 #endif
-    m_VK_device.destroyBuffer(m_VK_indexBuffer);
-    vmaFreeMemory(m_VMA_allocator, m_VMA_indexAllocation);
+    vmaDestroyBuffer(m_VMA_allocator, m_VK_indexBuffer, m_VMA_indexAllocation);
 
-    m_VK_device.destroyBuffer(m_VK_vertexBuffer);
-    vmaFreeMemory(m_VMA_allocator, m_VMA_vertexAllocation);
+    vmaDestroyBuffer(m_VMA_allocator, m_VK_vertexBuffer, m_VMA_vertexAllocation);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
         m_VK_device.destroySemaphore(mv_VK_imageAvailableSemaphores[i]);
@@ -1721,8 +1654,7 @@ CraigError Craig::Renderer::terminate() {
 
     m_VK_device.destroyImageView(m_VK_textureImageView);
 
-    m_VK_device.destroyImage(m_VK_textureImage);
-    m_VK_device.freeMemory(m_VK_textureImageMemory);
+    vmaDestroyImage(m_VMA_allocator, m_VK_textureImage, m_VMA_textureImageAllocation);
 
     m_VK_device.destroyPipeline(m_VK_graphicsPipeline);
     m_VK_device.destroyPipelineLayout(m_VK_pipelineLayout);
@@ -1739,8 +1671,7 @@ CraigError Craig::Renderer::terminate() {
     m_VK_device.destroySwapchainKHR(m_VK_swapChain);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
-        m_VK_device.destroyBuffer(mv_VK_uniformBuffers[i]);
-        m_VK_device.freeMemory(mv_VK_uniformBuffersMemory[i]);
+        vmaDestroyBuffer(m_VMA_allocator, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i]);
     }
 
     m_VK_device.destroyDescriptorPool(m_VK_descriptorPool);
