@@ -13,7 +13,5 @@ float4 main(PSInput input) : SV_Target
     // Sample the texture using interpolated UVs
     float4 texColor = texSampler.Sample(texSamplerState, input.texCoord);
 
-    // Optionally multiply by vertex color if you want tinting
     return texColor;// * float4(input.color, 1.0);
-    //return float4(input.texCoord, 0, 1);
 }

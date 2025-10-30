@@ -108,25 +108,23 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 
 	//Create the Vulkan instance/Initialize Vulkan
     try {
-        //VkValidationFeatureEnableEXT enabledFeatures[] = {
-        //    VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
-        //    // Optional extras:
-        //    // VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
-        //    // VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
-        //};
+        VkValidationFeatureEnableEXT enabledFeatures[] = {
+            VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
+            // Optional extras:
+            // VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
+            // VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
+        };
 
-        //VkValidationFeaturesEXT featuresInfo{};
-        //featuresInfo.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-        //featuresInfo.enabledValidationFeatureCount = static_cast<uint32_t>(std::size(enabledFeatures));
-        //featuresInfo.pEnabledValidationFeatures = enabledFeatures;
+        VkValidationFeaturesEXT featuresInfo{};
+        featuresInfo.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+        featuresInfo.enabledValidationFeatureCount = static_cast<uint32_t>(std::size(enabledFeatures));
+        featuresInfo.pEnabledValidationFeatures = enabledFeatures;
 
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
         populateDebugMessengerCreateInfo(debugCreateInfo);
 
-        //featuresInfo.pNext = &debugCreateInfo;
-        //m_VK_instInfo.setPNext(&featuresInfo);
-
-        m_VK_instInfo.setPNext(&debugCreateInfo); // Attach debug info to the instance creation
+        featuresInfo.pNext = &debugCreateInfo;
+        m_VK_instInfo.setPNext(&featuresInfo);
 
 		m_VK_instance = vk::createInstance(m_VK_instInfo); //Now that we have the instance created, we can initialize Vulkan
 
