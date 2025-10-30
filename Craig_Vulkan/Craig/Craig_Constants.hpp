@@ -14,7 +14,7 @@ constexpr uint32_t kVK_EngineVersion = 1;
 
 constexpr float kClearColour[4] = { 1.0f, 0.5f, 0.0f, 1.0f }; // Clear colour for the render target
 constexpr int kMaxFramesInFlight = 3; //How many frames the GPU should deal with at a time
-
+constexpr uint32_t kmaxSizeForMemoryPool = 1048576;
 
 enum CraigError {
 	CRAIG_SUCCESS = 0,
