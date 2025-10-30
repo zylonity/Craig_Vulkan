@@ -1267,6 +1267,7 @@ void Craig::Renderer::createUniformBuffers() {
     VmaAllocationCreateInfo stagingAci{};
     stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
     stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    stagingAci.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
     mv_VK_uniformBuffers.resize(kMaxFramesInFlight);
     mv_VK_uniformBuffersAllocations.resize(kMaxFramesInFlight);
