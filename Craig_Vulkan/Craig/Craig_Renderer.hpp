@@ -8,6 +8,7 @@
 #include <array>
 #include <vulkan/vulkan.hpp>
 #include <SDL2/SDL_vulkan.h>
+#include "../External/vk_mem_alloc.h"
 #include <glm/glm.hpp>
 
 #include "Craig_Constants.hpp"
@@ -67,6 +68,7 @@ namespace Craig {
 
 		void createGraphicsPipeline();
 		void createCommandPool();
+		void initVMA();
 		void createCommandBuffers();
 		void createSyncObjects();
 
@@ -119,7 +121,11 @@ namespace Craig {
 
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
+		VmaAllocator m_VMA_allocator = VK_NULL_HANDLE;
+
 		void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
+		void createBufferVMA(vk::DeviceSize size, vk::BufferUsageFlags usage, VmaMemoryUsage memUsage, vk::Buffer& buffer, VmaAllocation& alloc);
+
 		void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
 
 		vk::CommandBuffer buffer_beginSingleTimeCommands();

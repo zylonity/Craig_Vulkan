@@ -1,6 +1,7 @@
 #pragma once
 
-
+//idk why but it doesn't work unless defined right here.
+#define VMA_IMPLEMENTATION
 #include "Craig_Constants.hpp"
 
 namespace Craig {

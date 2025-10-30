@@ -21,7 +21,6 @@
 #include "Craig_Window.hpp"
 #include "Craig_ShaderCompilation.hpp"
 
-
 #if defined(IMGUI_ENABLED)
 static void check_vk_result(VkResult err)
 {
@@ -215,6 +214,9 @@ void Craig::Renderer::InitVulkan() {
     setupDebugMessenger(); // Actually enable the messenger
 	pickPhysicalDevice(); // Pick a suitable physical device for rendering
 	createLogicalDevice(); // Create a logical device to interact with the physical device
+
+    initVMA();
+
     createSwapChain();
     createImageViews();
     createRenderPass();
@@ -236,6 +238,21 @@ void Craig::Renderer::InitVulkan() {
     createImguiDescriptorPool();
 #endif
     
+
+}
+
+void Craig::Renderer::initVMA() {
+
+    vk::PhysicalDeviceProperties props = m_VK_physicalDevice.getProperties();
+
+    VmaAllocatorCreateInfo ci{};
+    ci.instance = m_VK_instance;
+    ci.physicalDevice = m_VK_physicalDevice;
+    ci.device = m_VK_device;
+    ci.vulkanApiVersion = props.apiVersion;
+    
+    VkResult r = vmaCreateAllocator(&ci, &m_VMA_allocator);
+    if (r != VK_SUCCESS) throw std::runtime_error("vmaCreateAllocator failed");
 
 }
 
@@ -399,7 +416,7 @@ void Craig::Renderer::createLogicalDevice() {
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    vk::PhysicalDeviceFeatures deviceFeatures; // Enable desired features (none yet, placeholder)
+    vk::PhysicalDeviceFeatures deviceFeatures = m_VK_physicalDevice.getFeatures(); // Enable desired features (none yet, placeholder)
     deviceFeatures.setSamplerAnisotropy(vk::True);
 
     // Fill in device creation info with queue setup and feature requirements
@@ -983,6 +1000,50 @@ void Craig::Renderer::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usa
     //Binding the memory to the buffer
     //Since the memory is allocated specifically for the vertex buffer, the offset is 0. Otherwise the offset has to be divisble by memRequirements.alignment
     m_VK_device.bindBufferMemory(buffer, bufferMemory, 0);
+
+}
+
+void Craig::Renderer::createBufferVMA(vk::DeviceSize size, vk::BufferUsageFlags usage, VmaMemoryUsage memUsage, vk::Buffer& buffer, VmaAllocation& alloc) {
+    QueueFamilyIndices indices = findQueueFamilies(m_VK_physicalDevice);
+
+    vk::BufferCreateInfo bufferInfo;
+
+    if (indices.hasDedicatedTransfer()) {
+        uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.transferFamily.value() };
+        bufferInfo.setSize(size) //Size of the triangle
+            .setUsage(usage)
+            .setSharingMode(vk::SharingMode::eConcurrent)
+            .setQueueFamilyIndexCount(2)
+            .setPQueueFamilyIndices(queueFamilyIndices);
+    }
+    else {
+        bufferInfo.setSize(size) //Size of the triangle
+            .setUsage(usage)
+            .setSharingMode(vk::SharingMode::eExclusive); //Buffer's only going to be used by the graphics queue
+    }
+
+    //buffer = m_VK_device.createBuffer(bufferInfo);
+
+    //vk::MemoryRequirements memRequirements;
+    //memRequirements = m_VK_device.getBufferMemoryRequirements(buffer);
+
+    //Allocating memory for the vertex buffer
+
+    VmaAllocationCreateInfo vmaAllocInfo;
+    vmaAllocInfo.usage = memUsage;
+
+    VkBuffer tempCBuffer = static_cast<VkBuffer>(buffer);
+    vmaCreateBuffer(m_VMA_allocator, bufferInfo, &vmaAllocInfo, &tempCBuffer, &alloc, nullptr);
+    buffer = vk::Buffer(tempCBuffer);
+
+    //vk::MemoryAllocateInfo allocInfo;
+    //allocInfo.setAllocationSize(memRequirements.size)
+    //    .setMemoryTypeIndex(findMemoryType(memRequirements.memoryTypeBits, properties));
+    //bufferMemory = m_VK_device.allocateMemory(allocInfo);
+
+    ////Binding the memory to the buffer
+    ////Since the memory is allocated specifically for the vertex buffer, the offset is 0. Otherwise the offset has to be divisble by memRequirements.alignment
+    //m_VK_device.bindBufferMemory(buffer, bufferMemory, 0);
 
 }
 
