@@ -124,7 +124,8 @@ namespace Craig {
 		VmaAllocator m_VMA_allocator = VK_NULL_HANDLE;
 
 		void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Buffer& buffer, vk::DeviceMemory& bufferMemory);
-		void createBufferVMA(vk::DeviceSize size, vk::BufferUsageFlags usage, VmaMemoryUsage memUsage, vk::Buffer& buffer, VmaAllocation& alloc);
+		//void createBufferVMA(vk::DeviceSize size, vk::BufferUsageFlags usage, VmaMemoryUsage memUsage, vk::Buffer& buffer, VmaAllocation& alloc);
+		void createBufferVMA(vk::DeviceSize size, vk::BufferUsageFlags usage, const VmaAllocationCreateInfo& aci, vk::Buffer& buffer,VmaAllocation& alloc, VmaAllocationInfo* outInfo = nullptr);
 
 		void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
 
@@ -190,6 +191,7 @@ namespace Craig {
 		std::vector<vk::Fence> mv_VK_inFlightFences;
 
 		vk::Buffer m_VK_vertexBuffer;
+		VmaAllocation m_VMA_vertexAllocation;
 		vk::DeviceMemory m_VK_vertexBufferMemory;
 		vk::Buffer m_VK_indexBuffer;
 		vk::DeviceMemory m_VK_indexBufferMemory;

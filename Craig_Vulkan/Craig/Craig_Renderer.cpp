@@ -93,7 +93,7 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
         .setApplicationVersion(kVK_AppVersion)
         .setPEngineName(kVK_EngineName)
         .setEngineVersion(kVK_EngineVersion)
-        .setApiVersion(VK_API_VERSION_1_0);
+        .setApiVersion(VK_API_VERSION_1_4);
 
     // vk::InstanceCreateInfo is where the programmer specifies the layers and/or extensions that
     // are needed.
@@ -245,13 +245,19 @@ void Craig::Renderer::initVMA() {
 
     vk::PhysicalDeviceProperties props = m_VK_physicalDevice.getProperties();
 
-    VmaAllocatorCreateInfo ci{};
-    ci.instance = m_VK_instance;
-    ci.physicalDevice = m_VK_physicalDevice;
-    ci.device = m_VK_device;
-    ci.vulkanApiVersion = props.apiVersion;
-    
-    VkResult r = vmaCreateAllocator(&ci, &m_VMA_allocator);
+    VmaAllocatorCreateInfo vmaCreateInfo{};
+    vmaCreateInfo.instance = m_VK_instance;
+    vmaCreateInfo.physicalDevice = m_VK_physicalDevice;
+    vmaCreateInfo.device = m_VK_device;
+    vmaCreateInfo.vulkanApiVersion = VK_API_VERSION_1_4;
+    //printf("Using vulkan api version: %i\n", props.apiVersion);
+
+    VmaVulkanFunctions vmaFunctions{};                 // <-- important
+    vmaFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
+    vmaFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
+    vmaCreateInfo.pVulkanFunctions = &vmaFunctions;
+
+    VkResult r = vmaCreateAllocator(&vmaCreateInfo, &m_VMA_allocator);
     if (r != VK_SUCCESS) throw std::runtime_error("vmaCreateAllocator failed");
 
 }
@@ -1003,48 +1009,30 @@ void Craig::Renderer::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usa
 
 }
 
-void Craig::Renderer::createBufferVMA(vk::DeviceSize size, vk::BufferUsageFlags usage, VmaMemoryUsage memUsage, vk::Buffer& buffer, VmaAllocation& alloc) {
-    QueueFamilyIndices indices = findQueueFamilies(m_VK_physicalDevice);
+void Craig::Renderer::createBufferVMA(
+    vk::DeviceSize size,
+    vk::BufferUsageFlags usage,
+    const VmaAllocationCreateInfo& aci,
+    vk::Buffer& buffer,
+    VmaAllocation& alloc,
+    VmaAllocationInfo* outInfo)
+{
+    VkBufferCreateInfo bi{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+    bi.size = size;
+    bi.usage = static_cast<VkBufferUsageFlags>(usage);
+    bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    vk::BufferCreateInfo bufferInfo;
-
-    if (indices.hasDedicatedTransfer()) {
-        uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.transferFamily.value() };
-        bufferInfo.setSize(size) //Size of the triangle
-            .setUsage(usage)
-            .setSharingMode(vk::SharingMode::eConcurrent)
-            .setQueueFamilyIndexCount(2)
-            .setPQueueFamilyIndices(queueFamilyIndices);
+    // If you truly need concurrent:
+    if (auto idx = findQueueFamilies(m_VK_physicalDevice); idx.hasDedicatedTransfer()) {
+        uint32_t q[2] = { idx.graphicsFamily.value(), idx.transferFamily.value() };
+        bi.sharingMode = VK_SHARING_MODE_CONCURRENT;
+        bi.queueFamilyIndexCount = 2;
+        bi.pQueueFamilyIndices = q;
     }
-    else {
-        bufferInfo.setSize(size) //Size of the triangle
-            .setUsage(usage)
-            .setSharingMode(vk::SharingMode::eExclusive); //Buffer's only going to be used by the graphics queue
-    }
 
-    //buffer = m_VK_device.createBuffer(bufferInfo);
-
-    //vk::MemoryRequirements memRequirements;
-    //memRequirements = m_VK_device.getBufferMemoryRequirements(buffer);
-
-    //Allocating memory for the vertex buffer
-
-    VmaAllocationCreateInfo vmaAllocInfo;
-    vmaAllocInfo.usage = memUsage;
-
-    VkBuffer tempCBuffer = static_cast<VkBuffer>(buffer);
-    vmaCreateBuffer(m_VMA_allocator, bufferInfo, &vmaAllocInfo, &tempCBuffer, &alloc, nullptr);
-    buffer = vk::Buffer(tempCBuffer);
-
-    //vk::MemoryAllocateInfo allocInfo;
-    //allocInfo.setAllocationSize(memRequirements.size)
-    //    .setMemoryTypeIndex(findMemoryType(memRequirements.memoryTypeBits, properties));
-    //bufferMemory = m_VK_device.allocateMemory(allocInfo);
-
-    ////Binding the memory to the buffer
-    ////Since the memory is allocated specifically for the vertex buffer, the offset is 0. Otherwise the offset has to be divisble by memRequirements.alignment
-    //m_VK_device.bindBufferMemory(buffer, bufferMemory, 0);
-
+    VkBuffer raw{};
+    vmaCreateBuffer(m_VMA_allocator, &bi, &aci, &raw, &alloc, outInfo);
+    buffer = vk::Buffer(raw);
 }
 
 vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommands() {
@@ -1213,28 +1201,56 @@ void Craig::Renderer::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint
     buffer_endSingleTimeCommands(tempBuffer);
 }
 
-void Craig::Renderer::createVertexBuffer() {
+//void Craig::Renderer::createVertexBuffer() {
+//
+//    vk::DeviceSize bufferSize = sizeof(m_vertices[0]) * m_vertices.size();
+//
+//    vk::Buffer stagingBuffer;
+//    vk::DeviceMemory stagingBufferMemory;
+//    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+//
+//    //Filling the vertex buffer in GPU memory
+//    void* data;
+//    data = m_VK_device.mapMemory(stagingBufferMemory, 0, bufferSize);
+//    memcpy(data, m_vertices.data(), (size_t)bufferSize);
+//    m_VK_device.unmapMemory(stagingBufferMemory);
+//
+//    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_vertexBuffer, m_VK_vertexBufferMemory);
+//
+//    copyBuffer(stagingBuffer, m_VK_vertexBuffer, bufferSize);
+//     
+//    m_VK_device.destroyBuffer(stagingBuffer);
+//    m_VK_device.freeMemory(stagingBufferMemory);
+//}
 
+void Craig::Renderer::createVertexBuffer() {
     vk::DeviceSize bufferSize = sizeof(m_vertices[0]) * m_vertices.size();
 
     vk::Buffer stagingBuffer;
-    vk::DeviceMemory stagingBufferMemory;
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+    VmaAllocation stagingAlloc{};
 
+    VmaAllocationCreateInfo stagingAci{};
+    stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
+    stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-    //Filling the vertex buffer in GPU memory
+    createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
+
     void* data;
-    data = m_VK_device.mapMemory(stagingBufferMemory, 0, bufferSize);
+    vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
     memcpy(data, m_vertices.data(), (size_t)bufferSize);
-    m_VK_device.unmapMemory(stagingBufferMemory);
+    vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, bufferSize);
+    vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
 
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_vertexBuffer, m_VK_vertexBufferMemory);
+    VmaAllocationCreateInfo gpuAci{};
+    gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
+    gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, gpuAci, m_VK_vertexBuffer, m_VMA_vertexAllocation);
 
     copyBuffer(stagingBuffer, m_VK_vertexBuffer, bufferSize);
-     
-    m_VK_device.destroyBuffer(stagingBuffer);
-    m_VK_device.freeMemory(stagingBufferMemory);
+    vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
 }
+
 
 void Craig::Renderer::createIndexBuffer() {
 

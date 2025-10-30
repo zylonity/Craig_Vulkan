@@ -2,6 +2,7 @@
 
 //idk why but it doesn't work unless defined right here.
 #define VMA_IMPLEMENTATION
+#define VMA_STATIC_VULKAN_FUNCTIONS 0
 #include "Craig_Constants.hpp"
 
 namespace Craig {
