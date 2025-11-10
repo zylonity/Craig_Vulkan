@@ -224,6 +224,7 @@ void Craig::Renderer::InitVulkan() {
     createGraphicsPipeline();
     createFrameBuffers();
     createCommandPool();
+    createDepthResources();
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
@@ -1513,6 +1514,45 @@ void Craig::Renderer::createImage(uint32_t width, uint32_t height, vk::Format fo
         throw std::runtime_error("vmaCreateImage failed");
 
   
+
+}
+
+vk::Format Craig::Renderer::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features)
+{
+    for (auto format : candidates) {
+        auto props = m_VK_physicalDevice.getFormatProperties(format);
+
+        if (tiling == vk::ImageTiling::eLinear &&
+            (props.linearTilingFeatures & features) == features)
+            return format;
+
+        if (tiling == vk::ImageTiling::eOptimal &&
+            (props.optimalTilingFeatures & features) == features)
+            return format;
+    }
+
+    throw std::runtime_error("no supported depth format found");
+}
+
+vk::Format Craig::Renderer::findDepthFormat() {
+    return findSupportedFormat(
+        {
+            vk::Format::eD32SfloatS8Uint,
+            vk::Format::eD24UnormS8Uint,
+            vk::Format::eD32Sfloat
+        },
+        vk::ImageTiling::eOptimal,
+        vk::FormatFeatureFlagBits::eDepthStencilAttachment
+    );
+}
+
+bool Craig::Renderer::hasStencilComponent(vk::Format format) {
+    return format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint;
+}
+
+void Craig::Renderer::createDepthResources() {
+
+   
 
 }
 

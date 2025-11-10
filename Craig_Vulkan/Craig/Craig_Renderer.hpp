@@ -90,6 +90,8 @@ namespace Craig {
 		void createTextureImageView();
 		void createTextureSampler();
 
+		void createDepthResources();
+
 		void drawFrame();
 
 		vk::detail::DispatchLoaderStatic onPresentationFail() { return vk::detail::DispatchLoaderStatic{}; };
@@ -139,6 +141,10 @@ namespace Craig {
 		void createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, VmaAllocation& allocation);
 		void transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, bool useTransferQueue = true);
 		void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
+
+		vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
+		vk::Format findDepthFormat();
+		bool hasStencilComponent(vk::Format format);
 
 		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
 
@@ -210,6 +216,12 @@ namespace Craig {
 		vk::Sampler m_VK_textureSampler;
 
 		VmaPool m_VMA_smallItemsPool;
+
+		vk::Image m_VK_depthImage;
+		VmaAllocation m_VMA_depthImageAllocation;
+		//vk::DeviceMemory m_VK_depthImageMemory;
+
+		vk::ImageView m_VK_depthImageView;
 
 #if defined(IMGUI_ENABLED)
 		void InitImgui();
