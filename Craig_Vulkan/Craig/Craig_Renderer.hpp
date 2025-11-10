@@ -221,7 +221,6 @@ namespace Craig {
 
 		vk::Image m_VK_depthImage;
 		VmaAllocation m_VMA_depthImageAllocation;
-		//vk::DeviceMemory m_VK_depthImageMemory;
 
 		vk::ImageView m_VK_depthImageView;
 

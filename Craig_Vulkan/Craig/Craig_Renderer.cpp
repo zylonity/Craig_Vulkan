@@ -662,6 +662,14 @@ void Craig::Renderer::createGraphicsPipeline() {
     multisampling.setSampleShadingEnable(vk::False)
         .setRasterizationSamples(vk::SampleCountFlagBits::e1);
 
+    vk::PipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil
+        .setDepthTestEnable(true)
+        .setDepthWriteEnable(true)
+        .setDepthCompareOp(vk::CompareOp::eLess)
+        .setDepthBoundsTestEnable(false)
+        .setStencilTestEnable(false);
+
     vk::PipelineColorBlendAttachmentState colourBlendAttachment;
     colourBlendAttachment.setColorWriteMask(
         vk::ColorComponentFlagBits::eR |
@@ -699,15 +707,15 @@ void Craig::Renderer::createGraphicsPipeline() {
     }
 
     vk::GraphicsPipelineCreateInfo pipelineInfo;
-
-    pipelineInfo.setStageCount(2)
+    pipelineInfo
+        .setStageCount(2)
         .setPStages(shaderStages)
         .setPVertexInputState(&vertexInputInfo)
         .setPInputAssemblyState(&inputAssembly)
         .setPViewportState(&viewportState)
         .setPRasterizationState(&rasterizer)
         .setPMultisampleState(&multisampling)
-        .setPDepthStencilState(nullptr)
+        .setPDepthStencilState(&depthStencil)
         .setPColorBlendState(&colourBlending)
         .setPDynamicState(&dynamicState)
         .setLayout(m_VK_pipelineLayout)
@@ -757,7 +765,7 @@ void Craig::Renderer::createRenderPass() {
     vk::AttachmentReference depthAttachmentRef;
     depthAttachmentRef
         .setAttachment(1)
-        .setLayout(vk::ImageLayout::eStencilAttachmentOptimal);
+        .setLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
     vk::SubpassDescription subpass;
     subpass
@@ -833,6 +841,10 @@ void Craig::Renderer::createFrameBuffers() {
 }
 
 void Craig::Renderer::cleanupSwapChain() {
+
+    m_VK_device.destroyImageView(m_VK_depthImageView);
+    vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
+
     for (auto framebuffer : mv_VK_swapChainFramebuffers) {
         m_VK_device.destroyFramebuffer(framebuffer);
     }
@@ -860,6 +872,7 @@ void Craig::Renderer::recreateSwapChain() {
 
     createSwapChain();
     createImageViews();
+    createDepthResources();
     createFrameBuffers();
 }
 
@@ -921,10 +934,12 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
                    .setExtent(m_VK_swapChainExtent);
 
     // Clear color for this frame
-    vk::ClearValue clearValue;
-    clearValue.setColor({ kClearColour[0], kClearColour[1], kClearColour[2], kClearColour[3] });
-    renderPassInfo.setClearValueCount(1)
-        .setPClearValues(&clearValue);
+    std::array<vk::ClearValue, 2> clearValues;
+    clearValues[0].setColor({kClearColour[0], kClearColour[1], kClearColour[2], kClearColour[3]});
+    clearValues[1].setDepthStencil({ 1.0f, 0 });
+
+    renderPassInfo.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
+        .setPClearValues(clearValues.data());
 
     commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
     
@@ -1723,6 +1738,9 @@ CraigError Craig::Renderer::terminate() {
     m_VK_device.destroyImageView(m_VK_textureImageView);
 
     vmaDestroyImage(m_VMA_allocator, m_VK_textureImage, m_VMA_textureImageAllocation);
+
+    m_VK_device.destroyImageView(m_VK_depthImageView);
+    vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
 
     m_VK_device.destroyPipeline(m_VK_graphicsPipeline);
     m_VK_device.destroyPipelineLayout(m_VK_pipelineLayout);
