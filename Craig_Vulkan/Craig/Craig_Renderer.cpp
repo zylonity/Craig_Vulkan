@@ -222,9 +222,9 @@ void Craig::Renderer::InitVulkan() {
     createRenderPass();
     createDescriptorSetLayout();
     createGraphicsPipeline();
-    createFrameBuffers();
     createCommandPool();
     createDepthResources();
+    createFrameBuffers();
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
@@ -805,14 +805,16 @@ void Craig::Renderer::createFrameBuffers() {
 
     for (size_t i = 0; i < mv_VK_swapChainImageViews.size(); i++)
     {
-        vk::ImageView attachments[]{
-            mv_VK_swapChainImageViews[i]
+        std::array<vk::ImageView, 2> attachments = {
+            mv_VK_swapChainImageViews[i],
+            m_VK_depthImageView
         };
 
         vk::FramebufferCreateInfo frameBufferInfo;
-        frameBufferInfo.setRenderPass(m_VK_renderPass)
-            .setAttachmentCount(1)
-            .setPAttachments(attachments)
+        frameBufferInfo
+            .setRenderPass(m_VK_renderPass)
+            .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+            .setPAttachments(attachments.data())
             .setWidth(m_VK_swapChainExtent.width)
             .setHeight(m_VK_swapChainExtent.height)
             .setLayers(1);
