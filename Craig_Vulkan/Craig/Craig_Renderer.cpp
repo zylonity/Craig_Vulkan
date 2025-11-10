@@ -567,7 +567,7 @@ void Craig::Renderer::createSwapChain() {
 
 }
 
-vk::ImageView Craig::Renderer::createImageView(vk::Image image, vk::Format format) {
+vk::ImageView Craig::Renderer::createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags) {
     vk::ImageViewCreateInfo createInfo;
     createInfo.setImage(image)
         .setViewType(vk::ImageViewType::e2D)
@@ -579,7 +579,7 @@ vk::ImageView Craig::Renderer::createImageView(vk::Image image, vk::Format forma
             vk::ComponentSwizzle::eIdentity
             })
         .setSubresourceRange(vk::ImageSubresourceRange{
-            vk::ImageAspectFlagBits::eColor, // aspectMask
+            aspectFlags,// aspectMask
             0, 1, // baseMipLevel, levelCount
             0, 1  // baseArrayLayer, layerCount
             });
@@ -604,7 +604,7 @@ void Craig::Renderer::createImageViews() {
 
     for (size_t i = 0; i < mv_VK_swapChainImages.size(); i++)
     {
-        mv_VK_swapChainImageViews[i] = createImageView(mv_VK_swapChainImages[i], m_VK_swapChainImageFormat);
+        mv_VK_swapChainImageViews[i] = createImageView(mv_VK_swapChainImages[i], m_VK_swapChainImageFormat, vk::ImageAspectFlagBits::eColor);
 
     }
     
@@ -728,7 +728,8 @@ void Craig::Renderer::createGraphicsPipeline() {
 void Craig::Renderer::createRenderPass() {
 
     vk::AttachmentDescription colourAttachment;
-    colourAttachment.setFormat(m_VK_swapChainImageFormat)
+    colourAttachment
+        .setFormat(m_VK_swapChainImageFormat)
         .setSamples(vk::SampleCountFlagBits::e1)
         .setLoadOp(vk::AttachmentLoadOp::eClear)
         .setStoreOp(vk::AttachmentStoreOp::eStore)
@@ -737,25 +738,50 @@ void Craig::Renderer::createRenderPass() {
         .setInitialLayout(vk::ImageLayout::eUndefined)
         .setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
 
+    vk::AttachmentDescription depthAttatchment;
+    depthAttatchment
+        .setFormat(findDepthFormat())
+        .setSamples(vk::SampleCountFlagBits::e1)
+        .setLoadOp(vk::AttachmentLoadOp::eClear)
+        .setStoreOp(vk::AttachmentStoreOp::eDontCare)
+        .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+        .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
+        .setInitialLayout(vk::ImageLayout::eUndefined)
+        .setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
     vk::AttachmentReference colourAttachmentRef;
-    colourAttachmentRef.setAttachment(0) //We only have one attachment description so it'll go to that
+    colourAttachmentRef
+        .setAttachment(0) //We only have one attachment description so it'll go to that
         .setLayout(vk::ImageLayout::eColorAttachmentOptimal);
 
+    vk::AttachmentReference depthAttachmentRef;
+    depthAttachmentRef
+        .setAttachment(1)
+        .setLayout(vk::ImageLayout::eStencilAttachmentOptimal);
+
     vk::SubpassDescription subpass;
-    subpass.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
+    subpass
+        .setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
         .setColorAttachmentCount(1)
-        .setPColorAttachments(&colourAttachmentRef);
+        .setPColorAttachments(&colourAttachmentRef)
+        .setPDepthStencilAttachment(&depthAttachmentRef);
 
     vk::SubpassDependency dependency;
-    dependency.setSrcSubpass(vk::SubpassExternal)
+    dependency
+        .setSrcSubpass(vk::SubpassExternal)
         .setDstSubpass(0)
-        .setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
-        .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput)
-        .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+        .setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eLateFragmentTests)
+        .setSrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentWrite)
+        .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eEarlyFragmentTests)
+        .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+
+
+    std::array<vk::AttachmentDescription, 2> attachments = { colourAttachment, depthAttatchment };
 
     vk::RenderPassCreateInfo renderPassInfo;
-    renderPassInfo.setAttachmentCount(1)
-        .setPAttachments(&colourAttachment)
+    renderPassInfo
+        .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+        .setPAttachments(attachments.data())
         .setSubpassCount(1)
         .setPSubpasses(&subpass)
         .setDependencyCount(1)
@@ -1425,7 +1451,7 @@ void Craig::Renderer::createTextureImage() {
 
 void Craig::Renderer::createTextureImageView() {
     
-    m_VK_textureImageView = createImageView(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb);
+    m_VK_textureImageView = createImageView(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor);
 }
 
 void Craig::Renderer::createTextureSampler() {
@@ -1547,11 +1573,12 @@ bool Craig::Renderer::hasStencilComponent(vk::Format format) {
 
 void Craig::Renderer::createDepthResources() {
 
-    //vk::Format depthFormat = findDepthFormat();
+    vk::Format depthFormat = findDepthFormat();
 
-    //createImage(m_VK_swapChainExtent.width, m_VK_swapChainExtent.height, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_depthImage, m_VMA_depthImageAllocation);
+    createImage(m_VK_swapChainExtent.width, m_VK_swapChainExtent.height, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_depthImage, m_VMA_depthImageAllocation);
 
-    //m_VK_depthImageView = 
+    m_VK_depthImageView = createImageView(m_VK_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth);
+
 }
 
 void Craig::Renderer::drawFrame() {
