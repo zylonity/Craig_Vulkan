@@ -2,6 +2,7 @@
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
 #include <optional>
 #include <vector>
@@ -10,6 +11,7 @@
 #include <SDL2/SDL_vulkan.h>
 #include "../External/vk_mem_alloc.h"
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "Craig_Constants.hpp"
 
@@ -218,7 +220,7 @@ namespace Craig {
 
 		//Vertex buffer stuff
 		struct Vertex {
-			glm::vec2 m_pos;
+			glm::vec3 m_pos;
 			glm::vec3 m_color;
 			glm::vec2 m_texCoord;
 
@@ -228,14 +230,20 @@ namespace Craig {
 		};
 
 		const std::vector<Vertex> m_vertices = {
-			{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-			{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-			{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-			{{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+			{{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+			{{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+			{{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+			{{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
+
+			{{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+			{{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+			{{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+			{{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
 		};
 
 		const std::vector<uint16_t> m_indices = {
-			0, 1, 2, 2, 3, 0
+			0, 1, 2, 2, 3, 0,
+			4, 5, 6, 6, 7, 4
 		};
 
 	};

@@ -1719,7 +1719,7 @@ std::array<vk::VertexInputAttributeDescription, 3> Craig::Renderer::Vertex::getA
     attributeDescriptions[0]
         .setBinding(0) 
         .setLocation(0)//Location0 = POSITION0
-        .setFormat(vk::Format::eR32G32Sfloat) //Not a colour, just uses the same format. Float2 = RG_float (Only 2 channels) 
+        .setFormat(vk::Format::eR32G32B32Sfloat) //Not a colour, just uses the same format. Float2 = RG_float (Only 2 channels) 
         .setOffset(offsetof(Vertex, m_pos));
 
     attributeDescriptions[1]
