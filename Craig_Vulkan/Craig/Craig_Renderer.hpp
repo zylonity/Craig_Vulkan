@@ -142,6 +142,8 @@ namespace Craig {
 		void transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, bool useTransferQueue = true);
 		void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
 
+		vk::ImageView createImageView(vk::Image image, vk::Format format);
+
 		vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
 		vk::Format findDepthFormat();
 		bool hasStencilComponent(vk::Format format);

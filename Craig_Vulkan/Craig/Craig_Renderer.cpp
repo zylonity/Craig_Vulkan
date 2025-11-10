@@ -567,6 +567,36 @@ void Craig::Renderer::createSwapChain() {
 
 }
 
+vk::ImageView Craig::Renderer::createImageView(vk::Image image, vk::Format format) {
+    vk::ImageViewCreateInfo createInfo;
+    createInfo.setImage(image)
+        .setViewType(vk::ImageViewType::e2D)
+        .setFormat(format)
+        .setComponents(vk::ComponentMapping{
+            vk::ComponentSwizzle::eIdentity,
+            vk::ComponentSwizzle::eIdentity,
+            vk::ComponentSwizzle::eIdentity,
+            vk::ComponentSwizzle::eIdentity
+            })
+        .setSubresourceRange(vk::ImageSubresourceRange{
+            vk::ImageAspectFlagBits::eColor, // aspectMask
+            0, 1, // baseMipLevel, levelCount
+            0, 1  // baseArrayLayer, layerCount
+            });
+
+
+    vk::ImageView imageView;
+
+    try {
+        imageView = m_VK_device.createImageView(createInfo);
+    }
+    catch (const vk::SystemError& err) {
+        throw std::runtime_error("failed to create image views!");
+    }
+
+    return imageView;
+}
+
 void Craig::Renderer::createImageViews() {
 
 
@@ -574,30 +604,7 @@ void Craig::Renderer::createImageViews() {
 
     for (size_t i = 0; i < mv_VK_swapChainImages.size(); i++)
     {
-
-        vk::ImageViewCreateInfo createInfo;
-        createInfo.setImage(mv_VK_swapChainImages[i])
-            .setViewType(vk::ImageViewType::e2D)
-            .setFormat(m_VK_swapChainImageFormat)
-            .setComponents(vk::ComponentMapping{
-                vk::ComponentSwizzle::eIdentity,
-                vk::ComponentSwizzle::eIdentity,
-                vk::ComponentSwizzle::eIdentity,
-                vk::ComponentSwizzle::eIdentity
-                })
-            .setSubresourceRange(vk::ImageSubresourceRange{
-                vk::ImageAspectFlagBits::eColor, // aspectMask
-                0, 1, // baseMipLevel, levelCount
-                0, 1  // baseArrayLayer, layerCount
-                });
-
-
-        try {
-            mv_VK_swapChainImageViews[i] = m_VK_device.createImageView(createInfo);
-        }
-        catch (const vk::SystemError& err) {
-            throw std::runtime_error("failed to create image views!");
-        }
+        mv_VK_swapChainImageViews[i] = createImageView(mv_VK_swapChainImages[i], m_VK_swapChainImageFormat);
 
     }
     
@@ -1417,20 +1424,8 @@ void Craig::Renderer::createTextureImage() {
 }
 
 void Craig::Renderer::createTextureImageView() {
-
-    vk::ImageViewCreateInfo viewInfo;
-    viewInfo.setImage(m_VK_textureImage)
-        .setViewType(vk::ImageViewType::e2D)
-        .setFormat(vk::Format::eR8G8B8A8Srgb)
-        .setSubresourceRange(vk::ImageSubresourceRange{
-            vk::ImageAspectFlagBits::eColor, // aspectMask
-            0, 1, // baseMipLevel, levelCount
-            0, 1  // baseArrayLayer, layerCount
-            });
-
-
-    m_VK_textureImageView = m_VK_device.createImageView(viewInfo);
-        
+    
+    m_VK_textureImageView = createImageView(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb);
 }
 
 void Craig::Renderer::createTextureSampler() {
@@ -1552,8 +1547,11 @@ bool Craig::Renderer::hasStencilComponent(vk::Format format) {
 
 void Craig::Renderer::createDepthResources() {
 
-   
+    //vk::Format depthFormat = findDepthFormat();
 
+    //createImage(m_VK_swapChainExtent.width, m_VK_swapChainExtent.height, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_depthImage, m_VMA_depthImageAllocation);
+
+    //m_VK_depthImageView = 
 }
 
 void Craig::Renderer::drawFrame() {
