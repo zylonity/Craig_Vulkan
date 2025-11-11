@@ -1733,14 +1733,14 @@ CraigError Craig::Renderer::terminate() {
         m_VK_device.destroyFramebuffer(framebuffer);
     }
 
+    m_VK_device.destroyImageView(m_VK_depthImageView);
+    vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
+
     m_VK_device.destroySampler(m_VK_textureSampler);
 
     m_VK_device.destroyImageView(m_VK_textureImageView);
 
     vmaDestroyImage(m_VMA_allocator, m_VK_textureImage, m_VMA_textureImageAllocation);
-
-    m_VK_device.destroyImageView(m_VK_depthImageView);
-    vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
 
     m_VK_device.destroyPipeline(m_VK_graphicsPipeline);
     m_VK_device.destroyPipelineLayout(m_VK_pipelineLayout);
@@ -1762,6 +1762,8 @@ CraigError Craig::Renderer::terminate() {
 
     m_VK_device.destroyDescriptorPool(m_VK_descriptorPool);
     m_VK_device.destroyDescriptorSetLayout(m_VK_descriptorSetLayout);
+
+    vmaDestroyAllocator(m_VMA_allocator);
 
     m_VK_device.destroy();
 

@@ -364,3 +364,6 @@ FodyWeavers.xsd
 
 #imgui config file
 imgui.ini
+
+# Allow model OBJ files
+!Craig_Vulkan/data/models/**/*.obj
