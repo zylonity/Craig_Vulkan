@@ -1,14 +1,17 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define STB_IMAGE_IMPLEMENTATION
+#define TINYOBJLOADER_IMPLEMENTATION
 
 #include <cassert>
 #include <iostream>
 #include <set>
 #include <algorithm>
 #include <chrono>
+#include <unordered_map>
 #include <glm/gtc/matrix_transform.hpp>
 #include "../External/stb_image.h"
+#include "../External/tiny_obj_loader.h"
 
 
 #if defined(IMGUI_ENABLED)
@@ -228,6 +231,7 @@ void Craig::Renderer::InitVulkan() {
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
+    loadModel();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
@@ -948,7 +952,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     vk::Buffer vertexBuffers[] = { m_VK_vertexBuffer };
     vk::DeviceSize offsets[] = { 0 };
     commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
-    commandBuffer.bindIndexBuffer(m_VK_indexBuffer, 0, vk::IndexType::eUint16);
+    commandBuffer.bindIndexBuffer(m_VK_indexBuffer, 0, vk::IndexType::eUint32);
 
     // Set the dynamic viewport (covers the whole framebuffer)
     vk::Viewport viewport;
@@ -1338,7 +1342,7 @@ void Craig::Renderer::createUniformBuffers() {
 
 void Craig::Renderer::createDescriptorPool() {
 
-    std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+    std::array<vk::DescriptorPoolSize, 2> poolSizes;
     poolSizes[0]
         .setType(vk::DescriptorType::eUniformBuffer)
         .setDescriptorCount(static_cast<uint32_t>(kMaxFramesInFlight));
@@ -1432,7 +1436,7 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage) {
 
 void Craig::Renderer::createTextureImage() {
     int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load("data/textures/ugo_cube.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
     if (!pixels) {
@@ -1844,5 +1848,55 @@ uint32_t Craig::Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryProperty
     }
 
     throw std::runtime_error("failed to find suitable memory type!");
+
+}
+
+void Craig::Renderer::loadModel() {
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string err;
+    std::string warn;
+
+    bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str());
+
+    if (!warn.empty()) {
+        std::cout << warn << std::endl;
+    }
+
+    if (!err.empty()) {
+        std::cerr << err << std::endl;
+    }
+
+    if (!ret) {
+        exit(CRAIG_FAIL);
+    }
+
+
+    for (const auto& shape : shapes) {
+        for (const auto& index : shape.mesh.indices) {
+            Vertex vertex{};
+
+
+
+            vertex.m_pos = {
+                attrib.vertices[3 * index.vertex_index + 0],
+                attrib.vertices[3 * index.vertex_index + 1],
+                attrib.vertices[3 * index.vertex_index + 2]
+            };
+
+            vertex.m_texCoord = {
+                attrib.texcoords[2 * index.texcoord_index + 0],
+                1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
+            };
+
+            vertex.m_color = { 1.0f, 1.0f, 1.0f };
+
+            //TODO: unique vertex loading
+
+            m_vertices.push_back(vertex);
+            m_indices.push_back(m_indices.size());
+        }
+    }
 
 }

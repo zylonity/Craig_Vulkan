@@ -129,6 +129,9 @@
     <ClInclude Include="External\vk_mem_alloc.h">
       <Filter>Header Files\External</Filter>
     </ClInclude>
+    <ClInclude Include="External\tiny_obj_loader.h">
+      <Filter>Header Files\External</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="data\shaders\FragmentShader.frag">

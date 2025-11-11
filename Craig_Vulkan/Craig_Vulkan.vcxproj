@@ -207,6 +207,7 @@ xcopy /Y /D "$(VULKAN_SDK)\Bin\SDL2.dll" "$(OutDir)."</Command>
     <ClInclude Include="External\Imgui\imstb_textedit.h" />
     <ClInclude Include="External\Imgui\imstb_truetype.h" />
     <ClInclude Include="External\stb_image.h" />
+    <ClInclude Include="External\tiny_obj_loader.h" />
     <ClInclude Include="External\vk_mem_alloc.h" />
     <ClInclude Include="Template.hpp" />
   </ItemGroup>
