@@ -540,7 +540,8 @@ void Craig::Renderer::createSwapChain() {
     VK_SHARING_MODE_CONCURRENT: Images can be used across multiple queue families without explicit ownership transfers.
     */
     if (indices.graphicsFamily != indices.presentFamily) {
-        createInfo.setImageSharingMode(vk::SharingMode::eConcurrent)
+        createInfo
+            .setImageSharingMode(vk::SharingMode::eConcurrent)
             .setQueueFamilyIndexCount(2)
             .setPQueueFamilyIndices(queueFamilyIndices);
     }
@@ -550,7 +551,8 @@ void Craig::Renderer::createSwapChain() {
 
     //We can transform the image here (like a 90 degree clockwise rotation or horizontal flip.)
     //Since we don't want any, we just specify the current transformation applied (which should be none)
-    createInfo.setPreTransform(swapChainSupport.capabilities.currentTransform)
+    createInfo
+        .setPreTransform(swapChainSupport.capabilities.currentTransform)
         .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque) //Blending with other windows in the window system (will mostly always be opaque)
         .setPresentMode(presentMode)
         .setClipped(VK_TRUE) //The GPU won't render pixels that are obscured (by other windows, for example)  it also means we can't trust the data in the pixels since they might've not rendered.
@@ -572,7 +574,8 @@ void Craig::Renderer::createSwapChain() {
 
 vk::ImageView Craig::Renderer::createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags) {
     vk::ImageViewCreateInfo createInfo;
-    createInfo.setImage(image)
+    createInfo
+        .setImage(image)
         .setViewType(vk::ImageViewType::e2D)
         .setFormat(format)
         .setComponents(vk::ComponentMapping{
@@ -621,12 +624,14 @@ void Craig::Renderer::createGraphicsPipeline() {
 
     // Set up shader stages for the pipeline
     vk::PipelineShaderStageCreateInfo vertShaderStageInfo;
-    vertShaderStageInfo.setStage(vk::ShaderStageFlagBits::eVertex)
+    vertShaderStageInfo
+        .setStage(vk::ShaderStageFlagBits::eVertex)
         .setModule(m_VK_vertShaderModule)
         .setPName("main");
 
     vk::PipelineShaderStageCreateInfo fragShaderStageInfo;
-    fragShaderStageInfo.setStage(vk::ShaderStageFlagBits::eFragment)
+    fragShaderStageInfo
+        .setStage(vk::ShaderStageFlagBits::eFragment)
         .setModule(m_VK_fragShaderModule)
         .setPName("main");
 
@@ -637,22 +642,26 @@ void Craig::Renderer::createGraphicsPipeline() {
 
     //No vertex data to load for now since its hardcoded into the shader.
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
-    vertexInputInfo.setVertexBindingDescriptionCount(1)
+    vertexInputInfo
+        .setVertexBindingDescriptionCount(1)
         .setPVertexBindingDescriptions(&bindingDescription) //These should point to an array of structs w vertex descriptions
         .setVertexAttributeDescriptionCount(static_cast<uint32_t>(attributeDescriptions.size()))
         .setPVertexAttributeDescriptions(attributeDescriptions.data());
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
-    inputAssembly.setTopology(vk::PrimitiveTopology::eTriangleList)
+    inputAssembly
+        .setTopology(vk::PrimitiveTopology::eTriangleList)
         .setPrimitiveRestartEnable(vk::False);
 
     // Viewport/scissor are dynamic (set later in the command buffer)
     vk::PipelineViewportStateCreateInfo viewportState;
-    viewportState.setViewportCount(1)
+    viewportState
+        .setViewportCount(1)
         .setScissorCount(1);
 
     vk::PipelineRasterizationStateCreateInfo rasterizer;
-    rasterizer.setDepthClampEnable(vk::False)
+    rasterizer
+        .setDepthClampEnable(vk::False)
         .setPolygonMode(vk::PolygonMode::eFill)
         .setLineWidth(1.0f)
         .setCullMode(vk::CullModeFlagBits::eBack)
@@ -662,7 +671,8 @@ void Craig::Renderer::createGraphicsPipeline() {
     //Multisampling/Anti-Aliasing
     //Keeping it disabled for now but will follow up later in the tutorial
     vk::PipelineMultisampleStateCreateInfo multisampling;
-    multisampling.setSampleShadingEnable(vk::False)
+    multisampling
+        .setSampleShadingEnable(vk::False)
         .setRasterizationSamples(vk::SampleCountFlagBits::e1);
 
     vk::PipelineDepthStencilStateCreateInfo depthStencil{};
@@ -674,7 +684,8 @@ void Craig::Renderer::createGraphicsPipeline() {
         .setStencilTestEnable(false);
 
     vk::PipelineColorBlendAttachmentState colourBlendAttachment;
-    colourBlendAttachment.setColorWriteMask(
+    colourBlendAttachment
+        .setColorWriteMask(
         vk::ColorComponentFlagBits::eR |
         vk::ColorComponentFlagBits::eG |
         vk::ColorComponentFlagBits::eB |
@@ -682,7 +693,8 @@ void Craig::Renderer::createGraphicsPipeline() {
         .setBlendEnable(vk::False);
 
     vk::PipelineColorBlendStateCreateInfo colourBlending;
-    colourBlending.setLogicOpEnable(vk::False)
+    colourBlending
+        .setLogicOpEnable(vk::False)
         .setLogicOp(vk::LogicOp::eCopy)
         .setAttachmentCount(1)
         .setPAttachments(&colourBlendAttachment);
@@ -694,7 +706,8 @@ void Craig::Renderer::createGraphicsPipeline() {
     };
 
     vk::PipelineDynamicStateCreateInfo dynamicState;
-    dynamicState.setDynamicStateCount(static_cast<uint32_t>(dynamicStates.size()))
+    dynamicState
+        .setDynamicStateCount(static_cast<uint32_t>(dynamicStates.size()))
         .setPDynamicStates(dynamicStates.data());
 
 
