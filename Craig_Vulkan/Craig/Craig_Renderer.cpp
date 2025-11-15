@@ -458,7 +458,7 @@ vk::SurfaceFormatKHR Craig::Renderer::chooseSwapSurfaceFormat(const std::vector<
 
     //Check the colour format and colour space are correct
     for (const auto& availableFormat : availableFormats) {
-        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) { //TODO: Expose to the class and allow for switching with imgui later.
+        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) { //TODO: Maybe add hdr?
             return availableFormat;
         }
     }
@@ -1178,7 +1178,6 @@ void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, 
     vk::PipelineStageFlags sourceStage, destinationStage;
 
     if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal) {
-        //TODO
         barrier.setDstAccessMask(vk::AccessFlagBits::eTransferWrite);
 
         sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
@@ -1430,22 +1429,18 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage) {
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
+    m_camera.setPosition(camPos);
+    m_camera.setPitchYaw(camRot);
+
     UniformBufferObject ubo;
 
-    //lets rotate the model around the z axis dependent on time
-    ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    m_camera.m_aspect = m_VK_swapChainExtent.width / (float)m_VK_swapChainExtent.height;
+    
+    ubo.model = glm::mat4(1.0f);//glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));// *glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    ubo.view = m_camera.getView();
+    ubo.proj = m_camera.getProj();
 
-    //Look at geomtry from above at 45 degree angle
-    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-
-    //45 degree FOV perspective projection.
-    ubo.proj = glm::perspective(glm::radians(45.0f), m_VK_swapChainExtent.width / (float)m_VK_swapChainExtent.height, 0.1f, 10.0f);
-
-    //from vulkan-tutorial
-    /*GLM was originally designed for OpenGL, where the Y coordinate of the clip coordinates is inverted. 
-    The easiest way to compensate for that is to flip the sign on the scaling factor of the Y axis in the projection matrix. 
-    If you don't do this, then the image will be rendered upside down.*/
-    ubo.proj[1][1] *= -1;
+    m_camera.update();
 
     memcpy(mv_VK_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
@@ -1928,10 +1923,14 @@ void Craig::Renderer::loadModel() {
                 attrib.vertices[3 * index.vertex_index + 2]
             };
 
-            vertex.m_texCoord = {
+            if (index.texcoord_index >= 0) {
+                vertex.m_texCoord = {
                 attrib.texcoords[2 * index.texcoord_index + 0],
                 1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-            };
+                };
+            }
+
+            
 
             vertex.m_color = { 1.0f, 1.0f, 1.0f };
 

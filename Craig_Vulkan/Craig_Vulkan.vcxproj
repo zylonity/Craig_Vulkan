@@ -176,6 +176,7 @@ xcopy /Y /D "$(VULKAN_SDK)\Bin\SDL2.dll" "$(OutDir)."</Command>
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Craig\Craig_Camera.cpp" />
     <ClCompile Include="Craig\Craig_Editor.cpp" />
     <ClCompile Include="Craig\Craig_Framework.cpp" />
     <ClCompile Include="Craig\Craig_Renderer.cpp" />
@@ -193,6 +194,7 @@ xcopy /Y /D "$(VULKAN_SDK)\Bin\SDL2.dll" "$(OutDir)."</Command>
     <ClCompile Include="Template.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Craig\Craig_Camera.hpp" />
     <ClInclude Include="Craig\Craig_Constants.hpp" />
     <ClInclude Include="Craig\Craig_Editor.hpp" />
     <ClInclude Include="Craig\Craig_Framework.hpp" />

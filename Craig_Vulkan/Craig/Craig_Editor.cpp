@@ -4,6 +4,12 @@
 #include "../External/Imgui/imgui.h"   
 #include "../External/Imgui/imgui_internal.h"
 
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 CraigError Craig::ImguiEditor::editorInit() {
 
 	CraigError ret = CRAIG_SUCCESS;
@@ -72,6 +78,9 @@ void Craig::ImguiEditor::showRenderProperties() {
 		if (ImGui::Checkbox("VSYNC", &mp_renderer->getVSyncState())) {
 			mp_renderer->refreshSwapChain();
 		}
+		ImGui::SeparatorText("Camera");
+		ImGui::DragFloat3("Cam Pos", glm::value_ptr(mp_renderer->camPos));
+		ImGui::DragFloat2("Cam Rot", glm::value_ptr(mp_renderer->camRot));
 		//ImGui::Checkbox("Show wireframe", &mp_Renderer->getWifeFrameVisibility());*/
 
 		ImGui::End();

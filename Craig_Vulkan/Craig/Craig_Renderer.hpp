@@ -14,6 +14,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "Craig_Constants.hpp"
+#include "Craig_Camera.hpp"
 
 
 namespace Craig {
@@ -31,7 +32,12 @@ namespace Craig {
 		bool& getVSyncState() { return m_vsync; };
 		void refreshSwapChain() { recreateSwapChain(); };
 		
+		glm::vec3 camPos = glm::vec3(0.0f, 0.0f, 6.0f);
+		glm::vec2 camRot = glm::vec2(0.0f, 0.0f);
+
 	private:
+		Craig::Camera m_camera = Craig::Camera();
+
 
 		struct UniformBufferObject {
 			glm::mat4 model;
@@ -259,7 +265,7 @@ namespace Craig {
 		std::vector<uint32_t> m_indices;
 
 
-		const std::string MODEL_PATH = "data/models/viking_room.obj";
+		const std::string MODEL_PATH = "data/models/kirby.obj";
 		const std::string TEXTURE_PATH = "data/textures/viking_room.png";
 		void loadModel();
 
