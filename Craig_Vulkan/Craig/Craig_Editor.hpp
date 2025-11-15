@@ -4,11 +4,15 @@
 
 namespace Craig {
 
+	//Forward declarations
+	class Renderer;
+
 	class ImguiEditor {
 
 	public:
 		CraigError editorMain();
 		CraigError editorInit();
+		CraigError setRenderer(Craig::Renderer* pRenderer);
 		CraigError terminate();
 
 		//===============================================================================
@@ -27,6 +31,8 @@ namespace Craig {
 
 		void showRenderProperties();
 		bool m_ShowRendererProperties = false;
+
+		Craig::Renderer* mp_renderer;
 
 		//===============================================================================
 		// Singleton Implementations (Banned functions to prevent a new instance)

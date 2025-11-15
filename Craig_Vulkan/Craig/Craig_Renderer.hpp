@@ -27,6 +27,10 @@ namespace Craig {
 		CraigError init(Window* CurrentWindowPtr);
 		CraigError update();
 		CraigError terminate();
+
+		bool& getVSyncState() { return m_vsync; };
+		void refreshSwapChain() { recreateSwapChain(); };
+		
 	private:
 
 		struct UniformBufferObject {
@@ -196,7 +200,13 @@ namespace Craig {
 		uint32_t m_currentFrame = 0;
 		std::vector<vk::Semaphore> mv_VK_imageAvailableSemaphores;
 		std::vector<vk::Semaphore> mv_VK_renderFinishedSemaphores;
-		std::vector<vk::Fence> mv_VK_inFlightFences;
+
+		//Timeline semaphore
+		vk::Semaphore m_VK_timelineSemaphore;
+		uint64_t m_sempahoreTimelineValue = 0;
+		std::array<uint64_t, kMaxFramesInFlight> m_frameValue;
+		std::vector<uint64_t> m_imageTimelineValue;
+
 
 		vk::Buffer m_VK_vertexBuffer;
 		VmaAllocation m_VMA_vertexAllocation;
@@ -252,6 +262,8 @@ namespace Craig {
 		const std::string MODEL_PATH = "data/models/viking_room.obj";
 		const std::string TEXTURE_PATH = "data/textures/viking_room.png";
 		void loadModel();
+
+		bool m_vsync = true;
 
 	};
 

@@ -1,4 +1,6 @@
 #include "Craig_Editor.hpp"
+#include "Craig_Renderer.hpp"
+
 #include "../External/Imgui/imgui.h"   
 #include "../External/Imgui/imgui_internal.h"
 
@@ -6,12 +8,12 @@ CraigError Craig::ImguiEditor::editorInit() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-	ImGuiID dockspace_id = ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
+	ImGuiID dockspace_id = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 
 	if (m_initialised == false) {
-		//ImGui::DockBuilderRemoveNode(dockspace_id); // Clear out existing layout
-		//ImGui::DockBuilderAddNode(dockspace_id);	// Add empty node
-		//ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
+		ImGui::DockBuilderRemoveNode(dockspace_id); // Clear out existing layout
+		ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);	// Add empty node
+		ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
 
 		ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.25f, nullptr, &dockspace_id);
 		ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.3f, nullptr, &dockspace_id);
@@ -67,10 +69,21 @@ void Craig::ImguiEditor::showRenderProperties() {
 		ImGui::Text("Delta Time: %f", ImGui::GetIO().DeltaTime);
 
 		ImGui::SeparatorText("Video Settings");
-		/*ImGui::Checkbox("VSYNC", &mp_Renderer->getVSyncState());
-		ImGui::Checkbox("Show wireframe", &mp_Renderer->getWifeFrameVisibility());*/
+		if (ImGui::Checkbox("VSYNC", &mp_renderer->getVSyncState())) {
+			mp_renderer->refreshSwapChain();
+		}
+		//ImGui::Checkbox("Show wireframe", &mp_Renderer->getWifeFrameVisibility());*/
 
 		ImGui::End();
 	}
+}
+
+CraigError Craig::ImguiEditor::setRenderer(Craig::Renderer* pRenderer) {
+
+	CraigError ret = CRAIG_SUCCESS;
+
+	mp_renderer = pRenderer;
+
+	return ret;
 }
 

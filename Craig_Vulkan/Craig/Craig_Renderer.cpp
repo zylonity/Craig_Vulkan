@@ -429,19 +429,19 @@ void Craig::Renderer::createLogicalDevice() {
     vk::PhysicalDeviceFeatures deviceFeatures = m_VK_physicalDevice.getFeatures(); // Enable desired features (none yet, placeholder)
     deviceFeatures.setSamplerAnisotropy(vk::True);
 
+    //Enable the timeline semaphore feature
+    vk::PhysicalDeviceTimelineSemaphoreFeatures timelineFeatures;
+    timelineFeatures.setTimelineSemaphore(true);
+
     // Fill in device creation info with queue setup and feature requirements
     vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
         .setQueueCreateInfos(queueCreateInfos)
         .setPEnabledFeatures(&deviceFeatures)
-        .setPEnabledExtensionNames(mv_VK_deviceExtensions);
+        .setPEnabledExtensionNames(mv_VK_deviceExtensions)
+        .setPNext(&timelineFeatures);
 
     // Create the logical device for the selected physical device
-    try {
-        m_VK_device = m_VK_physicalDevice.createDevice(createInfo);
-    }
-    catch (const std::exception& e) {
-        throw std::runtime_error("Failed to create logical device: " + std::string(e.what()));
-    }
+    m_VK_device = m_VK_physicalDevice.createDevice(createInfo);
 
     // Retrieve the queue handles for rendering and presentation
     m_VK_graphicsQueue = m_VK_device.getQueue(indices.graphicsFamily.value(), 0);
@@ -474,15 +474,15 @@ vk::PresentModeKHR Craig::Renderer::chooseSwapPresentMode(const std::vector<vk::
     //VK_PRESENT_MODE_FIFO_RELAXED_KHR : This mode only differs from the previous one if the application is late and the queue was empty at the last vertical blank.Instead of waiting for the next vertical blank, the image is transferred right away when it finally arrives.This may result in visible tearing.
     //VK_PRESENT_MODE_MAILBOX_KHR : This is another variation of the second mode.Instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer ones.This mode can be used to render frames as fast as possible while still avoiding tearing, resulting in fewer latency issues than standard vertical sync.This is commonly known as "triple buffering", although the existence of three buffers alone does not necessarily mean that the framerate is unlocked.
 
-    //TODO: I want to be able to enable/disable Vsync later, so we expose this to the class and use accessors w/ imgui later
     for (const auto& availablePresentMode : availablePresentModes) {
-        if (availablePresentMode == vk::PresentModeKHR::eFifo) {
+        vk::PresentModeKHR modeToUse = m_vsync ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eMailbox;
+        if (availablePresentMode == modeToUse) {
             return availablePresentMode;
         }
     }
 
 
-    return vk::PresentModeKHR::eFifo;
+    return vk::PresentModeKHR::eFifo; 
 }
 
 vk::Extent2D Craig::Renderer::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) {
@@ -1015,27 +1015,31 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
 void Craig::Renderer::createSyncObjects() {
 
-    vk::SemaphoreCreateInfo semaphoreInfo;
-    vk::FenceCreateInfo fenceInfo;
-    fenceInfo.setFlags(vk::FenceCreateFlagBits::eSignaled);  // Start signaled so the first frame doesn't block
+    vk::SemaphoreTypeCreateInfo typeInfo;
+    typeInfo
+        .setSemaphoreType(vk::SemaphoreType::eTimeline)
+        .setInitialValue(0);
+    
+    vk::SemaphoreCreateInfo timelineInfo;
+    timelineInfo.setPNext(&typeInfo);
+
+    m_VK_timelineSemaphore = m_VK_device.createSemaphore(timelineInfo);
+    m_sempahoreTimelineValue = 0;
+    m_frameValue.fill(0);
 
     mv_VK_renderFinishedSemaphores.resize(kMaxFramesInFlight);
-    mv_VK_imageAvailableSemaphores.resize(kMaxFramesInFlight);
-    mv_VK_inFlightFences.resize(kMaxFramesInFlight);
+    mv_VK_imageAvailableSemaphores.resize(mv_VK_swapChainImages.size());
+    m_imageTimelineValue.resize(mv_VK_swapChainImages.size());
+    std::fill(m_imageTimelineValue.begin(), m_imageTimelineValue.end(), 0);
 
-    try {
-        
-        
-        for (size_t i = 0; i < kMaxFramesInFlight; i++) {
-            mv_VK_imageAvailableSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
-            mv_VK_renderFinishedSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
-            mv_VK_inFlightFences[i] = m_VK_device.createFence(fenceInfo);
-        }
-
-       
+    vk::SemaphoreCreateInfo semaphoreInfo;
+   
+    for (size_t i = 0; i < kMaxFramesInFlight; i++) {
+        mv_VK_imageAvailableSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
     }
-    catch (const vk::SystemError& err) {
-        throw std::runtime_error("failed to record command buffer!");
+
+    for (size_t i = 0; i < mv_VK_swapChainImages.size(); i++) {
+        mv_VK_renderFinishedSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
     }
 
 }
@@ -1616,14 +1620,26 @@ void Craig::Renderer::createDepthResources() {
 
 void Craig::Renderer::drawFrame() {
 
+    
+    //m_VK_device.waitForFences(mv_VK_inFlightFences[m_currentFrame], vk::True, UINT64_MAX);
+
     // Wait until the previous frame has finished
-    m_VK_device.waitForFences(mv_VK_inFlightFences[m_currentFrame], vk::True, UINT64_MAX);
+    uint64_t waitValue = m_frameValue[m_currentFrame];
+
+    if (waitValue > 0) {
+        vk::SemaphoreWaitInfo waitInfo{};
+        waitInfo.setSemaphores(m_VK_timelineSemaphore);
+        waitInfo.setValues(waitValue);
+
+        // Blocks until GPU reached that value
+        m_VK_device.waitSemaphores(waitInfo, UINT64_MAX);
+    }
 
     if (m_VK_currentExtent.width <= 0 || m_VK_currentExtent.height <= 0) {
         return; // Skip this frame
     }
 
-    uint32_t imageIndex;
+    uint32_t imageIndex = m_currentFrame;
     VkResult nextImageResult = vkAcquireNextImageKHR(m_VK_device, m_VK_swapChain, UINT64_MAX, mv_VK_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (nextImageResult == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -1634,45 +1650,62 @@ void Craig::Renderer::drawFrame() {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
-    m_VK_device.resetFences(mv_VK_inFlightFences[m_currentFrame]);
+    uint64_t imageWaitValue = m_imageTimelineValue[imageIndex];
+
+    if (imageWaitValue > 0) {
+        vk::SemaphoreWaitInfo imageWaitInfo{};
+        imageWaitInfo.setSemaphores(m_VK_timelineSemaphore);
+        imageWaitInfo.setValues(imageWaitValue);
+
+        // Blocks until GPU reached that value
+        m_VK_device.waitSemaphores(imageWaitInfo, UINT64_MAX);
+    }
 
     // Record drawing commands into the command buffer
-    mv_VK_commandBuffers[m_currentFrame].reset();
-    recordCommandBuffer(mv_VK_commandBuffers[m_currentFrame], imageIndex);
+    mv_VK_commandBuffers[imageIndex].reset();
+    recordCommandBuffer(mv_VK_commandBuffers[imageIndex], imageIndex);
 
     updateUniformBuffer(m_currentFrame);
 
     // Submit the command buffer for execution
-    vk::SubmitInfo submitInfo;
 
     vk::Semaphore waitSemaphores[] = { mv_VK_imageAvailableSemaphores[m_currentFrame]};
     vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 
-    submitInfo.setWaitSemaphoreCount(1)
+    vk::Semaphore signalSemaphores[] = { m_VK_timelineSemaphore, mv_VK_renderFinishedSemaphores[imageIndex] };
+
+    uint64_t signalValue = ++m_sempahoreTimelineValue;
+    uint64_t signalValues[] = { signalValue, 0 };
+
+    m_frameValue[imageIndex] = signalValue;
+    m_imageTimelineValue[imageIndex] = signalValue;
+
+    vk::TimelineSemaphoreSubmitInfo timelineSubmit;
+    timelineSubmit
+        .setSignalSemaphoreValueCount(2)
+        .setSignalSemaphoreValues(signalValues);
+
+    vk::SubmitInfo submitInfo;
+    submitInfo
+        .setPNext(&timelineSubmit)
+        .setWaitSemaphoreCount(1)
         .setPWaitSemaphores(waitSemaphores)
         .setPWaitDstStageMask(waitStages)
+        .setSignalSemaphoreCount(2)
+        .setPSignalSemaphores(signalSemaphores)
         .setCommandBufferCount(1)
-        .setPCommandBuffers(&mv_VK_commandBuffers[m_currentFrame]);
+        .setPCommandBuffers(&mv_VK_commandBuffers[imageIndex]);
 
-    vk::Semaphore signalSemaphores[] = { mv_VK_renderFinishedSemaphores[m_currentFrame] };
-    submitInfo.setSignalSemaphoreCount(1)
-        .setPSignalSemaphores(signalSemaphores);
 
-    try {
-        m_VK_graphicsQueue.submit(submitInfo, mv_VK_inFlightFences[m_currentFrame]);
-    }
-    catch (const vk::SystemError& err) {
-        throw std::runtime_error("failed to submit draw command buffer!");
-    }
+    m_VK_graphicsQueue.submit(submitInfo, VK_NULL_HANDLE);
     
     // Present the rendered image to the screen
     vk::PresentInfoKHR presentInfo;
-    presentInfo.setWaitSemaphoreCount(1)
-        .setPWaitSemaphores(signalSemaphores);
-
-    vk::SwapchainKHR swapChains[] = { m_VK_swapChain };
-    presentInfo.setSwapchainCount(1)
-        .setPSwapchains(swapChains)
+    presentInfo
+        .setWaitSemaphoreCount(1)
+        .setPWaitSemaphores(&mv_VK_renderFinishedSemaphores[imageIndex])
+        .setSwapchainCount(1)
+        .setPSwapchains(&m_VK_swapChain)
         .setPImageIndices(&imageIndex);
 
 
@@ -1729,9 +1762,13 @@ CraigError Craig::Renderer::terminate() {
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
         m_VK_device.destroySemaphore(mv_VK_imageAvailableSemaphores[i]);
-        m_VK_device.destroySemaphore(mv_VK_renderFinishedSemaphores[i]);
-        m_VK_device.destroyFence(mv_VK_inFlightFences[i]);
     }    
+
+    for (size_t i = 0; i < mv_VK_swapChainImages.size(); i++) {
+        m_VK_device.destroySemaphore(mv_VK_renderFinishedSemaphores[i]);
+    }
+
+    m_VK_device.destroySemaphore(m_VK_timelineSemaphore);
 
     if (m_VK_transferCommandPool && m_VK_transferCommandPool != m_VK_commandPool) {
         m_VK_device.destroyCommandPool(m_VK_transferCommandPool);

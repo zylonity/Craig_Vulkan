@@ -7,6 +7,7 @@
 #include "Craig_Window.hpp"
 #include "Craig_Renderer.hpp"
 #include "Craig_ResourceManager.hpp"
+#include "Craig_Editor.hpp"
 
 CraigError Craig::Framework::init() {
 
@@ -21,12 +22,15 @@ CraigError Craig::Framework::init() {
 
 	// Initialize our Renderer
 	mp_Renderer = new Craig::Renderer;
+	Craig::ImguiEditor::getInstance().setRenderer(mp_Renderer);
 	assert(mp_Renderer != nullptr && "mp_Renderer failed to allocate memory");
 	ret = mp_Renderer->init(mp_Window);
 	assert(ret == CRAIG_SUCCESS);											
 
 	// Initialize the Resource Manager Singleton
 	Craig::ResourceManager::getInstance().init();
+
+	
 
 #if defined(IMGUI_ENABLED)
 	
