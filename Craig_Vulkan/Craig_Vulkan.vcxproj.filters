@@ -76,6 +76,9 @@
     <ClCompile Include="Craig\Craig_ResourceManager.cpp">
       <Filter>Source Files\Craig</Filter>
     </ClCompile>
+    <ClCompile Include="Craig\Craig_Editor.cpp">
+      <Filter>Source Files\Craig</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Craig\Craig_Framework.hpp">
@@ -131,6 +134,9 @@
     </ClInclude>
     <ClInclude Include="External\tiny_obj_loader.h">
       <Filter>Header Files\External</Filter>
+    </ClInclude>
+    <ClInclude Include="Craig\Craig_Editor.hpp">
+      <Filter>Header Files\Craig</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

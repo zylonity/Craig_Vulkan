@@ -224,6 +224,9 @@ namespace Craig {
 
 		vk::ImageView m_VK_depthImageView;
 
+		vk::Extent2D m_VK_currentExtent;
+
+
 #if defined(IMGUI_ENABLED)
 		void InitImgui();
 		void createImguiDescriptorPool();

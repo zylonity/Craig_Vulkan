@@ -1,31 +1,36 @@
 #pragma once
 #include "Craig_Constants.hpp"
-#include <chrono>
+
 
 namespace Craig {
 
-	class ResourceManager {
+	class ImguiEditor {
 
 	public:
-		CraigError init();
+		CraigError editorMain();
+		CraigError editorInit();
 		CraigError terminate();
 
 		//===============================================================================
 		// Singleton Implementations
-		static ResourceManager& getInstance()
+		static ImguiEditor& getInstance()
 		{
-			static ResourceManager instance; // Guaranteed to be destroyed.
+			static ImguiEditor instance; // Guaranteed to be destroyed.
 			return instance;
 		}
 		// Make deleted functions public for nicer error messages (~ Scott Myers)
-		ResourceManager(ResourceManager const&) = delete;	// Copy constructor
-		void operator=(ResourceManager const&) = delete;	// Assignment Operator
+		ImguiEditor(ImguiEditor const&) = delete;	// Copy constructor
+		void operator=(ImguiEditor const&) = delete;	// Assignment Operator
 		//===============================================================================
 	private:
+		bool m_initialised = false;
+
+		void showRenderProperties();
+		bool m_ShowRendererProperties = false;
 
 		//===============================================================================
 		// Singleton Implementations (Banned functions to prevent a new instance)
-		ResourceManager() {}										// Default Constructor private so can only be called from within
+		ImguiEditor() {}										// Default Constructor private so can only be called from within
 		//===============================================================================
 	};
 

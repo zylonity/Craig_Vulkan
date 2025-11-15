@@ -64,8 +64,6 @@ CraigError Craig::Window::update() {
 		}
 	}
 
-	SDL_Delay(10);
-
 
 	return ret;
 }

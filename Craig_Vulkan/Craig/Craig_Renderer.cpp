@@ -8,7 +8,6 @@
 #include <set>
 #include <algorithm>
 #include <chrono>
-#include <unordered_map>
 #include <glm/gtc/matrix_transform.hpp>
 #include "../External/stb_image.h"
 #include "../External/tiny_obj_loader.h"
@@ -23,6 +22,7 @@
 #include "Craig_Renderer.hpp"
 #include "Craig_Window.hpp"
 #include "Craig_ShaderCompilation.hpp"
+#include "Craig_Editor.hpp"
 
 #if defined(IMGUI_ENABLED)
 static void check_vk_result(VkResult err)
@@ -84,8 +84,11 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 	assert(mp_CurrentWindow != nullptr && "mp_CurrentWindow is null, somehow didn't get passed to our member variable");
 
 	// Use validation layers if this is a debug build
+#if defined(_DEBUG)
+    mv_VK_Layers.push_back("VK_LAYER_KHRONOS_validation");
+#endif
+
 #if defined(IMGUI_ENABLED)
-	mv_VK_Layers.push_back("VK_LAYER_KHRONOS_validation");
     mp_CurrentWindow->getExtensionsVector().push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
@@ -110,23 +113,23 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 
 	//Create the Vulkan instance/Initialize Vulkan
     try {
-        VkValidationFeatureEnableEXT enabledFeatures[] = {
-            VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
-            // Optional extras:
-            // VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
-            // VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
-        };
+        //VkValidationFeatureEnableEXT enabledFeatures[] = {
+        //    VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
+        //    // Optional extras:
+        //    // VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
+        //    // VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
+        //};
 
-        VkValidationFeaturesEXT featuresInfo{};
-        featuresInfo.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+        //VkValidationFeaturesEXT featuresInfo{};
+        /*featuresInfo.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
         featuresInfo.enabledValidationFeatureCount = static_cast<uint32_t>(std::size(enabledFeatures));
-        featuresInfo.pEnabledValidationFeatures = enabledFeatures;
+        featuresInfo.pEnabledValidationFeatures = enabledFeatures;*/
 
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
         populateDebugMessengerCreateInfo(debugCreateInfo);
 
-        featuresInfo.pNext = &debugCreateInfo;
-        m_VK_instInfo.setPNext(&featuresInfo);
+        //featuresInfo.pNext = &debugCreateInfo;
+        m_VK_instInfo.setPNext(&debugCreateInfo);
 
 		m_VK_instance = vk::createInstance(m_VK_instInfo); //Now that we have the instance created, we can initialize Vulkan
 
@@ -145,6 +148,7 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 
 #if defined(IMGUI_ENABLED)
     InitImgui();
+
 #endif
 
 	return ret;
@@ -182,7 +186,6 @@ void Craig::Renderer::InitImgui() {
     init_info.RenderPass = m_VK_renderPass;
     ImGui_ImplVulkan_Init(&init_info);
 
-
 }
 #endif
 
@@ -191,15 +194,11 @@ CraigError Craig::Renderer::update() {
 	CraigError ret = CRAIG_SUCCESS;
 
 #if defined(IMGUI_ENABLED)
-    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_VK_physicalDevice);
-    vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
-// Start the Dear ImGui frame
-    if (extent.width > 0 || extent.height > 0) {
+    if (m_VK_currentExtent.width > 0 && m_VK_currentExtent.height > 0) {
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
-        ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode); //Lets transparency through the window
-        ImGui::ShowDemoWindow(); // Show demo window! :)
+        Craig::ImguiEditor::getInstance().editorMain();
     }
    
 #endif
@@ -511,7 +510,7 @@ void Craig::Renderer::createSwapChain() {
 
     vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
     vk::PresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-    vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+    m_VK_currentExtent = chooseSwapExtent(swapChainSupport.capabilities);
 
     uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1; //Ammount of images we want for buffering, min is probably 2, so tripple buffering
 
@@ -527,7 +526,7 @@ void Craig::Renderer::createSwapChain() {
         .setMinImageCount(imageCount)
         .setImageFormat(surfaceFormat.format)
         .setImageColorSpace(surfaceFormat.colorSpace)
-        .setImageExtent(extent)
+        .setImageExtent(m_VK_currentExtent)
         .setImageArrayLayers(1) //"always 1 unless you are developing a stereoscopic 3D application"
         .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
 
@@ -567,7 +566,7 @@ void Craig::Renderer::createSwapChain() {
 
     mv_VK_swapChainImages = m_VK_device.getSwapchainImagesKHR(m_VK_swapChain);
     m_VK_swapChainImageFormat = surfaceFormat.format;
-    m_VK_swapChainExtent = extent;
+    m_VK_swapChainExtent = m_VK_currentExtent;
 
 }
 
@@ -863,9 +862,9 @@ void Craig::Renderer::cleanupSwapChain() {
 void Craig::Renderer::recreateSwapChain() {
 
     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_VK_physicalDevice);
-    vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+    m_VK_currentExtent = chooseSwapExtent(swapChainSupport.capabilities);
 
-    if (extent.width <= 0 || extent.height <= 0) {
+    if (m_VK_currentExtent.width <= 0 || m_VK_currentExtent.height <= 0) {
         return; // Skip this frame
     }
 
@@ -1417,7 +1416,7 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage) {
     UniformBufferObject ubo;
 
     //lets rotate the model around the z axis dependent on time
-    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 
     //Look at geomtry from above at 45 degree angle
     ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
@@ -1607,10 +1606,7 @@ void Craig::Renderer::drawFrame() {
     // Wait until the previous frame has finished
     m_VK_device.waitForFences(mv_VK_inFlightFences[m_currentFrame], vk::True, UINT64_MAX);
 
-    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_VK_physicalDevice);
-    vk::Extent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
-
-    if (extent.width <= 0 || extent.height <= 0) {
+    if (m_VK_currentExtent.width <= 0 || m_VK_currentExtent.height <= 0) {
         return; // Skip this frame
     }
 
@@ -1625,10 +1621,7 @@ void Craig::Renderer::drawFrame() {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
-
     m_VK_device.resetFences(mv_VK_inFlightFences[m_currentFrame]);
-
-    
 
     // Record drawing commands into the command buffer
     mv_VK_commandBuffers[m_currentFrame].reset();

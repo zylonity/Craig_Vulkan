@@ -28,6 +28,10 @@ CraigError Craig::Framework::init() {
 	// Initialize the Resource Manager Singleton
 	Craig::ResourceManager::getInstance().init();
 
+#if defined(IMGUI_ENABLED)
+	
+#endif
+
 	return ret;
 }
 

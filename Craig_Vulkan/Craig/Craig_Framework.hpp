@@ -10,6 +10,7 @@ namespace Craig {
 	//Forward declarations
 	class Window;
 	class Renderer;
+	class ImguiEditor;
 
 
 	class Framework {
@@ -23,6 +24,10 @@ namespace Craig {
 		Craig::Window* mp_Window			= nullptr;
 		Craig::Renderer* mp_Renderer		= nullptr;
 
+#if defined(IMGUI_ENABLED)
+		Craig::ImguiEditor* mp_ImguiEditor = nullptr;
+#endif
+		
 
 	};
 
