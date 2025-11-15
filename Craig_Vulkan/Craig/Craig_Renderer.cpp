@@ -476,7 +476,7 @@ vk::PresentModeKHR Craig::Renderer::chooseSwapPresentMode(const std::vector<vk::
 
     //TODO: I want to be able to enable/disable Vsync later, so we expose this to the class and use accessors w/ imgui later
     for (const auto& availablePresentMode : availablePresentModes) {
-        if (availablePresentMode == vk::PresentModeKHR::eMailbox) {
+        if (availablePresentMode == vk::PresentModeKHR::eFifo) {
             return availablePresentMode;
         }
     }
