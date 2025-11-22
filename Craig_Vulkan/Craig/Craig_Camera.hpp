@@ -3,6 +3,7 @@
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <SDL2/SDL.h>
 
 #include "Craig_Constants.hpp"
 
@@ -14,6 +15,7 @@ namespace Craig {
         Craig::Camera(glm::vec3 pos = glm::vec3(0.0f));
 
         void update();
+        void processSDLEvent(SDL_Event& e);
 
         void panTilt(float pan, float tilt);
         void slew(const glm::vec3& v);
@@ -22,7 +24,9 @@ namespace Craig {
         glm::mat4 getView()  const { return m_view; }
         glm::mat4 getProj()  const { return m_proj; }
 
-        glm::vec3 getPosition() const { return m_position; }
+        glm::vec3& getPosition() { return m_position; }
+        glm::vec3& getVelocity() { return m_velocity; }
+        glm::vec2& getRotation() { return m_pitchYaw; }
 
         float m_fov = 45.0f;
         float m_nearPlane = 0.1f;
@@ -40,7 +44,8 @@ namespace Craig {
         glm::vec3 right() const;
         glm::vec3 up() const;
 
-        glm::vec3 m_position;
+        glm::vec3 m_position{};
+        glm::vec3 m_velocity{};
         glm::vec2 m_pitchYaw{ 0.0f, 0.0f }; // x = pitch, y = yaw
 
         glm::mat4 m_view;

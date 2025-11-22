@@ -242,7 +242,8 @@ void Craig::Renderer::InitVulkan() {
     createImguiDescriptorPool();
 #endif
     
-
+    mp_CurrentWindow->setCameraRef(&m_camera);
+    Craig::ImguiEditor::getInstance().setCamera(&m_camera);
 }
 
 void Craig::Renderer::initVMA() {
@@ -1429,9 +1430,6 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage) {
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-    m_camera.setPosition(camPos);
-    m_camera.setPitchYaw(camRot);
-
     UniformBufferObject ubo;
 
     m_camera.m_aspect = m_VK_swapChainExtent.width / (float)m_VK_swapChainExtent.height;
@@ -1442,6 +1440,7 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage) {
     ubo.proj = m_camera.getProj();
 
     m_camera.update();
+    
 
     memcpy(mv_VK_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }

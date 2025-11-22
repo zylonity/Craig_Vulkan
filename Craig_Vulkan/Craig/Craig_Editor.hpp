@@ -6,14 +6,17 @@ namespace Craig {
 
 	//Forward declarations
 	class Renderer;
+	class Camera;
 
 	class ImguiEditor {
 
 	public:
 		CraigError editorMain();
 		CraigError editorInit();
-		CraigError setRenderer(Craig::Renderer* pRenderer);
 		CraigError terminate();
+
+		void setRenderer(Craig::Renderer* pRenderer) { mp_renderer = pRenderer; };
+		void setCamera(Craig::Camera* pCamera) { mp_camera = pCamera; };
 
 		//===============================================================================
 		// Singleton Implementations
@@ -33,6 +36,7 @@ namespace Craig {
 		bool m_ShowRendererProperties = false;
 
 		Craig::Renderer* mp_renderer;
+		Craig::Camera* mp_camera;
 
 		//===============================================================================
 		// Singleton Implementations (Banned functions to prevent a new instance)

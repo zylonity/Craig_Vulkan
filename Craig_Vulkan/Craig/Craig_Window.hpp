@@ -8,6 +8,8 @@
 
 namespace Craig {
 
+	//Forward declaration
+	class Camera;
 
 	class Window {
 
@@ -29,13 +31,17 @@ namespace Craig {
 		const bool isResizeNeeded() const { return m_resizeNeeded; }
 		void finishedResize() { m_resizeNeeded = false; }
 
+		//Setters
+		void setCameraRef(Camera* camera) { m_currentCamera = camera; }
 	private:
 		SDL_Window* mp_SDL_Window = nullptr; // SDL Window handle
 		unsigned m_SDL_ExtensionCount; // Number of elements in the extension array (Number of extensions in use?)
 		std::vector<const char*> mv_SDL_Extensions; // Array of extensions required by SDL for Vulkan
+		
+		Camera* m_currentCamera;
 
 		bool m_resizeNeeded = false;
-		
+		bool m_mouseLocked = false;
 
 
 	};

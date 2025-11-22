@@ -11,6 +11,7 @@
 #endif
 
 #include "Craig_Window.hpp"
+#include "Craig_Camera.hpp"
 
 CraigError Craig::Window::init() {
 
@@ -42,6 +43,7 @@ CraigError Craig::Window::update() {
 
 	SDL_Event event;
 	while (SDL_PollEvent(&event)) {
+		m_currentCamera->processSDLEvent(event);
 #if defined(IMGUI_ENABLED)
 		ImGui_ImplSDL2_ProcessEvent(&event);
 #endif
@@ -58,8 +60,22 @@ CraigError Craig::Window::update() {
 			}
 			break;
 
+		case SDL_KEYUP:
+			if (event.key.keysym.sym == SDLK_TAB) {
+				m_mouseLocked = !m_mouseLocked;
+
+				if (m_mouseLocked) {
+					SDL_SetRelativeMouseMode(SDL_TRUE);
+				}
+				else {
+					SDL_SetRelativeMouseMode(SDL_FALSE);
+				}
+				
+			}
+			break;
+
 		default:
-			// Do nothing.
+
 			break;
 		}
 	}

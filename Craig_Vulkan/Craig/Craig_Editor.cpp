@@ -1,5 +1,6 @@
 #include "Craig_Editor.hpp"
 #include "Craig_Renderer.hpp"
+#include "Craig_Camera.hpp"
 
 #include "../External/Imgui/imgui.h"   
 #include "../External/Imgui/imgui_internal.h"
@@ -79,20 +80,14 @@ void Craig::ImguiEditor::showRenderProperties() {
 			mp_renderer->refreshSwapChain();
 		}
 		ImGui::SeparatorText("Camera");
-		ImGui::DragFloat3("Cam Pos", glm::value_ptr(mp_renderer->camPos));
-		ImGui::DragFloat2("Cam Rot", glm::value_ptr(mp_renderer->camRot));
+		ImGui::DragFloat3("Cam Pos", glm::value_ptr(mp_camera->getPosition()));
+		ImGui::DragFloat2("Cam Rot", glm::value_ptr(mp_camera->getRotation()));
+		ImGui::DragFloat3("Cam Vel", glm::value_ptr(mp_camera->getVelocity()));
 		//ImGui::Checkbox("Show wireframe", &mp_Renderer->getWifeFrameVisibility());*/
 
 		ImGui::End();
 	}
 }
 
-CraigError Craig::ImguiEditor::setRenderer(Craig::Renderer* pRenderer) {
 
-	CraigError ret = CRAIG_SUCCESS;
-
-	mp_renderer = pRenderer;
-
-	return ret;
-}
 

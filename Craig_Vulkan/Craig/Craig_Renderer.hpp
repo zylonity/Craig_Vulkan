@@ -31,9 +31,7 @@ namespace Craig {
 
 		bool& getVSyncState() { return m_vsync; };
 		void refreshSwapChain() { recreateSwapChain(); };
-		
-		glm::vec3 camPos = glm::vec3(0.0f, 0.0f, 6.0f);
-		glm::vec2 camRot = glm::vec2(0.0f, 0.0f);
+	
 
 	private:
 		Craig::Camera m_camera = Craig::Camera();

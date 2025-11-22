@@ -22,6 +22,9 @@ void Craig::Camera::update()
 
 void Craig::Camera::updateView()
 {
+    
+    m_position += forward() * m_velocity.z;
+    m_position += right() * m_velocity.x;
 
     glm::mat4 cameraTranslation = glm::translate(glm::mat4(1.f), m_position);
     glm::mat4 cameraRotation = getRotationMatrix();
@@ -89,8 +92,31 @@ void Craig::Camera::raise(float f)
 glm::mat4 Craig::Camera::getRotationMatrix()
 {
     glm::quat pitchRotation = glm::angleAxis(glm::radians(m_pitchYaw[0]), glm::vec3{1.f, 0.f, 0.f});
-    glm::quat yawRotation = glm::angleAxis(glm::radians(m_pitchYaw[1]), glm::vec3{0.f, -1.f, 0.f});
+    glm::quat yawRotation = glm::angleAxis(glm::radians(m_pitchYaw[1]), glm::vec3{0.f, 1.f, 0.f});
 
     return (glm::toMat4(yawRotation) * glm::toMat4(pitchRotation));
+
+}
+
+void Craig::Camera::processSDLEvent(SDL_Event& e) {
+
+    if (e.type == SDL_KEYDOWN) {
+        if (e.key.keysym.sym == SDLK_w) { m_velocity.z = -1; }
+        if (e.key.keysym.sym == SDLK_s) { m_velocity.z = 1; }
+        if (e.key.keysym.sym == SDLK_a) { m_velocity.x = -1; }
+        if (e.key.keysym.sym == SDLK_d) { m_velocity.x = 1; }
+    }
+
+    if (e.type == SDL_KEYUP) {
+        if (e.key.keysym.sym == SDLK_w) { m_velocity.z = 0; }
+        if (e.key.keysym.sym == SDLK_s) { m_velocity.z = 0; }
+        if (e.key.keysym.sym == SDLK_a) { m_velocity.x = 0; }
+        if (e.key.keysym.sym == SDLK_d) { m_velocity.x = 0; }
+    }
+
+    if (e.type == SDL_MOUSEMOTION) {
+        m_pitchYaw[1] -= (float)e.motion.xrel / 20.f;
+        m_pitchYaw[0] -= (float)e.motion.yrel / 20.f;
+    }
 
 }
