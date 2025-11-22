@@ -4,7 +4,7 @@
 #define VMA_IMPLEMENTATION
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #include "Craig_Constants.hpp"
-
+#include <chrono>
 namespace Craig {
 	
 	//Forward declarations
@@ -28,7 +28,8 @@ namespace Craig {
 		Craig::ImguiEditor* mp_ImguiEditor = nullptr;
 #endif
 		
-
+		float getElapsedTime();
+		std::chrono::steady_clock::time_point m_LastFrameTime;
 	};
 
 

@@ -42,13 +42,13 @@ CraigError Craig::ImguiEditor::editorInit() {
 }
 
 
-CraigError Craig::ImguiEditor::editorMain() {
+CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 
 	CraigError ret = CRAIG_SUCCESS;
 
 	editorInit();
 
-	showRenderProperties();
+	showRenderProperties(deltaTime);
 
 	return ret;
 }
@@ -61,7 +61,7 @@ CraigError Craig::ImguiEditor::terminate() {
 	return ret;
 }
 
-void Craig::ImguiEditor::showRenderProperties() {
+void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
 	if (m_ShowRendererProperties)
 	{
 		// The ### is for a unique ID, otherwsise the window doesn't stay docked on the right since the name/id changes
@@ -73,7 +73,7 @@ void Craig::ImguiEditor::showRenderProperties() {
 		ImGui::SeparatorText("FPS Details");
 		//ImGui::Text("Frame Time: %f", ImGui::GetIO().Framerate);
 		ImGui::Text("FPS: % .2f", ImGui::GetIO().Framerate);
-		ImGui::Text("Delta Time: %f", ImGui::GetIO().DeltaTime);
+		ImGui::Text("Delta Time: %f", deltaTime);
 
 		ImGui::SeparatorText("Video Settings");
 		if (ImGui::Checkbox("VSYNC", &mp_renderer->getVSyncState())) {
@@ -83,6 +83,9 @@ void Craig::ImguiEditor::showRenderProperties() {
 		ImGui::DragFloat3("Cam Pos", glm::value_ptr(mp_camera->getPosition()));
 		ImGui::DragFloat2("Cam Rot", glm::value_ptr(mp_camera->getRotation()));
 		ImGui::DragFloat3("Cam Vel", glm::value_ptr(mp_camera->getVelocity()));
+
+		ImGui::DragFloat("Camera Move Speed", &mp_camera->m_movementSpeed);
+		ImGui::DragFloat("Camera Rotation Speed", &mp_camera->m_rotSpeed);
 		//ImGui::Checkbox("Show wireframe", &mp_Renderer->getWifeFrameVisibility());*/
 
 		ImGui::End();

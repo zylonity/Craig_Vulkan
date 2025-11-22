@@ -11,7 +11,7 @@ namespace Craig {
 	class ImguiEditor {
 
 	public:
-		CraigError editorMain();
+		CraigError editorMain(const float& deltaTime);
 		CraigError editorInit();
 		CraigError terminate();
 
@@ -32,7 +32,7 @@ namespace Craig {
 	private:
 		bool m_initialised = false;
 
-		void showRenderProperties();
+		void showRenderProperties(const float& deltaTime);
 		bool m_ShowRendererProperties = false;
 
 		Craig::Renderer* mp_renderer;

@@ -189,7 +189,7 @@ void Craig::Renderer::InitImgui() {
 }
 #endif
 
-CraigError Craig::Renderer::update() {
+CraigError Craig::Renderer::update(const float& deltaTime) {
 
 	CraigError ret = CRAIG_SUCCESS;
 
@@ -198,12 +198,12 @@ CraigError Craig::Renderer::update() {
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
-        Craig::ImguiEditor::getInstance().editorMain();
+        Craig::ImguiEditor::getInstance().editorMain(deltaTime);
     }
    
 #endif
 
-    drawFrame();
+    drawFrame(deltaTime);
 
 
 
@@ -1423,7 +1423,7 @@ void Craig::Renderer::createDescriptorSets() {
 }
 
 //TODO: Separate camera
-void Craig::Renderer::updateUniformBuffer(uint32_t currentImage) {
+void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& deltaTime) {
 
     static auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -1439,7 +1439,7 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage) {
     ubo.view = m_camera.getView();
     ubo.proj = m_camera.getProj();
 
-    m_camera.update();
+    m_camera.update(deltaTime);
     
 
     memcpy(mv_VK_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
@@ -1613,7 +1613,7 @@ void Craig::Renderer::createDepthResources() {
 
 }
 
-void Craig::Renderer::drawFrame() {
+void Craig::Renderer::drawFrame(const float& deltaTime) {
 
     
     //m_VK_device.waitForFences(mv_VK_inFlightFences[m_currentFrame], vk::True, UINT64_MAX);
@@ -1660,7 +1660,7 @@ void Craig::Renderer::drawFrame() {
     mv_VK_commandBuffers[imageIndex].reset();
     recordCommandBuffer(mv_VK_commandBuffers[imageIndex], imageIndex);
 
-    updateUniformBuffer(m_currentFrame);
+    updateUniformBuffer(m_currentFrame, deltaTime);
 
     // Submit the command buffer for execution
 

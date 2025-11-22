@@ -14,7 +14,7 @@ namespace Craig {
     public:
         Craig::Camera(glm::vec3 pos = glm::vec3(0.0f));
 
-        void update();
+        void update(const float& deltaTime);
         void processSDLEvent(SDL_Event& e);
 
         void panTilt(float pan, float tilt);
@@ -33,11 +33,14 @@ namespace Craig {
         float m_farPlane = 100.0f;
         float m_aspect = 1.0f;  // set this from swapchain
 
+        float m_movementSpeed = 1.0f;
+        float m_rotSpeed = 1.0f;
+
         void setPosition(const glm::vec3& p) { m_position = p; }
         void setPitchYaw(const glm::vec2& py) { m_pitchYaw = py; }
 
     private:
-        void updateView();
+        void updateView(const float& deltaTime);
         void updateProj();
 
         glm::vec3 forward() const;

@@ -26,7 +26,7 @@ namespace Craig {
 
 	public:
 		CraigError init(Window* CurrentWindowPtr);
-		CraigError update();
+		CraigError update(const float& deltaTime);
 		CraigError terminate();
 
 		bool& getVSyncState() { return m_vsync; };
@@ -100,7 +100,7 @@ namespace Craig {
 
 		void createDepthResources();
 
-		void drawFrame();
+		void drawFrame(const float& deltaTime);
 
 		vk::detail::DispatchLoaderStatic onPresentationFail() { return vk::detail::DispatchLoaderStatic{}; };
 
@@ -144,7 +144,7 @@ namespace Craig {
 		vk::CommandBuffer buffer_beginSingleTimeCommandsGFX(); //Uses the graphis queue and command buffer
 		void buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandBuffer);
 
-		void updateUniformBuffer(uint32_t currentImage);
+		void updateUniformBuffer(uint32_t currentImage, const float& deltaTime);
 
 		void createImage(uint32_t width, uint32_t height, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, VmaAllocation& allocation);
 		void transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, bool useTransferQueue = true);

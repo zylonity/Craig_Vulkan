@@ -21,7 +21,7 @@ namespace Craig {
 		};
 
 		CraigError init();
-		CraigError update();
+		CraigError update(const float& deltaTime);
 		CraigError terminate();
 
 		// Getters

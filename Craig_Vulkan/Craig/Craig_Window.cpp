@@ -37,7 +37,7 @@ CraigError Craig::Window::init() {
 	return ret;
 }
 
-CraigError Craig::Window::update() {
+CraigError Craig::Window::update(const float& deltaTime) {
 
 	CraigError ret = CRAIG_SUCCESS;
 

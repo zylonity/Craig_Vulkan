@@ -9,6 +9,8 @@
 #include "Craig_ResourceManager.hpp"
 #include "Craig_Editor.hpp"
 
+#include <chrono>
+
 CraigError Craig::Framework::init() {
 
 	CraigError ret = CRAIG_SUCCESS;
@@ -30,11 +32,7 @@ CraigError Craig::Framework::init() {
 	// Initialize the Resource Manager Singleton
 	Craig::ResourceManager::getInstance().init();
 
-	
-
-#if defined(IMGUI_ENABLED)
-	
-#endif
+	m_LastFrameTime = std::chrono::steady_clock::now();
 
 	return ret;
 }
@@ -44,13 +42,15 @@ CraigError Craig::Framework::update() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-	ret = mp_Window->update();
+	const float elapsed = getElapsedTime();
+
+	ret = mp_Window->update(elapsed);
 	assert((ret == CRAIG_SUCCESS || ret == CRAIG_CLOSED) && "mp_Window failed to update");
 	if(ret == CRAIG_CLOSED) {
 		return CRAIG_CLOSED; // If the window is closed, we return that code
 	}
 
-	ret = mp_Renderer->update();
+	ret = mp_Renderer->update(elapsed);
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer failed to update");
 
 	return ret;
@@ -73,4 +73,16 @@ CraigError Craig::Framework::terminate() {
 	Craig::ResourceManager::getInstance().terminate();
 
 	return ret;
+}
+
+float Craig::Framework::getElapsedTime()
+{
+	// Calculate frame time as current time - time when we last called the function.
+	const std::chrono::steady_clock::time_point currentTime = std::chrono::steady_clock::now();
+	const float elapsedTime = std::chrono::duration_cast<std::chrono::microseconds>(currentTime - m_LastFrameTime).count() / 1000000.f;
+
+	// Update our reference to the recorded time.
+	m_LastFrameTime = currentTime;
+
+	return elapsedTime;
 }

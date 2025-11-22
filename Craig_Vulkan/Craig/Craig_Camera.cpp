@@ -14,17 +14,17 @@ Craig::Camera::Camera(glm::vec3 pos)
 {
 }
 
-void Craig::Camera::update()
+void Craig::Camera::update(const float& deltaTime)
 {
-    updateView();
+    updateView(deltaTime);
     updateProj();
 }
 
-void Craig::Camera::updateView()
+void Craig::Camera::updateView(const float& deltaTime)
 {
     
-    m_position += forward() * m_velocity.z;
-    m_position += right() * m_velocity.x;
+    m_position += ((forward() * m_velocity.z) * m_movementSpeed) * deltaTime;
+    m_position += ((right() * m_velocity.x) * m_movementSpeed) * deltaTime;
 
     glm::mat4 cameraTranslation = glm::translate(glm::mat4(1.f), m_position);
     glm::mat4 cameraRotation = getRotationMatrix();
