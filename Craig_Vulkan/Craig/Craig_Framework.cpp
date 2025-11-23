@@ -8,6 +8,7 @@
 #include "Craig_Renderer.hpp"
 #include "Craig_ResourceManager.hpp"
 #include "Craig_Editor.hpp"
+#include "Craig_SceneManager.hpp"
 
 #include <chrono>
 
@@ -32,6 +33,14 @@ CraigError Craig::Framework::init() {
 	// Initialize the Resource Manager Singleton
 	Craig::ResourceManager::getInstance().init();
 
+	// Initialize our scene manager
+	mp_SceneManager = new Craig::SceneManager;
+	assert(mp_SceneManager != nullptr && "mp_SceneManager failed to allocate memory");
+	ret = mp_SceneManager->init();
+	assert(ret == CRAIG_SUCCESS);
+
+	mp_Renderer->setSceneManager(mp_SceneManager);
+
 	m_LastFrameTime = std::chrono::steady_clock::now();
 
 	return ret;
@@ -53,6 +62,9 @@ CraigError Craig::Framework::update() {
 	ret = mp_Renderer->update(elapsed);
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer failed to update");
 
+	ret = mp_SceneManager->update(elapsed);
+	assert(ret == CRAIG_SUCCESS && "mp_SceneManager failed to update");
+
 	return ret;
 }
 
@@ -69,6 +81,11 @@ CraigError Craig::Framework::terminate() {
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer didn't terminate properly"); //Check it closed properly
 	delete mp_Renderer; //Delete the scene manager
 	mp_Renderer = nullptr; //Set the pointer to null (Might not be done by default, just in case)
+
+	ret = mp_SceneManager->terminate(); 
+	assert(ret == CRAIG_SUCCESS && "mp_SceneManager didn't terminate properly");
+	delete mp_SceneManager; 
+	mp_SceneManager = nullptr; 
 
 	Craig::ResourceManager::getInstance().terminate();
 

@@ -115,8 +115,8 @@ void Craig::Camera::processSDLEvent(SDL_Event& e) {
     }
 
     if (e.type == SDL_MOUSEMOTION) {
-        m_pitchYaw[1] -= (float)e.motion.xrel / 20.f;
-        m_pitchYaw[0] -= (float)e.motion.yrel / 20.f;
+        m_pitchYaw[1] -= ((float)e.motion.xrel / 200.f) * m_rotSpeed;
+        m_pitchYaw[0] -= ((float)e.motion.yrel / 200.f) * m_rotSpeed;
     }
 
 }

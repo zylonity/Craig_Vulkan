@@ -21,6 +21,7 @@ namespace Craig {
 
 	//Forward declarations
 	class Window;
+	class SceneManager;
 
 	class Renderer {
 
@@ -31,9 +32,13 @@ namespace Craig {
 
 		bool& getVSyncState() { return m_vsync; };
 		void refreshSwapChain() { recreateSwapChain(); };
+
+		void setSceneManager(SceneManager* sceneManagerPtr) { mp_SceneManager = sceneManagerPtr; };
 	
 
 	private:
+
+		SceneManager* mp_SceneManager;
 		Craig::Camera m_camera = Craig::Camera();
 
 

@@ -82,6 +82,12 @@
     <ClCompile Include="Craig\Craig_Camera.cpp">
       <Filter>Source Files\Craig</Filter>
     </ClCompile>
+    <ClCompile Include="Craig\Craig_Scene.cpp">
+      <Filter>Source Files\Craig</Filter>
+    </ClCompile>
+    <ClCompile Include="Craig\Craig_SceneManager.cpp">
+      <Filter>Source Files\Craig</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Craig\Craig_Framework.hpp">
@@ -142,6 +148,12 @@
       <Filter>Header Files\Craig</Filter>
     </ClInclude>
     <ClInclude Include="Craig\Craig_Camera.hpp">
+      <Filter>Header Files\Craig</Filter>
+    </ClInclude>
+    <ClInclude Include="Craig\Craig_Scene.hpp">
+      <Filter>Header Files\Craig</Filter>
+    </ClInclude>
+    <ClInclude Include="Craig\Craig_SceneManager.hpp">
       <Filter>Header Files\Craig</Filter>
     </ClInclude>
   </ItemGroup>
