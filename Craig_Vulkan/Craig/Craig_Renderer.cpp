@@ -1,7 +1,9 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+
+#define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
-#define TINYOBJLOADER_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
 
 #include <cassert>
 #include <iostream>
@@ -9,8 +11,8 @@
 #include <algorithm>
 #include <chrono>
 #include <glm/gtc/matrix_transform.hpp>
-#include "../External/stb_image.h"
-#include "../External/tiny_obj_loader.h"
+#include "../External/tiny_gltf.h"
+
 
 
 #if defined(IMGUI_ENABLED)
@@ -1890,55 +1892,133 @@ uint32_t Craig::Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryProperty
 }
 
 void Craig::Renderer::loadModel() {
-    tinyobj::attrib_t attrib;
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> materials;
-    std::string err;
-    std::string warn;
+    tinygltf::Model model;
+    tinygltf::TinyGLTF loader;
+    std::string err, warn;
 
-    bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str());
+    bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH.c_str());
+    // use LoadBinaryFromFile for .glb
 
     if (!warn.empty()) {
         std::cout << warn << std::endl;
     }
-
     if (!err.empty()) {
         std::cerr << err << std::endl;
     }
-
     if (!ret) {
         exit(CRAIG_FAIL);
     }
-
-
-    for (const auto& shape : shapes) {
-        for (const auto& index : shape.mesh.indices) {
-            Vertex vertex{};
-
-
-
-            vertex.m_pos = {
-                attrib.vertices[3 * index.vertex_index + 0],
-                attrib.vertices[3 * index.vertex_index + 1],
-                attrib.vertices[3 * index.vertex_index + 2]
-            };
-
-            if (index.texcoord_index >= 0) {
-                vertex.m_texCoord = {
-                attrib.texcoords[2 * index.texcoord_index + 0],
-                1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-                };
-            }
-
-            
-
-            vertex.m_color = { 1.0f, 1.0f, 1.0f };
-
-            //TODO: unique vertex loading
-
-            m_vertices.push_back(vertex);
-            m_indices.push_back(m_indices.size());
-        }
+    else {
+        printf("model found");
     }
 
+    m_vertices.clear();
+    m_indices.clear();
+
+    // iterate all meshes / primitives, no scene graph yet
+    for (const auto& mesh : model.meshes) {
+        for (const auto& prim : mesh.primitives) { //in gltf a primitive is a draw call, we can have multiple draw calls for like different layer textures
+
+            //INDICES STUFF
+            if (prim.indices < 0) {
+                // you *can* support non-indexed later, skip for now
+                continue;
+            }
+
+            const tinygltf::Accessor& indexAccessor = model.accessors[prim.indices];
+            const tinygltf::BufferView& indexBV = model.bufferViews[indexAccessor.bufferView];
+            const tinygltf::Buffer& indexBuf = model.buffers[indexBV.buffer];
+
+            const uint8_t* indexData = indexBuf.data.data() + indexBV.byteOffset + indexAccessor.byteOffset; //pointer to where the index data starts, offset by the other things
+
+
+            //POSITION STUFF
+            auto itPos = prim.attributes.find("POSITION");
+            if (itPos == prim.attributes.end()) {
+                continue; // no positions means we can skip the primitive
+            }
+
+            const tinygltf::Accessor& posAccessor = model.accessors[itPos->second];
+            const tinygltf::BufferView& posBV = model.bufferViews[posAccessor.bufferView];
+            const tinygltf::Buffer& posBuf = model.buffers[posBV.buffer];
+
+            const uint8_t* posData = posBuf.data.data() + posBV.byteOffset + posAccessor.byteOffset; //pointer to where the position data starts, offset by the other things
+
+            // position stride - From what I understand, it's how much forward in memory (how many bits) we need to move before finding the next vertex
+            // oxford dictionary: Stride - walk with long, decisive steps in a specified direction.
+            size_t posStride = tinygltf::GetNumComponentsInType(posAccessor.type) * tinygltf::GetComponentSizeInBytes(posAccessor.componentType);
+            if (posAccessor.ByteStride(posBV) != 0) {
+                posStride = posAccessor.ByteStride(posBV);
+            }
+
+            //TEXCOORD STUFF
+            const tinygltf::Accessor* texAccessor = nullptr;
+            const tinygltf::BufferView* texBV = nullptr;
+            const tinygltf::Buffer* texBuf = nullptr;
+            const uint8_t* texData = nullptr;
+            size_t texStride = 0;
+
+            auto itUv = prim.attributes.find("TEXCOORD_0");
+            if (itUv != prim.attributes.end()) {
+                texAccessor = &model.accessors[itUv->second];
+                texBV = &model.bufferViews[texAccessor->bufferView];
+                texBuf = &model.buffers[texBV->buffer];
+
+                texData = texBuf->data.data() + texBV->byteOffset + texAccessor->byteOffset;
+
+                texStride = tinygltf::GetNumComponentsInType(texAccessor->type) * tinygltf::GetComponentSizeInBytes(texAccessor->componentType);
+                if (texAccessor->ByteStride(*texBV) != 0) {
+                    texStride = texAccessor->ByteStride(*texBV);
+                }
+            }
+
+
+            // calculate where the first vertex for this primitive (draw call) is
+            uint32_t firstVertex = static_cast<uint32_t>(m_vertices.size());
+
+            //GET VERTICES
+            for (size_t i = 0; i < posAccessor.count; ++i) {
+                Vertex v{};
+
+                const float* p = reinterpret_cast<const float*>(posData + i * posStride);
+                v.m_pos = glm::vec3(p[0], p[1], p[2]);
+
+                if (texAccessor) {
+                    const float* t = reinterpret_cast<const float*>(texData + i * texStride);
+                    v.m_texCoord = glm::vec2(t[0], 1.0f - t[1]);
+                }
+                else {
+                    v.m_texCoord = glm::vec2(0.0f);
+                }
+
+                v.m_color = glm::vec3(1.0f);
+
+                m_vertices.push_back(v);
+            }
+
+            //GET INDICES
+            for (size_t i = 0; i < indexAccessor.count; ++i) {
+                uint32_t index = 0;
+
+                switch (indexAccessor.componentType) {
+                case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+                    index = reinterpret_cast<const uint16_t*>(indexData)[i];
+                    break;
+                case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
+                    index = reinterpret_cast<const uint32_t*>(indexData)[i];
+                    break;
+                case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+                    index = reinterpret_cast<const uint8_t*>(indexData)[i];
+                    break;
+                default:
+                    // unsupported index type for now
+                    break;
+                }
+
+                m_indices.push_back(firstVertex + index);
+            }
+
+
+        }
+    }
 }

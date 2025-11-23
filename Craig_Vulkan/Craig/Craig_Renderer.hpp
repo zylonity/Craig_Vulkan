@@ -268,7 +268,7 @@ namespace Craig {
 		std::vector<uint32_t> m_indices;
 
 
-		const std::string MODEL_PATH = "data/models/kirby.obj";
+		const std::string MODEL_PATH = "data/models/AlphaBlendModeTest.glb";
 		const std::string TEXTURE_PATH = "data/textures/viking_room.png";
 		void loadModel();
 
