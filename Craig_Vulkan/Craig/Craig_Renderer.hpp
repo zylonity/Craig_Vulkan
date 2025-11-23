@@ -16,13 +16,12 @@
 #include "Craig_Constants.hpp"
 #include "Craig_Camera.hpp"
 
-
 namespace Craig {
 
 	//Forward declarations
 	class Window;
 	class SceneManager;
-
+	
 	class Renderer {
 
 	public:
@@ -99,6 +98,7 @@ namespace Craig {
 		void createDescriptorPool();
 		void createDescriptorSets();
 
+		void createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels);
 		void createTextureImage();
 		void createTextureImageView();
 		void createTextureSampler();
@@ -263,6 +263,15 @@ namespace Craig {
 			static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions(); //We have two attributes, position and color, so we need two attribute description structs.
 
 		};
+
+		struct SubMesh {
+			uint32_t firstIndex;
+			uint32_t indexCount;
+			uint32_t firstVertex;
+			int      materialIndex; // prim.material
+		};
+
+		std::vector<SubMesh> m_submeshes;
 
 		std::vector<Vertex> m_vertices;
 		std::vector<uint32_t> m_indices;

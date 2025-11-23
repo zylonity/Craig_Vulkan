@@ -13,8 +13,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include "../External/tiny_gltf.h"
 
-
-
 #if defined(IMGUI_ENABLED)
 #include "../External/Imgui/imgui.h"   
 #include "../External/Imgui/imgui_impl_vulkan.h"
@@ -229,8 +227,6 @@ void Craig::Renderer::InitVulkan() {
     createCommandPool();
     createDepthResources();
     createFrameBuffers();
-    createTextureImage();
-    createTextureImageView();
     createTextureSampler();
     loadModel();
     createVertexBuffer();
@@ -996,7 +992,12 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     vertexOffset: used as an offset into the vertex buffer?
     firstInstance: Used as an offset for instanced rendering, defines the lowest value of gl_InstanceIndex.
     */
-    commandBuffer.drawIndexed(static_cast<uint32_t>(m_indices.size()), 1, 0, 0, 0);
+
+    for (const SubMesh& sm : m_submeshes) {
+        //bindMaterial(materials[sm.materialIndex]); // bind right texture/params
+
+        commandBuffer.drawIndexed(sm.indexCount, 1, sm.firstIndex, 0, 0);
+    }
 
 #if defined(IMGUI_ENABLED)
     ImGui::Render();
@@ -1481,6 +1482,42 @@ void Craig::Renderer::createTextureImage() {
     transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, false);
 
     vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
+}
+
+void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels) {
+    vk::DeviceSize imageSize = texWidth * texHeight * 4;
+
+    if (!pixels) {
+        throw std::runtime_error("failed to load texture image!");
+    }
+
+    vk::Buffer stagingBuffer;
+    VmaAllocation stagingAlloc{};
+
+    VmaAllocationCreateInfo stagingAci{};
+    stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
+    stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+
+    createBufferVMA(imageSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
+
+    void* data;
+    vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
+    memcpy(data, pixels, static_cast<size_t>(imageSize));
+    vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, imageSize);
+    vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
+
+    //stbi_image_free(pixels);
+
+    createImage(texWidth, texHeight, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_textureImage, m_VMA_textureImageAllocation);
+
+    transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
+    copyBufferToImage(stagingBuffer, m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+
+    transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, false);
+
+    vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
+
+    createTextureImageView();
 }
 
 void Craig::Renderer::createTextureImageView() {
@@ -1972,9 +2009,8 @@ void Craig::Renderer::loadModel() {
                 }
             }
 
-
-            // calculate where the first vertex for this primitive (draw call) is
-            uint32_t firstVertex = static_cast<uint32_t>(m_vertices.size());
+            uint32_t firstVertex = (uint32_t)m_vertices.size();
+            uint32_t firstIndex = (uint32_t)m_indices.size();
 
             //GET VERTICES
             for (size_t i = 0; i < posAccessor.count; ++i) {
@@ -1985,7 +2021,7 @@ void Craig::Renderer::loadModel() {
 
                 if (texAccessor) {
                     const float* t = reinterpret_cast<const float*>(texData + i * texStride);
-                    v.m_texCoord = glm::vec2(t[0], 1.0f - t[1]);
+                    v.m_texCoord = glm::vec2(t[0], t[1]);
                 }
                 else {
                     v.m_texCoord = glm::vec2(0.0f);
@@ -2018,6 +2054,41 @@ void Craig::Renderer::loadModel() {
                 m_indices.push_back(firstVertex + index);
             }
 
+            uint32_t indexCount = (uint32_t)m_indices.size() - firstIndex;
+
+            SubMesh sm{};
+            sm.firstVertex = firstVertex;
+            sm.firstIndex = firstIndex;
+            sm.indexCount = indexCount;
+            sm.materialIndex = prim.material;
+
+            m_submeshes.push_back(sm);
+
+            //GET TEXTURE
+            int materialIndex = prim.material; //find the material
+            if (materialIndex >= 0 && materialIndex < model.materials.size()) { //if we actually have a texutre
+                const tinygltf::Material& mat = model.materials[materialIndex];
+
+                // Base color texture (what you usually think of as “albedo” / “diffuse”)
+                int baseColorTexIndex = mat.pbrMetallicRoughness.baseColorTexture.index;
+                if (baseColorTexIndex >= 0 && baseColorTexIndex < model.textures.size()) {
+                    const tinygltf::Texture& tex = model.textures[baseColorTexIndex];
+
+                    int imageIndex = tex.source;
+                    if (imageIndex >= 0 && imageIndex < model.images.size()) {
+                        const tinygltf::Image& img = model.images[imageIndex];
+
+                        const uint8_t* pixels = img.image.data();
+                        int width = img.width;
+                        int height = img.height;
+                        int comp = img.component; // usually 4 (RGBA)
+
+                        // Here you replace your old stb_image path:
+                        // createVulkanTextureFromPixels(pixels, width, height, comp);
+                        createTextureImage2(pixels, width, height, comp);
+                    }
+                }
+            }
 
         }
     }
