@@ -66,6 +66,7 @@ CraigError Craig::Window::update(const float& deltaTime) {
 
 				if (m_mouseLocked) {
 					SDL_SetRelativeMouseMode(SDL_TRUE);
+					
 				}
 				else {
 					SDL_SetRelativeMouseMode(SDL_FALSE);

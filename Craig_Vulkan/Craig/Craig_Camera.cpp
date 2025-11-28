@@ -100,23 +100,27 @@ glm::mat4 Craig::Camera::getRotationMatrix()
 
 void Craig::Camera::processSDLEvent(SDL_Event& e) {
 
-    if (e.type == SDL_KEYDOWN) {
-        if (e.key.keysym.sym == SDLK_w) { m_velocity.z = -1; }
-        if (e.key.keysym.sym == SDLK_s) { m_velocity.z = 1; }
-        if (e.key.keysym.sym == SDLK_a) { m_velocity.x = -1; }
-        if (e.key.keysym.sym == SDLK_d) { m_velocity.x = 1; }
-    }
 
-    if (e.type == SDL_KEYUP) {
-        if (e.key.keysym.sym == SDLK_w) { m_velocity.z = 0; }
-        if (e.key.keysym.sym == SDLK_s) { m_velocity.z = 0; }
-        if (e.key.keysym.sym == SDLK_a) { m_velocity.x = 0; }
-        if (e.key.keysym.sym == SDLK_d) { m_velocity.x = 0; }
-    }
+    if (SDL_GetRelativeMouseMode() == SDL_TRUE) {
+        if (e.type == SDL_KEYDOWN) {
+            if (e.key.keysym.sym == SDLK_w) { m_velocity.z = -1; }
+            if (e.key.keysym.sym == SDLK_s) { m_velocity.z = 1; }
+            if (e.key.keysym.sym == SDLK_a) { m_velocity.x = -1; }
+            if (e.key.keysym.sym == SDLK_d) { m_velocity.x = 1; }
+        }
 
-    if (e.type == SDL_MOUSEMOTION) {
-        m_pitchYaw[1] -= ((float)e.motion.xrel / 200.f) * m_rotSpeed;
-        m_pitchYaw[0] -= ((float)e.motion.yrel / 200.f) * m_rotSpeed;
+        if (e.type == SDL_KEYUP) {
+            if (e.key.keysym.sym == SDLK_w) { m_velocity.z = 0; }
+            if (e.key.keysym.sym == SDLK_s) { m_velocity.z = 0; }
+            if (e.key.keysym.sym == SDLK_a) { m_velocity.x = 0; }
+            if (e.key.keysym.sym == SDLK_d) { m_velocity.x = 0; }
+        }
+
+        if (e.type == SDL_MOUSEMOTION) {
+            m_pitchYaw[1] -= ((float)e.motion.xrel / 200.f) * m_rotSpeed;
+            m_pitchYaw[0] -= ((float)e.motion.yrel / 200.f) * m_rotSpeed;
+        }
     }
+    
 
 }
