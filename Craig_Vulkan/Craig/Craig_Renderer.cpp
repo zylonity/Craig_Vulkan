@@ -230,7 +230,7 @@ void Craig::Renderer::InitVulkan() {
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
-    loadModel();
+    Craig::ResourceManager::getInstance().loadModel();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
@@ -994,7 +994,20 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     vertexOffset: used as an offset into the vertex buffer?
     firstInstance: Used as an offset for instanced rendering, defines the lowest value of gl_InstanceIndex.
     */
-    commandBuffer.drawIndexed(static_cast<uint32_t>(m_indices.size()), 1, 0, 0, 0);
+    
+    for (size_t i = 0; i < Craig::ResourceManager::getInstance().m_testModel.subMeshesCount; i++)
+    {
+        Craig::SubMesh* submesh = Craig::ResourceManager::getInstance().m_testModel.subMeshes[i];
+
+        commandBuffer.drawIndexed(
+            submesh->m_indices.size(),
+            1, 
+            submesh->indexOffset,
+            submesh->vertexOffset,
+            0);
+    }
+
+    
 
 #if defined(IMGUI_ENABLED)
     ImGui::Render();
@@ -1237,7 +1250,25 @@ void Craig::Renderer::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint
 }
 
 void Craig::Renderer::createVertexBuffer() {
-    vk::DeviceSize bufferSize = sizeof(m_vertices[0]) * m_vertices.size();
+
+    Craig::Model& model = Craig::ResourceManager::getInstance().m_testModel;
+
+    uint32_t totalVertexCount = 0;
+    for (size_t i = 0; i < model.subMeshesCount; i++)
+    {
+        Craig::SubMesh* submesh = model.subMeshes[i];
+        submesh->vertexOffset = totalVertexCount; // store where this submesh starts
+        totalVertexCount += static_cast<uint32_t>(submesh->m_vertices.size());
+
+    }
+    
+    if (totalVertexCount == 0) {
+        // nothing to upload, bail early
+        return;
+    }
+
+
+    vk::DeviceSize bufferSize = sizeof(model.subMeshes[0]->m_vertices[0]) * totalVertexCount;
 
     vk::Buffer stagingBuffer;
     VmaAllocation stagingAlloc{};
@@ -1250,7 +1281,21 @@ void Craig::Renderer::createVertexBuffer() {
 
     void* data;
     vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
-    memcpy(data, m_vertices.data(), (size_t)bufferSize);
+
+    Craig::Vertex* dst = static_cast<Vertex*>(data);
+
+    uint32_t cursor = 0;
+    for (size_t i = 0; i < model.subMeshesCount; ++i) {
+        std::vector<Craig::Vertex>& verts = model.subMeshes[i]->m_vertices;
+
+        std::memcpy(dst + cursor,
+            verts.data(),
+            sizeof(Vertex) * verts.size());
+
+        model.subMeshes[i]->vertexOffset = cursor;
+        cursor += static_cast<uint32_t>(verts.size());
+    }
+
     vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, bufferSize);
     vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
 
@@ -1265,7 +1310,20 @@ void Craig::Renderer::createVertexBuffer() {
 }
 
 void Craig::Renderer::createIndexBuffer() {
-    vk::DeviceSize bufferSize = sizeof(m_indices[0]) * m_indices.size();
+
+    Craig::Model& model = Craig::ResourceManager::getInstance().m_testModel;
+
+    uint32_t totalIndexCount = 0;
+    for (size_t i = 0; i < model.subMeshesCount; ++i) {
+        totalIndexCount += static_cast<uint32_t>(model.subMeshes[i]->m_indices.size());
+    }
+
+    if (totalIndexCount == 0) {
+        // nothing to upload, bail early
+        return;
+    }
+
+    vk::DeviceSize bufferSize = sizeof(model.subMeshes[0]->m_indices[0]) * totalIndexCount;
 
     vk::Buffer stagingBuffer;
     VmaAllocation stagingAlloc{};
@@ -1278,7 +1336,27 @@ void Craig::Renderer::createIndexBuffer() {
 
     void* data;
     vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
-    memcpy(data, m_indices.data(), (size_t)bufferSize);
+
+    uint32_t* dst = static_cast<uint32_t*>(data);
+    uint32_t cursor = 0;
+
+    for (size_t i = 0; i < model.subMeshesCount; ++i) {
+        Craig::SubMesh* submesh = model.subMeshes[i];
+        std::vector<uint32_t>& indices = submesh->m_indices;
+
+        if (indices.empty()) {
+            submesh->indexOffset = cursor;
+            continue;
+        }
+
+        std::memcpy(dst + cursor,
+            indices.data(),
+            sizeof(uint32_t) * indices.size());
+
+        submesh->indexOffset = cursor;
+        cursor += static_cast<uint32_t>(indices.size());
+    }
+
     vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, bufferSize);
     vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
 
@@ -1446,8 +1524,10 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
 }
 
 void Craig::Renderer::createTextureImage() {
+    Craig::Model& model = Craig::ResourceManager::getInstance().m_testModel;
+
     int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(model.texturePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
     if (!pixels) {
@@ -1830,43 +1910,6 @@ CraigError Craig::Renderer::terminate() {
     return ret;
 }
 
-vk::VertexInputBindingDescription Craig::Renderer::Vertex::getBindingDescription()  {
-    vk::VertexInputBindingDescription bindingDescription;
-
-    bindingDescription
-        .setBinding(0)
-        .setStride(sizeof(Vertex))
-        .setInputRate(vk::VertexInputRate::eVertex);
-       
-
-    return bindingDescription;
-}
-
-std::array<vk::VertexInputAttributeDescription, 3> Craig::Renderer::Vertex::getAttributeDescriptions() {
-    std::array<vk::VertexInputAttributeDescription, 3> attributeDescriptions;
-
-    attributeDescriptions[0]
-        .setBinding(0) 
-        .setLocation(0)//Location0 = POSITION0
-        .setFormat(vk::Format::eR32G32B32Sfloat) //Not a colour, just uses the same format. Float2 = RG_float (Only 2 channels) 
-        .setOffset(offsetof(Vertex, m_pos));
-
-    attributeDescriptions[1]
-        .setBinding(0) 
-        .setLocation(1)//Location1 = COLOR1 <- ps fuck american spelling.
-        .setFormat(vk::Format::eR32G32B32Sfloat) //This time it IS a colour, so float3 = RGB_float
-        .setOffset(offsetof(Vertex, m_color));
-
-    attributeDescriptions[2]
-        .setBinding(0)
-        .setLocation(2)
-        .setFormat(vk::Format::eR32G32Sfloat) 
-        .setOffset(offsetof(Vertex, m_texCoord));
-
-
-    return attributeDescriptions;
-}
-
 uint32_t Craig::Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
     vk::PhysicalDeviceMemoryProperties memProperties;
 
@@ -1886,59 +1929,5 @@ uint32_t Craig::Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryProperty
     }
 
     throw std::runtime_error("failed to find suitable memory type!");
-
-}
-
-void Craig::Renderer::loadModel() {
-    tinyobj::attrib_t attrib;
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> materials;
-    std::string err;
-    std::string warn;
-
-    bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str());
-
-    if (!warn.empty()) {
-        std::cout << warn << std::endl;
-    }
-
-    if (!err.empty()) {
-        std::cerr << err << std::endl;
-    }
-
-    if (!ret) {
-        exit(CRAIG_FAIL);
-    }
-
-
-    for (const auto& shape : shapes) {
-        for (const auto& index : shape.mesh.indices) {
-            Vertex vertex{};
-
-
-
-            vertex.m_pos = {
-                attrib.vertices[3 * index.vertex_index + 0],
-                attrib.vertices[3 * index.vertex_index + 1],
-                attrib.vertices[3 * index.vertex_index + 2]
-            };
-
-            if (index.texcoord_index >= 0) {
-                vertex.m_texCoord = {
-                attrib.texcoords[2 * index.texcoord_index + 0],
-                1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-                };
-            }
-
-            
-
-            vertex.m_color = { 1.0f, 1.0f, 1.0f };
-
-            //TODO: unique vertex loading
-
-            m_vertices.push_back(vertex);
-            m_indices.push_back(m_indices.size());
-        }
-    }
 
 }

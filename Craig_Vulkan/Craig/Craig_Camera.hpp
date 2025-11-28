@@ -33,8 +33,8 @@ namespace Craig {
         float m_farPlane = 100.0f;
         float m_aspect = 1.0f;  // set this from swapchain
 
-        float m_movementSpeed = 1.0f;
-        float m_rotSpeed = 1.0f;
+        float m_movementSpeed = 10.0f;
+        float m_rotSpeed = 10.0f;
 
         void setPosition(const glm::vec3& p) { m_position = p; }
         void setPitchYaw(const glm::vec2& py) { m_pitchYaw = py; }

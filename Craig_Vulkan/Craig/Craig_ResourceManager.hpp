@@ -1,14 +1,56 @@
 #pragma once
+
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+
 #include "Craig_Constants.hpp"
 #include <chrono>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <vulkan/vulkan.hpp>
+
+
 
 namespace Craig {
+
+	//Vertex buffer
+	struct Vertex {
+		glm::vec3 m_pos;
+		glm::vec3 m_color;
+		glm::vec2 m_texCoord;
+
+		static vk::VertexInputBindingDescription getBindingDescription(); //A vertex binding describes at which rate to load data from memory throughout the vertices. It specifies the number of bytes between data entries and whether to move to the next data entry after each vertex or after each instance.
+		static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions(); //We have two attributes, position and color, so we need two attribute description structs.
+
+	};
+
+	struct SubMesh
+	{
+		std::vector<Vertex> m_vertices;
+		std::vector<uint32_t> m_indices;
+
+		uint32_t vertexOffset = 0;
+		uint32_t indexOffset = 0;
+	};
+
+	struct Model {
+		std::vector<Craig::SubMesh*> subMeshes;
+		uint32_t subMeshesCount;
+		std::string modelPath = "data/models/kirby.obj";
+		std::string texturePath = "data/textures/viking_room.png";
+
+	};
 
 	class ResourceManager {
 
 	public:
 		CraigError init();
 		CraigError terminate();
+
+		void loadModel();
+
+		Craig::Model m_testModel;
 
 		//===============================================================================
 		// Singleton Implementations

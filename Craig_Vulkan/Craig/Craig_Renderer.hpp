@@ -15,7 +15,7 @@
 
 #include "Craig_Constants.hpp"
 #include "Craig_Camera.hpp"
-
+#include "Craig_ResourceManager.hpp"
 
 namespace Craig {
 
@@ -252,25 +252,6 @@ namespace Craig {
 
 		vk::DescriptorPool m_VK_imguiDescriptorPool;
 #endif
-
-		//Vertex buffer stuff
-		struct Vertex {
-			glm::vec3 m_pos;
-			glm::vec3 m_color;
-			glm::vec2 m_texCoord;
-
-			static vk::VertexInputBindingDescription getBindingDescription(); //A vertex binding describes at which rate to load data from memory throughout the vertices. It specifies the number of bytes between data entries and whether to move to the next data entry after each vertex or after each instance.
-			static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions(); //We have two attributes, position and color, so we need two attribute description structs.
-
-		};
-
-		std::vector<Vertex> m_vertices;
-		std::vector<uint32_t> m_indices;
-
-
-		const std::string MODEL_PATH = "data/models/kirby.obj";
-		const std::string TEXTURE_PATH = "data/textures/viking_room.png";
-		void loadModel();
 
 		bool m_vsync = true;
 
