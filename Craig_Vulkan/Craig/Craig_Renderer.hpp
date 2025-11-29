@@ -8,6 +8,7 @@
 #include <vector>
 #include <array>
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_beta.h>
 #include <SDL2/SDL_vulkan.h>
 #include "../External/vk_mem_alloc.h"
 #include <glm/glm.hpp>
@@ -134,6 +135,11 @@ namespace Craig {
 
 		const std::vector<const char*> mv_VK_deviceExtensions = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME // Required for swapchain support (Like a framebuffer)
+#if defined(__APPLE__)
+			,VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
+#endif
+
+
 		};
 
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);

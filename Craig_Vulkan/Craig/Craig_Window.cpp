@@ -6,7 +6,7 @@
 #include <vulkan/vulkan.hpp>
 
 #if defined(IMGUI_ENABLED)
-#include "../External/Imgui/imgui.h"   
+#include "../External/Imgui/imgui.h"
 #include "../External/Imgui/imgui_impl_sdl2.h"
 #endif
 
@@ -32,6 +32,10 @@ CraigError Craig::Window::init() {
 
 	sdlRetBool = SDL_Vulkan_GetInstanceExtensions(mp_SDL_Window, &m_SDL_ExtensionCount, mv_SDL_Extensions.data()); // Get the names of the required instance extensions
 	assert(sdlRetBool && "Could not get the names of required instance extensions from SDL.");
+
+#if defined(__APPLE__)
+	mv_SDL_Extensions.push_back(vk::KHRPortabilityEnumerationExtensionName);
+#endif
 
 
 	return ret;

@@ -12,7 +12,7 @@ namespace Craig {
     class Camera
     {
     public:
-        Craig::Camera(glm::vec3 pos = glm::vec3(0.0f));
+        Camera(glm::vec3 pos = glm::vec3(0.0f));
 
         void update(const float& deltaTime);
         void processSDLEvent(SDL_Event& e);

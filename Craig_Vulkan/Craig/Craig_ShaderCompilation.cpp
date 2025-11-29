@@ -1,10 +1,10 @@
 #include "Craig_ShaderCompilation.hpp"
-
 #include <iostream>
+
+#if defined(_WIN32)
+
 #include <atlbase.h>        // CComPtr
 #include <dxc/dxcapi.h>     // DXC API
-
-
 
 //refer to https://docs.vulkan.org/guide/latest/hlsl.html
 //The reason i'm stubbornly sticking to HLSL is because it's the closest semantically to AGC, original craig.
@@ -111,3 +111,32 @@ vk::ShaderModule Craig::ShaderCompilation::CompileHLSLToShaderModule(vk::Device 
 	return shaderModule;
 }
 
+#elif defined(__APPLE__)
+#include <fstream>
+
+vk::ShaderModule Craig::ShaderCompilation::CompileHLSLToShaderModule(vk::Device device, const std::wstring& filename) {
+
+	std::ifstream file;
+	file.open(filename, std::ios::ate | std::ios::binary);
+
+	if (!file.is_open()) {
+		throw std::runtime_error("failed to open file!");
+	}
+
+	size_t fileSize = (size_t) file.tellg();
+	std::vector<char> buffer(fileSize);
+
+	file.seekg(0);
+	file.read(buffer.data(), fileSize);
+
+	file.close();
+
+	vk::ShaderModuleCreateInfo ci{};
+	ci.setCodeSize(buffer.size())
+	  .setPCode(reinterpret_cast<const uint32_t*>(buffer.data()));
+
+	return device.createShaderModule(ci);
+}
+
+
+#endif

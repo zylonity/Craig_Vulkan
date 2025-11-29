@@ -1,4 +1,4 @@
-#define GLM_FORCE_RADIANS
+ï»¿#define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define STB_IMAGE_IMPLEMENTATION
 
@@ -10,6 +10,7 @@
 #include <chrono>
 #include <glm/gtc/matrix_transform.hpp>
 #include "../External/stb_image.h"
+#include <filesystem>
 //#include "../External/tiny_obj_loader.h"
 
 
@@ -104,7 +105,11 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
     // vk::InstanceCreateInfo is where the programmer specifies the layers and/or extensions that
     // are needed.
     m_VK_instInfo = vk::InstanceCreateInfo()
+#if defined(_WIN32)
         .setFlags(vk::InstanceCreateFlags())
+#elif defined(__APPLE__)
+        .setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR)
+#endif
         .setPApplicationInfo(&m_VK_appInfo)
         .setEnabledExtensionCount(static_cast<uint32_t>(mp_CurrentWindow->getExtensionsVector().size()))
         .setPpEnabledExtensionNames(mp_CurrentWindow->getExtensionsVector().data())
@@ -112,39 +117,34 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
         .setPpEnabledLayerNames(mv_VK_Layers.data());
 
 	//Create the Vulkan instance/Initialize Vulkan
-    try {
-        //VkValidationFeatureEnableEXT enabledFeatures[] = {
-        //    VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
-        //    // Optional extras:
-        //    // VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
-        //    // VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
-        //};
+    //VkValidationFeatureEnableEXT enabledFeatures[] = {
+    //    VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
+    //    // Optional extras:
+    //    // VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
+    //    // VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
+    //};
 
-        //VkValidationFeaturesEXT featuresInfo{};
-        /*featuresInfo.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-        featuresInfo.enabledValidationFeatureCount = static_cast<uint32_t>(std::size(enabledFeatures));
-        featuresInfo.pEnabledValidationFeatures = enabledFeatures;*/
+    //VkValidationFeaturesEXT featuresInfo{};
+    /*featuresInfo.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+    featuresInfo.enabledValidationFeatureCount = static_cast<uint32_t>(std::size(enabledFeatures));
+    featuresInfo.pEnabledValidationFeatures = enabledFeatures;*/
 
-        VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
-        populateDebugMessengerCreateInfo(debugCreateInfo);
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
+    populateDebugMessengerCreateInfo(debugCreateInfo);
 
-        //featuresInfo.pNext = &debugCreateInfo;
-        m_VK_instInfo.setPNext(&debugCreateInfo);
+    //featuresInfo.pNext = &debugCreateInfo;
+    m_VK_instInfo.setPNext(&debugCreateInfo);
 
-		m_VK_instance = vk::createInstance(m_VK_instInfo); //Now that we have the instance created, we can initialize Vulkan
+    m_VK_instance = vk::createInstance(m_VK_instInfo); //Now that we have the instance created, we can initialize Vulkan
 
-        // Create a Vulkan surface for rendering
-        VkSurfaceKHR cSurface; // Vulkan surface for rendering
-        bool sdlRetBool = SDL_Vulkan_CreateSurface(mp_CurrentWindow->getSDLWindow(), static_cast<VkInstance>(m_VK_instance), &cSurface);
-        assert(sdlRetBool && "Could not create a Vulkan surface.");
+    // Create a Vulkan surface for rendering
+    VkSurfaceKHR cSurface; // Vulkan surface for rendering
+    bool sdlRetBool = SDL_Vulkan_CreateSurface(mp_CurrentWindow->getSDLWindow(), static_cast<VkInstance>(m_VK_instance), &cSurface);
+    assert(sdlRetBool && "Could not create a Vulkan surface.");
 
-        m_VK_surface = vk::SurfaceKHR(cSurface);
+    m_VK_surface = vk::SurfaceKHR(cSurface);
 
-        InitVulkan();
-    }
-    catch (const std::exception& e) {
-        assert(("Vulkan instance creation failed: " + std::string(e.what())).c_str());
-    }
+    InitVulkan();
 
 #if defined(IMGUI_ENABLED)
     InitImgui();
@@ -353,7 +353,7 @@ Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(const vk:
         i++;
     }
 
-    // Fallback: if no dedicated transfer, use graphics (it’s implicitly transfer-capable)
+    // Fallback: if no dedicated transfer, use graphics (itï¿½s implicitly transfer-capable)
     if (!indices.transferFamily && indices.graphicsFamily) {
         indices.transferFamily = indices.graphicsFamily;
     }
@@ -438,7 +438,8 @@ void Craig::Renderer::createLogicalDevice() {
     vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
         .setQueueCreateInfos(queueCreateInfos)
         .setPEnabledFeatures(&deviceFeatures)
-        .setPEnabledExtensionNames(mv_VK_deviceExtensions)
+        .setEnabledExtensionCount(static_cast<uint32_t>(mv_VK_deviceExtensions.size()))
+        .setPpEnabledExtensionNames(mv_VK_deviceExtensions.data())
         .setPNext(&timelineFeatures);
 
     // Create the logical device for the selected physical device
@@ -455,6 +456,7 @@ void Craig::Renderer::createLogicalDevice() {
         m_VK_transferQueue = m_VK_graphicsQueue;
     }
 }
+
 vk::SurfaceFormatKHR Craig::Renderer::chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) {
 
     //Check the colour format and colour space are correct
@@ -476,7 +478,7 @@ vk::PresentModeKHR Craig::Renderer::chooseSwapPresentMode(const std::vector<vk::
     //VK_PRESENT_MODE_MAILBOX_KHR : This is another variation of the second mode.Instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer ones.This mode can be used to render frames as fast as possible while still avoiding tearing, resulting in fewer latency issues than standard vertical sync.This is commonly known as "triple buffering", although the existence of three buffers alone does not necessarily mean that the framerate is unlocked.
 
     for (const auto& availablePresentMode : availablePresentModes) {
-        vk::PresentModeKHR modeToUse = m_vsync ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eMailbox;
+        vk::PresentModeKHR modeToUse = m_vsync ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eImmediate;
         if (availablePresentMode == modeToUse) {
             return availablePresentMode;
         }
@@ -624,8 +626,17 @@ void Craig::Renderer::createImageViews() {
 void Craig::Renderer::createGraphicsPipeline() {
 
     // Compile HLSL shaders to SPIR-V shader modules
+#if defined(_WIN32)
     m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/VertexShader.vert");
     m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/FragmentShader.frag");
+#elif defined(__APPLE__)
+
+    std::cout << "Current path is " << std::filesystem::current_path() << '\n'; // (1)
+    m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/vert.spv");
+    m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/frag.spv");
+#endif
+
+
 
     // Set up shader stages for the pipeline
     vk::PipelineShaderStageCreateInfo vertShaderStageInfo;
@@ -915,7 +926,7 @@ void Craig::Renderer::createCommandPool() {
         m_VK_transferCommandPool = m_VK_device.createCommandPool(info);
     }
     else {
-        // No dedicated transfer family — reuse graphics pool
+        // No dedicated transfer family ï¿½ reuse graphics pool
         m_VK_transferCommandPool = m_VK_commandPool;
     }
 
@@ -982,7 +993,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     commandBuffer.setViewport(0, viewport);
 
-    // Set the dynamic scissor (no cropping — covers entire area)
+    // Set the dynamic scissor (no cropping ï¿½ covers entire area)
     vk::Rect2D scissor;
     scissor.setOffset({ 0, 0 })
         .setExtent(m_VK_swapChainExtent);
@@ -1045,8 +1056,8 @@ void Craig::Renderer::createSyncObjects() {
     m_sempahoreTimelineValue = 0;
     m_frameValue.fill(0);
 
-    mv_VK_renderFinishedSemaphores.resize(kMaxFramesInFlight);
-    mv_VK_imageAvailableSemaphores.resize(mv_VK_swapChainImages.size());
+    mv_VK_imageAvailableSemaphores.resize(kMaxFramesInFlight);
+    mv_VK_renderFinishedSemaphores.resize(mv_VK_swapChainImages.size());
     m_imageTimelineValue.resize(mv_VK_swapChainImages.size());
     std::fill(m_imageTimelineValue.begin(), m_imageTimelineValue.end(), 0);
 
@@ -1698,9 +1709,6 @@ void Craig::Renderer::createDepthResources() {
 }
 
 void Craig::Renderer::drawFrame(const float& deltaTime) {
-
-    
-    //m_VK_device.waitForFences(mv_VK_inFlightFences[m_currentFrame], vk::True, UINT64_MAX);
 
     // Wait until the previous frame has finished
     uint64_t waitValue = m_frameValue[m_currentFrame];
