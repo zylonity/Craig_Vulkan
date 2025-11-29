@@ -257,6 +257,4 @@ namespace Craig {
 
 	};
 
-
-
 }

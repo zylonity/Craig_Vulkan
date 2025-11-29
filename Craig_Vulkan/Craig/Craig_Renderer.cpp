@@ -1,7 +1,7 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define STB_IMAGE_IMPLEMENTATION
-#define TINYOBJLOADER_IMPLEMENTATION
+
 
 #include <cassert>
 #include <iostream>
@@ -10,7 +10,7 @@
 #include <chrono>
 #include <glm/gtc/matrix_transform.hpp>
 #include "../External/stb_image.h"
-#include "../External/tiny_obj_loader.h"
+//#include "../External/tiny_obj_loader.h"
 
 
 #if defined(IMGUI_ENABLED)
@@ -513,7 +513,11 @@ void Craig::Renderer::createSwapChain() {
     vk::PresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
     m_VK_currentExtent = chooseSwapExtent(swapChainSupport.capabilities);
 
-    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1; //Ammount of images we want for buffering, min is probably 2, so tripple buffering
+    if (swapChainSupport.capabilities.minImageCount > kMaxFramesInFlight) {
+        assert("too many frames in flight for this system!");
+    }
+
+    uint32_t imageCount = kMaxFramesInFlight;
 
     if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
         imageCount = swapChainSupport.capabilities.maxImageCount;

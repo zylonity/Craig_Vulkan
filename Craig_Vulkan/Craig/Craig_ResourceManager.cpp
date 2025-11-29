@@ -1,3 +1,5 @@
+#define TINYOBJLOADER_IMPLEMENTATION
+
 #include "Craig_ResourceManager.hpp"
 #include "../External/tiny_obj_loader.h"
 #include <iostream>

@@ -16,6 +16,7 @@ Craig::Camera::Camera(glm::vec3 pos)
 
 void Craig::Camera::update(const float& deltaTime)
 {
+
     updateView(deltaTime);
     updateProj();
 }

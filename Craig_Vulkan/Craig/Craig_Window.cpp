@@ -52,13 +52,13 @@ CraigError Craig::Window::update(const float& deltaTime) {
 
 		case SDL_QUIT:
 			ret = CRAIG_CLOSED; // Set the return code to fail to indicate that the window should close
-			break;
+			continue;
 
 		case SDL_WINDOWEVENT:
 			if (event.window.event == SDL_WINDOWEVENT_RESIZED || event.window.event == SDL_WINDOWEVENT_MINIMIZED) {
 				m_resizeNeeded = true;
 			}
-			break;
+			continue;
 
 		case SDL_KEYUP:
 			if (event.key.keysym.sym == SDLK_TAB) {
@@ -73,11 +73,11 @@ CraigError Craig::Window::update(const float& deltaTime) {
 				}
 				
 			}
-			break;
+			continue;
 
 		default:
 
-			break;
+			continue;
 		}
 	}
 
