@@ -36,6 +36,7 @@ namespace Craig {
 
 		void setSceneManager(SceneManager* sceneManagerPtr) { mp_SceneManager = sceneManagerPtr; };
 	
+		void createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels);
 
 	private:
 

@@ -141,9 +141,6 @@
     <ClInclude Include="External\vk_mem_alloc.h">
       <Filter>Header Files\External</Filter>
     </ClInclude>
-    <ClInclude Include="External\tiny_obj_loader.h">
-      <Filter>Header Files\External</Filter>
-    </ClInclude>
     <ClInclude Include="Craig\Craig_Editor.hpp">
       <Filter>Header Files\Craig</Filter>
     </ClInclude>
@@ -155,6 +152,15 @@
     </ClInclude>
     <ClInclude Include="Craig\Craig_SceneManager.hpp">
       <Filter>Header Files\Craig</Filter>
+    </ClInclude>
+    <ClInclude Include="External\stb_image_write.h">
+      <Filter>Header Files\External</Filter>
+    </ClInclude>
+    <ClInclude Include="External\tiny_gltf.h">
+      <Filter>Header Files\External</Filter>
+    </ClInclude>
+    <ClInclude Include="External\json.hpp">
+      <Filter>Header Files\External</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

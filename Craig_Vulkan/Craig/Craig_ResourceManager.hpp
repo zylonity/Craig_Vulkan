@@ -14,6 +14,8 @@
 
 namespace Craig {
 
+	class Renderer;
+
 	//Vertex buffer
 	struct Vertex {
 		glm::vec3 m_pos;
@@ -32,12 +34,17 @@ namespace Craig {
 
 		uint32_t vertexOffset = 0;
 		uint32_t indexOffset = 0;
+
+		uint32_t firstIndex;
+		uint32_t indexCount;
+		uint32_t firstVertex;
+		int      materialIndex; // prim.material
 	};
 
 	struct Model {
 		std::vector<Craig::SubMesh*> subMeshes;
 		uint32_t subMeshesCount;
-		std::string modelPath = "data/models/kirby.obj";
+		std::string modelPath = "data/models/BarramundiFish.glb";
 		std::string texturePath = "data/textures/viking_room.png";
 
 	};
@@ -49,8 +56,11 @@ namespace Craig {
 		CraigError terminate();
 
 		void loadModel();
+		void terminateModel();
 
 		Craig::Model m_testModel;
+
+		void setRendererPtr(Craig::Renderer* rendererToSet) { m_renderer = rendererToSet; };
 
 		//===============================================================================
 		// Singleton Implementations
@@ -69,6 +79,8 @@ namespace Craig {
 		// Singleton Implementations (Banned functions to prevent a new instance)
 		ResourceManager() {}										// Default Constructor private so can only be called from within
 		//===============================================================================
+
+		Craig::Renderer* m_renderer;
 	};
 
 
