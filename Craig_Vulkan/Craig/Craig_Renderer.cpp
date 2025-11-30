@@ -1,7 +1,5 @@
 ﻿#define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-//#define STB_IMAGE_IMPLEMENTATION
-
 
 #include <cassert>
 #include <iostream>
@@ -9,10 +7,6 @@
 #include <algorithm>
 #include <chrono>
 #include <glm/gtc/matrix_transform.hpp>
-//#include "../External/stb_image.h"
-#include <filesystem>
-//#include "../External/tiny_obj_loader.h"
-
 
 #if defined(IMGUI_ENABLED)
 #include "../External/Imgui/imgui.h"   
@@ -632,7 +626,6 @@ void Craig::Renderer::createGraphicsPipeline() {
     m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/FragmentShader.frag");
 #elif defined(__APPLE__)
 
-    std::cout << "Current path is " << std::filesystem::current_path() << '\n'; // (1)
     m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/vert.spv");
     m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/frag.spv");
 #endif
