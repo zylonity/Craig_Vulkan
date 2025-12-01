@@ -110,6 +110,7 @@ namespace Craig {
 		void createTextureImageView();
 		void createTextureSampler();
 
+		void createColourResources();
 		void createDepthResources();
 
 		void drawFrame(const float& deltaTime);
@@ -163,7 +164,7 @@ namespace Craig {
 
 		void updateUniformBuffer(uint32_t currentImage, const float& deltaTime);
 
-		void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, VmaAllocation& allocation);
+		void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, vk::SampleCountFlagBits numSamples, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, VmaAllocation& allocation);
 		void transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, bool useTransferQueue = true, uint32_t mipLevels = 1);
 		void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
 
@@ -247,6 +248,13 @@ namespace Craig {
 		void updateDescriptorSets();
 		vk::DescriptorPool m_VK_descriptorPool;
 		std::vector<vk::DescriptorSet> m_VK_descriptorSets;
+
+		vk::SampleCountFlagBits getMaxUsableSampleCount();
+		vk::SampleCountFlagBits msaaSamples;
+		vk::Image m_VK_colourImage;
+		vk::ImageView colourImageView;
+		VmaAllocation m_VMA_colourImageAllocation;
+		
 
 		uint32_t m_VK_mipLevels;
 		vk::Image m_VK_textureImage;

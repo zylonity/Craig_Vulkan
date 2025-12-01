@@ -290,6 +290,7 @@ void Craig::Renderer::pickPhysicalDevice() {
     for (const auto& device : devices) {
         if (isDeviceSuitable(device)) {
             m_VK_physicalDevice = device;
+            msaaSamples = getMaxUsableSampleCount();
             break;
         }
     }
@@ -1416,6 +1417,22 @@ void Craig::Renderer::createDescriptorSetLayout() {
 
 }
 
+vk::SampleCountFlagBits Craig::Renderer::getMaxUsableSampleCount() {
+    vk::PhysicalDeviceProperties physicalDeviceProperties = m_VK_physicalDevice.getProperties();
+
+    vk::SampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+    
+    if (counts & vk::SampleCountFlagBits::e64) { return vk::SampleCountFlagBits::e64;}
+    if (counts & vk::SampleCountFlagBits::e32) { return vk::SampleCountFlagBits::e32;}
+    if (counts & vk::SampleCountFlagBits::e16) { return vk::SampleCountFlagBits::e16;}
+    if (counts & vk::SampleCountFlagBits::e8) { return vk::SampleCountFlagBits::e8;}
+    if (counts & vk::SampleCountFlagBits::e4) { return vk::SampleCountFlagBits::e4;}
+    if (counts & vk::SampleCountFlagBits::e2) { return vk::SampleCountFlagBits::e2;}
+
+    return vk::SampleCountFlagBits::e1;
+
+}
+
 
 void Craig::Renderer::createUniformBuffers() {
 
@@ -1511,6 +1528,12 @@ void Craig::Renderer::createDescriptorSets() {
 
 }
 
+void Craig::Renderer::createColourResources() {
+
+
+
+}
+
 void Craig::Renderer::updateDescriptorSets() {
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
@@ -1585,7 +1608,7 @@ void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, i
 
     //stbi_image_free(pixels);
 
-    createImage(texWidth, texHeight, m_VK_mipLevels, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_textureImage, m_VMA_textureImageAllocation);
+    createImage(texWidth, texHeight, m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_textureImage, m_VMA_textureImageAllocation);
 
     transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, true, m_VK_mipLevels);
     copyBufferToImage(stagingBuffer, m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
@@ -1744,7 +1767,7 @@ void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_
 
 }
 
-void Craig::Renderer::createImage(uint32_t width, uint32_t height, uint32_t mipLevels, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, VmaAllocation& allocation) {
+void Craig::Renderer::createImage(uint32_t width, uint32_t height, uint32_t mipLevels, vk::SampleCountFlagBits numSamples, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, VmaAllocation& allocation) {
 
     vk::ImageCreateInfo imageInfo;
     imageInfo.setImageType(vk::ImageType::e2D);
@@ -1759,7 +1782,7 @@ void Craig::Renderer::createImage(uint32_t width, uint32_t height, uint32_t mipL
         VK_IMAGE_TILING_OPTIMAL : Texels are laid out in an implementation defined order for optimal access */
     imageInfo.setInitialLayout(vk::ImageLayout::eUndefined);
     imageInfo.setUsage(usage);
-    imageInfo.setSamples(vk::SampleCountFlagBits::e1); //From Vulkan-Tutorial.com - The samples flag is related to multisampling. This is only relevant for images that will be used as attachments, so stick to one sample.
+    imageInfo.setSamples(numSamples); //From Vulkan-Tutorial.com - The samples flag is related to multisampling. This is only relevant for images that will be used as attachments, so stick to one sample.
 
     QueueFamilyIndices q = findQueueFamilies(m_VK_physicalDevice);
     if (q.hasDedicatedTransfer()) {
@@ -1828,7 +1851,7 @@ void Craig::Renderer::createDepthResources() {
 
     vk::Format depthFormat = findDepthFormat();
 
-    createImage(m_VK_swapChainExtent.width, m_VK_swapChainExtent.height, 1, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_depthImage, m_VMA_depthImageAllocation);
+    createImage(m_VK_swapChainExtent.width, m_VK_swapChainExtent.height, 1, vk::SampleCountFlagBits::e1, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_depthImage, m_VMA_depthImageAllocation);
 
     m_VK_depthImageView = createImageView(m_VK_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
 
