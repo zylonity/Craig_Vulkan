@@ -38,11 +38,11 @@ namespace Craig {
 	
 		void createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels);
 
+		const uint32_t& getMaxLOD() const { return m_VK_mipLevels; };
+		void updateMinLOD(int minLOD);
 
-		uint32_t& getMinLOD() { return m_minLODLevel; };
-		uint32_t& getMaxLOD() { return m_VK_mipLevels; };
+		
 
-		void createTextureSampler();
 	private:
 
 		SceneManager* mp_SceneManager;
@@ -108,7 +108,7 @@ namespace Craig {
 
 		void createTextureImage();
 		void createTextureImageView();
-		
+		void createTextureSampler();
 
 		void createDepthResources();
 
@@ -170,6 +170,7 @@ namespace Craig {
 		void generateMipMaps(vk::Image image, vk::Format format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels, bool useTransferQueue);
 		uint32_t m_minLODLevel = 0;
 
+		void terminateSampler();
 
 		vk::ImageView createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags, uint32_t mipLevels);
 
@@ -243,6 +244,7 @@ namespace Craig {
 		std::vector<VmaAllocation> mv_VK_uniformBuffersAllocations;
 		std::vector<void*> mv_VK_uniformBuffersMapped;
 
+		void updateDescriptorSets();
 		vk::DescriptorPool m_VK_descriptorPool;
 		std::vector<vk::DescriptorSet> m_VK_descriptorSets;
 

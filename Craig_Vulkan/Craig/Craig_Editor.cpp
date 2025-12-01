@@ -89,8 +89,8 @@ void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
 		//ImGui::Checkbox("Show wireframe", &mp_Renderer->getWifeFrameVisibility());*/
 
 		ImGui::SeparatorText("Mip Levels");
-		if (ImGui::SliderInt("Minimum mip level", (int*)&mp_renderer->getMinLOD(), 0, (int)mp_renderer->getMaxLOD())) {
-			mp_renderer->createTextureSampler();
+		if (ImGui::SliderInt("Minimum mip level", &m_currentMipLevel, 0, (int)mp_renderer->getMaxLOD())) {
+			mp_renderer->updateMinLOD(m_currentMipLevel);
 		}
 
 		ImGui::End();

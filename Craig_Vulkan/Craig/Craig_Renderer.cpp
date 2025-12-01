@@ -1511,6 +1511,31 @@ void Craig::Renderer::createDescriptorSets() {
 
 }
 
+void Craig::Renderer::updateDescriptorSets() {
+
+    for (size_t i = 0; i < kMaxFramesInFlight; i++) {
+
+        vk::DescriptorImageInfo imageInfo;
+        imageInfo
+            .setImageView(m_VK_textureImageView)
+            .setSampler(m_VK_textureSampler)
+            .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        vk::WriteDescriptorSet descriptorWrite;
+        descriptorWrite
+            .setDstSet(m_VK_descriptorSets[i])
+            .setDstBinding(1)
+            .setDstArrayElement(0)
+            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+            .setDescriptorCount(1)
+            .setImageInfo(imageInfo);
+
+        m_VK_device.updateDescriptorSets(descriptorWrite, nullptr);
+
+    }
+
+}
+
 //TODO: Separate camera
 void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& deltaTime) {
 
@@ -1533,44 +1558,6 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
 
     memcpy(mv_VK_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
-
-//void Craig::Renderer::createTextureImage() {
-//    Craig::Model& model = Craig::ResourceManager::getInstance().m_testModel;
-//
-//    int texWidth, texHeight, texChannels;
-//    stbi_uc* pixels = stbi_load(model.texturePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-//    vk::DeviceSize imageSize = texWidth * texHeight * 4;
-//
-//    if (!pixels) {
-//        throw std::runtime_error("failed to load texture image!");
-//    }
-//
-//    vk::Buffer stagingBuffer;
-//    VmaAllocation stagingAlloc{};
-//
-//    VmaAllocationCreateInfo stagingAci{};
-//    stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
-//    stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-//
-//    createBufferVMA(imageSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
-//
-//    void* data;
-//    vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
-//    memcpy(data, pixels, static_cast<size_t>(imageSize));
-//    vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, imageSize);
-//    vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
-//
-//    stbi_image_free(pixels);
-//
-//    createImage(texWidth, texHeight, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_textureImage, m_VMA_textureImageAllocation);
-//
-//    transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal);
-//    copyBufferToImage(stagingBuffer, m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-//
-//    transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, false);
-//
-//    vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
-//}
 
 void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels) {
     vk::DeviceSize imageSize = texWidth * texHeight * 4;
@@ -1652,6 +1639,16 @@ void Craig::Renderer::createTextureSampler() {
 
 
 
+}
+
+void Craig::Renderer::updateMinLOD(int minLOD) {
+    m_minLODLevel = minLOD;
+
+    terminateSampler();
+    createTextureSampler();
+    updateDescriptorSets();
+
+    printf("Recreated sampler and updated the descriptor sets to change the LOD \n");
 }
 
 void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels, bool useTransferQueue) {
@@ -2051,6 +2048,11 @@ CraigError Craig::Renderer::terminate() {
     m_VK_instance.destroy();
 
     return ret;
+}
+
+void Craig::Renderer::terminateSampler() {
+    m_VK_device.waitIdle();
+    m_VK_device.destroySampler(m_VK_textureSampler);
 }
 
 uint32_t Craig::Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {

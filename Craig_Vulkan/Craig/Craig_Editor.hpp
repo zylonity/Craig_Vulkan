@@ -38,6 +38,8 @@ namespace Craig {
 		Craig::Renderer* mp_renderer;
 		Craig::Camera* mp_camera;
 
+		int m_currentMipLevel = 0;
+
 		//===============================================================================
 		// Singleton Implementations (Banned functions to prevent a new instance)
 		ImguiEditor() {}										// Default Constructor private so can only be called from within

@@ -78,7 +78,7 @@ void Craig::ResourceManager::loadModel() {
         exit(CRAIG_FAIL);
     }
     else {
-        printf("model found");
+        printf("model found \n");
     }
 
     int i = 0;
