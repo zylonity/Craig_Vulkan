@@ -38,6 +38,11 @@ namespace Craig {
 	
 		void createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels);
 
+
+		uint32_t& getMinLOD() { return m_minLODLevel; };
+		uint32_t& getMaxLOD() { return m_VK_mipLevels; };
+
+		void createTextureSampler();
 	private:
 
 		SceneManager* mp_SceneManager;
@@ -103,7 +108,7 @@ namespace Craig {
 
 		void createTextureImage();
 		void createTextureImageView();
-		void createTextureSampler();
+		
 
 		void createDepthResources();
 
@@ -161,6 +166,10 @@ namespace Craig {
 		void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, VmaAllocation& allocation);
 		void transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, bool useTransferQueue = true, uint32_t mipLevels = 1);
 		void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
+
+		void generateMipMaps(vk::Image image, vk::Format format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels, bool useTransferQueue);
+		uint32_t m_minLODLevel = 0;
+
 
 		vk::ImageView createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags, uint32_t mipLevels);
 

@@ -88,6 +88,11 @@ void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
 		ImGui::DragFloat("Camera Rotation Speed", &mp_camera->m_rotSpeed);
 		//ImGui::Checkbox("Show wireframe", &mp_Renderer->getWifeFrameVisibility());*/
 
+		ImGui::SeparatorText("Mip Levels");
+		if (ImGui::SliderInt("Minimum mip level", (int*)&mp_renderer->getMinLOD(), 0, (int)mp_renderer->getMaxLOD())) {
+			mp_renderer->createTextureSampler();
+		}
+
 		ImGui::End();
 	}
 }

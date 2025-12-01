@@ -223,9 +223,10 @@ void Craig::Renderer::InitVulkan() {
     createFrameBuffers();
     //createTextureImage();
     //createTextureImageView();
-    createTextureSampler();
+    
     Craig::ResourceManager::getInstance().setRendererPtr(this);
     Craig::ResourceManager::getInstance().loadModel(); 
+    createTextureSampler();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
@@ -587,9 +588,9 @@ vk::ImageView Craig::Renderer::createImageView(vk::Image image, vk::Format forma
             vk::ComponentSwizzle::eIdentity
             })
         .setSubresourceRange(vk::ImageSubresourceRange{
-            aspectFlags,// aspectMask
-            0, 1, // baseMipLevel, levelCount
-            0, 1  // baseArrayLayer, layerCount
+            aspectFlags,  // aspectMask
+            0, mipLevels, // baseMipLevel, levelCount
+            0, 1          // baseArrayLayer, layerCount
             });
 
 
@@ -1122,7 +1123,7 @@ void Craig::Renderer::buffer_endSingleTimeCommands(vk::CommandBuffer commandBuff
         .setCommandBuffers(commandBuffer);
 
     m_VK_transferQueue.submit(submitInfo);
-    m_VK_transferQueue.waitIdle(); //We could use a fence instead to allow multiple transfers simultaniously.
+    m_VK_transferQueue.waitIdle(); 
 
     m_VK_device.freeCommandBuffers(m_VK_transferCommandPool, commandBuffer);
 }
@@ -1156,7 +1157,7 @@ void Craig::Renderer::buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandB
         .setCommandBuffers(commandBuffer);
 
     m_VK_graphicsQueue.submit(submitInfo);
-    m_VK_graphicsQueue.waitIdle(); //We could use a fence instead to allow multiple transfers simultaniously.
+    m_VK_graphicsQueue.waitIdle(); 
 
     m_VK_device.freeCommandBuffers(m_VK_commandPool, commandBuffer);
 }
@@ -1194,9 +1195,10 @@ void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, 
         .setImage(image)
         .subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor)
                          .setBaseMipLevel(0)
-                         .setLevelCount(1)
+                         .setLevelCount(mipLevels)
                          .setBaseArrayLayer(0)
                          .setLayerCount(1);
+               
 
     vk::PipelineStageFlags sourceStage, destinationStage;
 
@@ -1598,12 +1600,14 @@ void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, i
 
     createImage(texWidth, texHeight, m_VK_mipLevels, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_textureImage, m_VMA_textureImageAllocation);
 
-    transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, true, 1);
+    transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, true, m_VK_mipLevels);
     copyBufferToImage(stagingBuffer, m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
-    transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, false, m_VK_mipLevels);
+    //transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, false, m_VK_mipLevels); <- now done when generating mipMaps
 
     vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
+
+    generateMipMaps(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight, m_VK_mipLevels, false);
 
     createTextureImageView();
 }
@@ -1640,13 +1644,106 @@ void Craig::Renderer::createTextureSampler() {
         .setCompareOp(vk::CompareOp::eAlways)
         //Mimapping
         .setMipmapMode(vk::SamplerMipmapMode::eLinear)
-        .setMipLodBias(0.0f)
-        .setMinLod(0.0f)
-        .setMaxLod(0.0f);
+        .setMinLod(m_minLODLevel)
+        .setMaxLod(vk::LodClampNone)
+        .setMipLodBias(0.0f);
     
     m_VK_textureSampler = m_VK_device.createSampler(samplerInfo);
 
 
+
+}
+
+void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels, bool useTransferQueue) {
+
+    vk::FormatProperties formatProperties = m_VK_physicalDevice.getFormatProperties(format);
+
+    if (!(formatProperties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImageFilterLinear)) {
+       assert("texture image format does not support linear blitting!");
+    }
+
+    vk::CommandBuffer tempBuffer = useTransferQueue ? buffer_beginSingleTimeCommands() : buffer_beginSingleTimeCommandsGFX();
+
+    //This means we're changing an image from x state to y state, and we gotta sync the access types
+    vk::ImageMemoryBarrier barrier{};
+    barrier
+        .setImage(image)
+        .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+        .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
+        .subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor)
+                         .setBaseArrayLayer(0)
+                         .setLayerCount(1)
+                         .setLevelCount(1);
+
+    int32_t mipWidth = texWidth;
+    int32_t mipHeight = texHeight;
+
+    //So for every mip level we want to generate, the source mip level is 'i - 1' and the destination would be 'i'
+    for (uint32_t i = 1; i < mipLevels; i++) {
+        barrier.subresourceRange.setBaseMipLevel(i - 1);
+        barrier
+            .setOldLayout(vk::ImageLayout::eTransferDstOptimal)
+            .setNewLayout(vk::ImageLayout::eTransferSrcOptimal)
+            .setSrcAccessMask(vk::AccessFlagBits::eTransferWrite)
+            .setDstAccessMask(vk::AccessFlagBits::eTransferRead);
+
+        tempBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer, {}, nullptr, nullptr, barrier);
+
+        vk::ImageBlit blit;
+        //SRC
+        blit.srcOffsets[0].setX(0)
+                          .setY(0)
+                          .setZ(0);
+
+        blit.srcOffsets[1].setX(mipWidth)
+                          .setY(mipHeight)
+                          .setZ(1);
+
+        blit.srcSubresource.setAspectMask(vk::ImageAspectFlagBits::eColor)
+                           .setMipLevel(i - 1)
+                           .setBaseArrayLayer(0)
+                           .setLayerCount(1);
+
+        //DST
+        blit.dstOffsets[0].setX(0)
+                          .setY(0)
+                          .setZ(0);
+
+        //Each mip level is half the size of the previous level
+        blit.dstOffsets[1].setX(mipWidth > 1 ? mipWidth / 2 : 1)
+                          .setY(mipHeight > 1 ? mipHeight / 2 : 1)
+                          .setZ(1); //Has to be 1, since 2D images have a depth of 1
+
+        blit.dstSubresource.setAspectMask(vk::ImageAspectFlagBits::eColor)
+                           .setMipLevel(i)
+                           .setBaseArrayLayer(0)
+                           .setLayerCount(1);
+
+        tempBuffer.blitImage(image, vk::ImageLayout::eTransferSrcOptimal, image, vk::ImageLayout::eTransferDstOptimal, blit, vk::Filter::eLinear); //Linear filter for interpolation
+
+        barrier
+            .setOldLayout(vk::ImageLayout::eTransferSrcOptimal)
+            .setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+            .setSrcAccessMask(vk::AccessFlagBits::eTransferRead)
+            .setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+
+        tempBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, {}, nullptr, nullptr, barrier);
+
+        if (mipWidth > 1) { mipWidth /= 2; };
+        if (mipHeight > 1) { mipHeight /= 2; };
+
+    }
+
+    barrier.subresourceRange.setBaseMipLevel(mipLevels - 1);
+    barrier
+        .setOldLayout(vk::ImageLayout::eTransferDstOptimal)
+        .setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
+        .setSrcAccessMask(vk::AccessFlagBits::eTransferWrite)
+        .setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+
+    tempBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, {}, nullptr, nullptr, barrier);
+
+    useTransferQueue ? buffer_endSingleTimeCommands(tempBuffer) : buffer_endSingleTimeCommandsGFX(tempBuffer);
 
 }
 
@@ -1657,7 +1754,7 @@ void Craig::Renderer::createImage(uint32_t width, uint32_t height, uint32_t mipL
     imageInfo.extent.setWidth(width);
     imageInfo.extent.setHeight(height);
     imageInfo.extent.setDepth(1);
-    imageInfo.setMipLevels(1);
+    imageInfo.setMipLevels(mipLevels);
     imageInfo.setArrayLayers(1);
     imageInfo.setFormat(format);
     imageInfo.setTiling(tiling); /*
