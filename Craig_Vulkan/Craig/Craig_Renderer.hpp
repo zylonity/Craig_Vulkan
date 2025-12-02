@@ -250,9 +250,9 @@ namespace Craig {
 		std::vector<vk::DescriptorSet> m_VK_descriptorSets;
 
 		vk::SampleCountFlagBits getMaxUsableSampleCount();
-		vk::SampleCountFlagBits msaaSamples;
+		vk::SampleCountFlagBits m_VK_msaaSamples = vk::SampleCountFlagBits::e1;
 		vk::Image m_VK_colourImage;
-		vk::ImageView colourImageView;
+		vk::ImageView m_VK_colourImageView;
 		VmaAllocation m_VMA_colourImageAllocation;
 		
 
