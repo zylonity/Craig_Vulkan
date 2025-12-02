@@ -841,11 +841,8 @@ void Craig::Renderer::createRenderPass() {
         .setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
         .setColorAttachmentCount(1)
         .setPColorAttachments(&colourAttachmentRef)
-        .setPDepthStencilAttachment(&depthAttachmentRef);
-
-    //if (m_VK_msaaSamples != vk::SampleCountFlagBits::e1) {
-        subpass.setPResolveAttachments(&colourAttachmentResolveRef);
-    //}
+        .setPDepthStencilAttachment(&depthAttachmentRef)
+        .setPResolveAttachments(&colourAttachmentResolveRef);
         
 
     vk::SubpassDependency dependency;
