@@ -97,7 +97,7 @@ namespace Craig {
 		void createSyncObjects();
 
 		void recreateSwapChain();
-		void recreateSwapChainFull();
+		void recreateSwapChainFull(); //This recreates the graphics pipeline and imgui as well as the swapchain
 		void createSwapChain(); //Create double/triple buffer
 		void createImageViews();
 		void createFrameBuffers();

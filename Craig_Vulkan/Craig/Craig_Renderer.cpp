@@ -799,6 +799,10 @@ void Craig::Renderer::createRenderPass() {
         .setInitialLayout(vk::ImageLayout::eUndefined)
         .setFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
 
+    if (m_VK_msaaSamples & vk::SampleCountFlagBits::e1){
+        colourAttachment.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+    }
+
     vk::AttachmentDescription depthAttatchment;
     depthAttatchment
         .setFormat(findDepthFormat())
@@ -844,6 +848,9 @@ void Craig::Renderer::createRenderPass() {
         .setPDepthStencilAttachment(&depthAttachmentRef)
         .setPResolveAttachments(&colourAttachmentResolveRef);
         
+    if (m_VK_msaaSamples & vk::SampleCountFlagBits::e1) {
+        subpass.setPResolveAttachments(nullptr);
+    }
 
     vk::SubpassDependency dependency;
     dependency
@@ -854,28 +861,39 @@ void Craig::Renderer::createRenderPass() {
         .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eEarlyFragmentTests)
         .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
 
+    if (m_VK_msaaSamples & vk::SampleCountFlagBits::e1) {
+        dependency.setSrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentWrite);
+    }
 
-    std::array<vk::AttachmentDescription, 3> attachments = { colourAttachment, depthAttatchment, colourAttachmentResolve };
+    if (m_VK_msaaSamples & vk::SampleCountFlagBits::e1) {
+        std::array<vk::AttachmentDescription, 2> attachments = { colourAttachment, depthAttatchment };
 
-    vk::RenderPassCreateInfo renderPassInfo;
-    renderPassInfo
-        .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-        .setPAttachments(attachments.data())
-        .setSubpassCount(1)
-        .setPSubpasses(&subpass)
-        .setDependencyCount(1)
-        .setDependencies(dependency);
+        vk::RenderPassCreateInfo renderPassInfo;
+        renderPassInfo
+            .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+            .setPAttachments(attachments.data())
+            .setSubpassCount(1)
+            .setPSubpasses(&subpass)
+            .setDependencyCount(1)
+            .setDependencies(dependency);
 
-
-
-
-    try {
         m_VK_renderPass = m_VK_device.createRenderPass(renderPassInfo);
     }
-    catch (const vk::SystemError& err) {
-        throw std::runtime_error("failed to create render pass!");
-    }
+    else {
+        std::array<vk::AttachmentDescription, 3> attachments = { colourAttachment, depthAttatchment, colourAttachmentResolve };
 
+        vk::RenderPassCreateInfo renderPassInfo;
+        renderPassInfo
+            .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
+            .setPAttachments(attachments.data())
+            .setSubpassCount(1)
+            .setPSubpasses(&subpass)
+            .setDependencyCount(1)
+            .setDependencies(dependency);
+
+        m_VK_renderPass = m_VK_device.createRenderPass(renderPassInfo);
+    }
+    
 }
 
 void Craig::Renderer::createFrameBuffers() {
@@ -884,11 +902,17 @@ void Craig::Renderer::createFrameBuffers() {
 
     for (size_t i = 0; i < mv_VK_swapChainImageViews.size(); i++)
     {
-        std::array<vk::ImageView, 3> attachments = {
-            m_VK_colourImageView,
-            m_VK_depthImageView,
-            mv_VK_swapChainImageViews[i]
-        };
+
+        std::vector<vk::ImageView> attachments;
+
+        if (m_VK_msaaSamples & vk::SampleCountFlagBits::e1) {
+            attachments.resize(2);
+            attachments = { mv_VK_swapChainImageViews[i], m_VK_depthImageView }; 
+        }
+        else {
+            attachments.resize(3);
+            attachments = { m_VK_colourImageView, m_VK_depthImageView, mv_VK_swapChainImageViews[i] };
+        }
 
         vk::FramebufferCreateInfo frameBufferInfo;
         frameBufferInfo
@@ -964,6 +988,7 @@ void Craig::Renderer::recreateSwapChainFull() {
 
     m_VK_device.waitIdle();
 
+    //We have to recreate the imgui stuff since it relies on our renderpass and frame buffer, aside from creating a whole different set for imgui, this is easier lol.
     ImGui_ImplSDL2_Shutdown();
     ImGui_ImplVulkan_Shutdown();
     ImGui::DestroyContext();
@@ -1006,7 +1031,7 @@ void Craig::Renderer::recreateSwapChainFull() {
     createFrameBuffers();
 
     InitImgui();
-    update(0.0f);
+    update(0.0f); //This will create a new imgui frame and fix any imgui issues
 }
 
 void Craig::Renderer::createCommandPool() {
