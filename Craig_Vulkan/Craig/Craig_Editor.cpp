@@ -32,7 +32,12 @@ CraigError Craig::ImguiEditor::editorInit() {
 
 		//Default windows to open
 		m_ShowRendererProperties = true;
+
+		//When we initialise the renderer we have the max sampling level set, so for now this is good enough since we change it in both places at once
+		//TODO: Keep track of the current level in the renderer, not both there and here
 		m_currentMSAALevel = (int)mp_renderer->getMaxSamplingLevel();
+		mv_MSAADropdownOptions.resize(m_MSAAIndexes[mp_renderer->getMaxSamplingLevel()] + 1);
+		m_MSAADropdownIndex = m_MSAAIndexes[m_currentMSAALevel];
 
 		m_initialised = true;
 	}
@@ -95,10 +100,9 @@ void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
 		}
 
 		ImGui::SeparatorText("MSAA");
-		if (ImGui::DragInt("MSAA level", &m_currentMSAALevel, 0, 0, (int)mp_renderer->getMaxSamplingLevel())) {
+		if (ImGui::Combo("MSAA level", &m_MSAADropdownIndex, mv_MSAADropdownOptions.data(), mv_MSAADropdownOptions.size())) {
 			ImGui::End();
-			m_initialised = false;
-			mp_renderer->updateSamplingLevel(m_currentMSAALevel);
+			mp_renderer->updateSamplingLevel(m_MSAAEquivalents[m_MSAADropdownIndex]);
 			return;
 		}
 

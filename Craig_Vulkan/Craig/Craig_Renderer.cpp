@@ -1552,33 +1552,33 @@ vk::SampleCountFlagBits Craig::Renderer::getMaxUsableSampleCount() {
 
     vk::SampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
     
-    //if (counts & vk::SampleCountFlagBits::e64) { 
-    //    m_MaxSamplingLevel = 64;
-    //    return vk::SampleCountFlagBits::e64;
-    //}
-    //if (counts & vk::SampleCountFlagBits::e32) {
-    //    m_MaxSamplingLevel = 32;
-    //    return vk::SampleCountFlagBits::e32;
-    //}
-    //if (counts & vk::SampleCountFlagBits::e16) {
-    //    m_MaxSamplingLevel = 16;
-    //    return vk::SampleCountFlagBits::e16;
-    //}
-    //if (counts & vk::SampleCountFlagBits::e8) {
-    //    m_MaxSamplingLevel = 8;
-    //    return vk::SampleCountFlagBits::e8;
-    //}
-    //if (counts & vk::SampleCountFlagBits::e4) {
-    //    m_MaxSamplingLevel = 4;
-    //    return vk::SampleCountFlagBits::e4;
-    //}
-    //if (counts & vk::SampleCountFlagBits::e2) {
-    //    m_MaxSamplingLevel = 2;
-    //    return vk::SampleCountFlagBits::e2;
-    //}
+    if (counts & vk::SampleCountFlagBits::e64) { 
+        m_MaxSamplingLevel = 64;
+        return vk::SampleCountFlagBits::e64;
+    }
+    if (counts & vk::SampleCountFlagBits::e32) {
+        m_MaxSamplingLevel = 32;
+        return vk::SampleCountFlagBits::e32;
+    }
+    if (counts & vk::SampleCountFlagBits::e16) {
+        m_MaxSamplingLevel = 16;
+        return vk::SampleCountFlagBits::e16;
+    }
+    if (counts & vk::SampleCountFlagBits::e8) {
+        m_MaxSamplingLevel = 8;
+        return vk::SampleCountFlagBits::e8;
+    }
+    if (counts & vk::SampleCountFlagBits::e4) {
+        m_MaxSamplingLevel = 4;
+        return vk::SampleCountFlagBits::e4;
+    }
+    if (counts & vk::SampleCountFlagBits::e2) {
+        m_MaxSamplingLevel = 2;
+        return vk::SampleCountFlagBits::e2;
+    }
 
-    m_MaxSamplingLevel = 2;
-    return vk::SampleCountFlagBits::e2;
+    m_MaxSamplingLevel = 1;
+    return vk::SampleCountFlagBits::e1;
 
 }
 
@@ -1826,31 +1826,24 @@ void Craig::Renderer::updateSamplingLevel(int levelToSet) {
     switch (levelToSet)
     {
     case(64):
-        m_MaxSamplingLevel = 64;
         m_VK_msaaSamples = vk::SampleCountFlagBits::e64;
         break;
     case(32):
-        m_MaxSamplingLevel = 32;
         m_VK_msaaSamples = vk::SampleCountFlagBits::e32;
         break;
     case(16):
-        m_MaxSamplingLevel = 16;
         m_VK_msaaSamples = vk::SampleCountFlagBits::e16;
         break;
     case(8):
-        m_MaxSamplingLevel = 8;
         m_VK_msaaSamples = vk::SampleCountFlagBits::e8;
         break;
     case(4):
-        m_MaxSamplingLevel = 4;
         m_VK_msaaSamples = vk::SampleCountFlagBits::e4;
         break;
     case(2):
-        m_MaxSamplingLevel = 2;
         m_VK_msaaSamples = vk::SampleCountFlagBits::e2;
         break;
     case(1):
-        m_MaxSamplingLevel = 1;
         m_VK_msaaSamples = vk::SampleCountFlagBits::e1;
         break;
 

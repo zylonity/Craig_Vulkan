@@ -1,6 +1,8 @@
 #pragma once
 #include "Craig_Constants.hpp"
-
+#include <unordered_map>
+#include <vector>
+#include <string>
 
 namespace Craig {
 
@@ -40,8 +42,11 @@ namespace Craig {
 
 		int m_currentMipLevel = 0;
 		int m_currentMSAALevel = 0;
+		int m_MSAADropdownIndex = 0;
 
-		bool doNotEnd = false;
+		std::vector<const char*> mv_MSAADropdownOptions = { "Off", "x2", "x4", "x8", "x16", "x32", "x64" };
+		std::unordered_map<int, int> m_MSAAEquivalents = { {0, 1}, {1, 2}, {2, 4}, {3, 8}, {4, 16}, {5, 32}, {6, 64} };
+		std::unordered_map<int, int> m_MSAAIndexes = { {1, 0}, {2, 1}, {4, 2}, {8, 3}, {16, 4}, {32, 5}, {64, 6} };
 
 		//===============================================================================
 		// Singleton Implementations (Banned functions to prevent a new instance)
