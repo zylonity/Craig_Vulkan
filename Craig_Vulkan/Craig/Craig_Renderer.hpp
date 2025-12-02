@@ -41,7 +41,8 @@ namespace Craig {
 		const uint32_t& getMaxLOD() const { return m_VK_mipLevels; };
 		void updateMinLOD(int minLOD);
 
-		
+		const uint32_t& getMaxSamplingLevel() const { return m_MaxSamplingLevel; };
+		void updateSamplingLevel(int levelToSet);
 
 	private:
 
@@ -89,12 +90,14 @@ namespace Craig {
 		void createDescriptorSetLayout();
 
 		void createGraphicsPipeline();
+		void cleanupGraphicsPipeline();
 		void createCommandPool();
 		void initVMA();
 		void createCommandBuffers();
 		void createSyncObjects();
 
 		void recreateSwapChain();
+		void recreateSwapChainFull();
 		void createSwapChain(); //Create double/triple buffer
 		void createImageViews();
 		void createFrameBuffers();
@@ -106,7 +109,7 @@ namespace Craig {
 		void createDescriptorPool();
 		void createDescriptorSets();
 
-		void createTextureImage();
+		//void createTextureImage();
 		void createTextureImageView();
 		void createTextureSampler();
 
@@ -251,6 +254,7 @@ namespace Craig {
 
 		vk::SampleCountFlagBits getMaxUsableSampleCount();
 		vk::SampleCountFlagBits m_VK_msaaSamples = vk::SampleCountFlagBits::e1;
+		uint32_t m_MaxSamplingLevel;
 		vk::Image m_VK_colourImage;
 		vk::ImageView m_VK_colourImageView;
 		VmaAllocation m_VMA_colourImageAllocation;

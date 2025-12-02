@@ -32,6 +32,7 @@ CraigError Craig::ImguiEditor::editorInit() {
 
 		//Default windows to open
 		m_ShowRendererProperties = true;
+		m_currentMSAALevel = (int)mp_renderer->getMaxSamplingLevel();
 
 		m_initialised = true;
 	}
@@ -93,7 +94,16 @@ void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
 			mp_renderer->updateMinLOD(m_currentMipLevel);
 		}
 
+		ImGui::SeparatorText("MSAA");
+		if (ImGui::DragInt("MSAA level", &m_currentMSAALevel, 0, 0, (int)mp_renderer->getMaxSamplingLevel())) {
+			ImGui::End();
+			m_initialised = false;
+			mp_renderer->updateSamplingLevel(m_currentMSAALevel);
+			return;
+		}
+
 		ImGui::End();
+		
 	}
 }
 

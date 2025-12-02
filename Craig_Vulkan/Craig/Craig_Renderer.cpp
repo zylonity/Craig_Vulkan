@@ -762,6 +762,30 @@ void Craig::Renderer::createGraphicsPipeline() {
 
 }
 
+void Craig::Renderer::cleanupGraphicsPipeline() {
+
+    if (m_VK_graphicsPipeline) {
+        m_VK_device.destroyPipeline(m_VK_graphicsPipeline);
+        m_VK_graphicsPipeline = nullptr;
+    }
+
+    if (m_VK_pipelineLayout) {
+        m_VK_device.destroyPipelineLayout(m_VK_pipelineLayout);
+        m_VK_pipelineLayout = nullptr;
+    }
+
+    if (m_VK_vertShaderModule) {
+        m_VK_device.destroyShaderModule(m_VK_vertShaderModule);
+        m_VK_vertShaderModule = nullptr;
+    }
+
+    if (m_VK_fragShaderModule) {
+        m_VK_device.destroyShaderModule(m_VK_fragShaderModule);
+        m_VK_fragShaderModule = nullptr;
+    }
+
+}
+
 void Craig::Renderer::createRenderPass() {
 
     vk::AttachmentDescription colourAttachment;
@@ -817,8 +841,12 @@ void Craig::Renderer::createRenderPass() {
         .setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
         .setColorAttachmentCount(1)
         .setPColorAttachments(&colourAttachmentRef)
-        .setPDepthStencilAttachment(&depthAttachmentRef)
-        .setPResolveAttachments(&colourAttachmentResolveRef);
+        .setPDepthStencilAttachment(&depthAttachmentRef);
+
+    //if (m_VK_msaaSamples != vk::SampleCountFlagBits::e1) {
+        subpass.setPResolveAttachments(&colourAttachmentResolveRef);
+    //}
+        
 
     vk::SubpassDependency dependency;
     dependency
@@ -925,6 +953,63 @@ void Craig::Renderer::recreateSwapChain() {
     createColourResources();
     createDepthResources();
     createFrameBuffers();
+}
+
+void Craig::Renderer::recreateSwapChainFull() {
+
+    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_VK_physicalDevice);
+    m_VK_currentExtent = chooseSwapExtent(swapChainSupport.capabilities);
+
+    if (m_VK_currentExtent.width <= 0 || m_VK_currentExtent.height <= 0) {
+        return; // Skip this frame
+    }
+
+
+    m_VK_device.waitIdle();
+
+    ImGui_ImplSDL2_Shutdown();
+    ImGui_ImplVulkan_Shutdown();
+    ImGui::DestroyContext();
+
+    //Clean up frame buffers
+    for (auto framebuffer : mv_VK_swapChainFramebuffers) {
+        m_VK_device.destroyFramebuffer(framebuffer);
+    }
+
+    cleanupGraphicsPipeline();
+
+    //Clean up render pass
+    if (m_VK_renderPass) {
+        m_VK_device.destroyRenderPass(m_VK_renderPass);
+        m_VK_renderPass = nullptr;
+    }
+
+    //Clean up colour resources
+    m_VK_device.destroyImageView(m_VK_colourImageView);
+    vmaDestroyImage(m_VMA_allocator, m_VK_colourImage, m_VMA_colourImageAllocation);
+
+    //Clean up depth resources
+    m_VK_device.destroyImageView(m_VK_depthImageView);
+    vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
+
+    //Clean up the swapchain
+    for (auto imageView : mv_VK_swapChainImageViews) {
+        m_VK_device.destroyImageView(imageView);
+    }
+
+    m_VK_device.destroySwapchainKHR(m_VK_swapChain);
+
+    //recreate with the new sample number
+    createSwapChain();
+    createImageViews();
+    createColourResources();
+    createDepthResources();
+    createRenderPass();
+    createGraphicsPipeline();
+    createFrameBuffers();
+
+    InitImgui();
+    update(0.0f);
 }
 
 void Craig::Renderer::createCommandPool() {
@@ -1445,14 +1530,33 @@ vk::SampleCountFlagBits Craig::Renderer::getMaxUsableSampleCount() {
 
     vk::SampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
     
-    if (counts & vk::SampleCountFlagBits::e64) { return vk::SampleCountFlagBits::e64;}
-    if (counts & vk::SampleCountFlagBits::e32) { return vk::SampleCountFlagBits::e32;}
-    if (counts & vk::SampleCountFlagBits::e16) { return vk::SampleCountFlagBits::e16;}
-    if (counts & vk::SampleCountFlagBits::e8) { return vk::SampleCountFlagBits::e8;}
-    if (counts & vk::SampleCountFlagBits::e4) { return vk::SampleCountFlagBits::e4;}
-    if (counts & vk::SampleCountFlagBits::e2) { return vk::SampleCountFlagBits::e2;}
+    //if (counts & vk::SampleCountFlagBits::e64) { 
+    //    m_MaxSamplingLevel = 64;
+    //    return vk::SampleCountFlagBits::e64;
+    //}
+    //if (counts & vk::SampleCountFlagBits::e32) {
+    //    m_MaxSamplingLevel = 32;
+    //    return vk::SampleCountFlagBits::e32;
+    //}
+    //if (counts & vk::SampleCountFlagBits::e16) {
+    //    m_MaxSamplingLevel = 16;
+    //    return vk::SampleCountFlagBits::e16;
+    //}
+    //if (counts & vk::SampleCountFlagBits::e8) {
+    //    m_MaxSamplingLevel = 8;
+    //    return vk::SampleCountFlagBits::e8;
+    //}
+    //if (counts & vk::SampleCountFlagBits::e4) {
+    //    m_MaxSamplingLevel = 4;
+    //    return vk::SampleCountFlagBits::e4;
+    //}
+    //if (counts & vk::SampleCountFlagBits::e2) {
+    //    m_MaxSamplingLevel = 2;
+    //    return vk::SampleCountFlagBits::e2;
+    //}
 
-    return vk::SampleCountFlagBits::e1;
+    m_MaxSamplingLevel = 2;
+    return vk::SampleCountFlagBits::e2;
 
 }
 
@@ -1691,6 +1795,48 @@ void Craig::Renderer::createTextureSampler() {
     m_VK_textureSampler = m_VK_device.createSampler(samplerInfo);
 
 
+
+}
+
+void Craig::Renderer::updateSamplingLevel(int levelToSet) {
+    
+
+    switch (levelToSet)
+    {
+    case(64):
+        m_MaxSamplingLevel = 64;
+        m_VK_msaaSamples = vk::SampleCountFlagBits::e64;
+        break;
+    case(32):
+        m_MaxSamplingLevel = 32;
+        m_VK_msaaSamples = vk::SampleCountFlagBits::e32;
+        break;
+    case(16):
+        m_MaxSamplingLevel = 16;
+        m_VK_msaaSamples = vk::SampleCountFlagBits::e16;
+        break;
+    case(8):
+        m_MaxSamplingLevel = 8;
+        m_VK_msaaSamples = vk::SampleCountFlagBits::e8;
+        break;
+    case(4):
+        m_MaxSamplingLevel = 4;
+        m_VK_msaaSamples = vk::SampleCountFlagBits::e4;
+        break;
+    case(2):
+        m_MaxSamplingLevel = 2;
+        m_VK_msaaSamples = vk::SampleCountFlagBits::e2;
+        break;
+    case(1):
+        m_MaxSamplingLevel = 1;
+        m_VK_msaaSamples = vk::SampleCountFlagBits::e1;
+        break;
+
+    default:
+        break;
+    }
+
+    recreateSwapChainFull();
 
 }
 

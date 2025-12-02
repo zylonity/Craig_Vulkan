@@ -39,6 +39,9 @@ namespace Craig {
 		Craig::Camera* mp_camera;
 
 		int m_currentMipLevel = 0;
+		int m_currentMSAALevel = 0;
+
+		bool doNotEnd = false;
 
 		//===============================================================================
 		// Singleton Implementations (Banned functions to prevent a new instance)
