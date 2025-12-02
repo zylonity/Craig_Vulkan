@@ -21,7 +21,7 @@ CraigError Craig::Window::init() {
 	assert(sdlRetInt == 0 && "Could not initialize SDL.");
 
 	mp_SDL_Window = SDL_CreateWindow(kSDL_WindowName, SDL_WINDOWPOS_CENTERED,
-		SDL_WINDOWPOS_CENTERED, kSDL_WindowWidth, kSDL_WindowHeight, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+		SDL_WINDOWPOS_CENTERED, kSDL_WindowWidth, kSDL_WindowHeight, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
 	assert(mp_SDL_Window != NULL && "Could not create SDL window.");
 
 	// Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
