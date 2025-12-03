@@ -94,7 +94,7 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
         .setApplicationVersion(kVK_AppVersion)
         .setPEngineName(kVK_EngineName)
         .setEngineVersion(kVK_EngineVersion)
-        .setApiVersion(VK_API_VERSION_1_4);
+        .setApiVersion(VK_API_VERSION_1_2);
 
     // vk::InstanceCreateInfo is where the programmer specifies the layers and/or extensions that
     // are needed.
@@ -251,7 +251,7 @@ void Craig::Renderer::initVMA() {
     vmaCreateInfo.instance = m_VK_instance;
     vmaCreateInfo.physicalDevice = m_VK_physicalDevice;
     vmaCreateInfo.device = m_VK_device;
-    vmaCreateInfo.vulkanApiVersion = VK_API_VERSION_1_4;
+    vmaCreateInfo.vulkanApiVersion = VK_API_VERSION_1_2;
     //printf("Using vulkan api version: %i\n", props.apiVersion);
 
     VmaVulkanFunctions vmaFunctions{};                 // <-- important
