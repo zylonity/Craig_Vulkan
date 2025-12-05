@@ -94,7 +94,7 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
         .setApplicationVersion(kVK_AppVersion)
         .setPEngineName(kVK_EngineName)
         .setEngineVersion(kVK_EngineVersion)
-        .setApiVersion(VK_API_VERSION_1_2);
+        .setApiVersion(VK_API_VERSION_1_3);
 
     // vk::InstanceCreateInfo is where the programmer specifies the layers and/or extensions that
     // are needed.
@@ -251,10 +251,9 @@ void Craig::Renderer::initVMA() {
     vmaCreateInfo.instance = m_VK_instance;
     vmaCreateInfo.physicalDevice = m_VK_physicalDevice;
     vmaCreateInfo.device = m_VK_device;
-    vmaCreateInfo.vulkanApiVersion = VK_API_VERSION_1_2;
-    //printf("Using vulkan api version: %i\n", props.apiVersion);
+    vmaCreateInfo.vulkanApiVersion = VK_API_VERSION_1_3;
 
-    VmaVulkanFunctions vmaFunctions{};                 // <-- important
+    VmaVulkanFunctions vmaFunctions{};                 // <-- important to have {} to zero it out
     vmaFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
     vmaFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
     vmaCreateInfo.pVulkanFunctions = &vmaFunctions;
@@ -373,7 +372,10 @@ Craig::Renderer::SwapChainSupportDetails Craig::Renderer::querySwapChainSupport(
 bool Craig::Renderer::isDeviceSuitable(const vk::PhysicalDevice& device) {
     QueueFamilyIndices indices = findQueueFamilies(device); //Check gfx device can render and present to the screen
 
+
+    bool dynamicRenderSupport = checkDynamicRendererSupport(device); //Check it supports dynamic rendering. It NEEDS to be checked before the extensions as this will push the extension if it's found
     bool extensionsSupported = checkDeviceExtensionSupport(device); //Check it supports extensions, especifically the swapchain extension
+
 
     bool swapChainAdequate = false; 
     if (extensionsSupported) {
@@ -383,6 +385,7 @@ bool Craig::Renderer::isDeviceSuitable(const vk::PhysicalDevice& device) {
 
     printf("Found graphics and presentation indices: %s\n", indices.isComplete() ? "True" : "False");
     printf("Found dedicated transfer index: %s\n", indices.hasDedicatedTransfer() ? "True" : "False");
+    printf("Dynamic rendering supported: %s\n", dynamicRenderSupport ? "True" : "False");
     printf("Extensions (Like swapchain/double buffers) are supported: %s\n", extensionsSupported ? "True" : "False");
     printf("The swapchain extension is adequate for our use: %s\n", swapChainAdequate ? "True" : "False");
 
@@ -402,6 +405,35 @@ bool Craig::Renderer::checkDeviceExtensionSupport(const vk::PhysicalDevice& devi
     }
 
     return requiredExtensions.empty();
+}
+
+bool Craig::Renderer::checkDynamicRendererSupport(const vk::PhysicalDevice& device) {
+
+    std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
+
+    std::set<std::string> dynamicExtension = { VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME };
+
+    for (const auto& extension : availableExtensions) {
+        dynamicExtension.erase(extension.extensionName);
+    }
+
+    if (dynamicExtension.size() == 0) {
+        mv_VK_deviceExtensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+        printf("Found Dynamic Rendering Extension");
+        return true;
+    }
+
+    if (dynamicExtension.size() == 1) {
+
+        vk::PhysicalDeviceVulkan13Features vk13features;
+        vk::PhysicalDeviceFeatures2 features = m_VK_physicalDevice.getFeatures2();
+        features.setPNext(vk13features);
+
+        return vk13features.dynamicRendering == vk::True;
+    }
+
+    return false;
+
 }
 
 void Craig::Renderer::createLogicalDevice() {
@@ -425,7 +457,7 @@ void Craig::Renderer::createLogicalDevice() {
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    vk::PhysicalDeviceFeatures deviceFeatures = m_VK_physicalDevice.getFeatures(); // Enable desired features (none yet, placeholder)
+    vk::PhysicalDeviceFeatures deviceFeatures = m_VK_physicalDevice.getFeatures();
     deviceFeatures.setSamplerAnisotropy(vk::True);
 
     //Enable the timeline semaphore feature

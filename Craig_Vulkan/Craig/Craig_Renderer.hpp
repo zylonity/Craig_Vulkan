@@ -85,6 +85,7 @@ namespace Craig {
 		void setupDebugMessenger(); // Sets up the Vulkan debug messenger after instance creation
 		void pickPhysicalDevice(); // Picks a suitable physical device for rendering
 		void createLogicalDevice(); //Logical device to interact with the physical device
+
 		void createRenderPass();
 
 		void createDescriptorSetLayout();
@@ -143,8 +144,9 @@ namespace Craig {
 		void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 		
 
-		const std::vector<const char*> mv_VK_deviceExtensions = {
+		std::vector<const char*> mv_VK_deviceExtensions = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME // Required for swapchain support (Like a framebuffer)
+		    
 #if defined(__APPLE__)
 			,VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
 #endif
@@ -275,6 +277,8 @@ namespace Craig {
 		vk::ImageView m_VK_depthImageView;
 
 		vk::Extent2D m_VK_currentExtent;
+
+		bool checkDynamicRendererSupport(const vk::PhysicalDevice& device);
 
 
 #if defined(IMGUI_ENABLED)
