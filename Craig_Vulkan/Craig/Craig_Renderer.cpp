@@ -372,8 +372,6 @@ Craig::Renderer::SwapChainSupportDetails Craig::Renderer::querySwapChainSupport(
 bool Craig::Renderer::isDeviceSuitable(const vk::PhysicalDevice& device) {
     QueueFamilyIndices indices = findQueueFamilies(device); //Check gfx device can render and present to the screen
 
-
-    bool dynamicRenderSupport = checkDynamicRendererSupport(device); //Check it supports dynamic rendering. It NEEDS to be checked before the extensions as this will push the extension if it's found
     bool extensionsSupported = checkDeviceExtensionSupport(device); //Check it supports extensions, especifically the swapchain extension
 
 
@@ -385,8 +383,7 @@ bool Craig::Renderer::isDeviceSuitable(const vk::PhysicalDevice& device) {
 
     printf("Found graphics and presentation indices: %s\n", indices.isComplete() ? "True" : "False");
     printf("Found dedicated transfer index: %s\n", indices.hasDedicatedTransfer() ? "True" : "False");
-    printf("Dynamic rendering supported: %s\n", dynamicRenderSupport ? "True" : "False");
-    printf("Extensions (Like swapchain/double buffers) are supported: %s\n", extensionsSupported ? "True" : "False");
+    printf("Device extensions are supported: %s\n", extensionsSupported ? "True" : "False");
     printf("The swapchain extension is adequate for our use: %s\n", swapChainAdequate ? "True" : "False");
 
     return indices.isComplete() && extensionsSupported && swapChainAdequate;
@@ -395,6 +392,22 @@ bool Craig::Renderer::isDeviceSuitable(const vk::PhysicalDevice& device) {
 //Here we get the list of available device extensions, and check if the required ones are present
 //by removing them from a set and checking if the set is empty at the end.
 bool Craig::Renderer::checkDeviceExtensionSupport(const vk::PhysicalDevice& device) {
+
+    vk::PhysicalDeviceProperties props = device.getProperties();
+    const uint32_t apiVersion = props.apiVersion;
+
+    if (VK_VERSION_MAJOR(apiVersion) > 1 || VK_VERSION_MINOR(apiVersion) >= 3)
+    {
+        printf("Vulkan 1.3 or above detected, assuming dynamic rendering support\n");
+        return true;
+
+    }
+    else {
+        printf("Vulkan 1.2 or below detected, checking for dynamic rendering extension support...\n");
+        if (std::find(mv_VK_deviceExtensions.begin(), mv_VK_deviceExtensions.end(), VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME) == mv_VK_deviceExtensions.end()) {
+            mv_VK_deviceExtensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+        }
+    }
 
     std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
 
@@ -405,35 +418,6 @@ bool Craig::Renderer::checkDeviceExtensionSupport(const vk::PhysicalDevice& devi
     }
 
     return requiredExtensions.empty();
-}
-
-bool Craig::Renderer::checkDynamicRendererSupport(const vk::PhysicalDevice& device) {
-
-    std::vector<vk::ExtensionProperties> availableExtensions = device.enumerateDeviceExtensionProperties();
-
-    std::set<std::string> dynamicExtension = { VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME };
-
-    for (const auto& extension : availableExtensions) {
-        dynamicExtension.erase(extension.extensionName);
-    }
-
-    if (dynamicExtension.size() == 0) {
-        mv_VK_deviceExtensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-        printf("Found Dynamic Rendering Extension");
-        return true;
-    }
-
-    if (dynamicExtension.size() == 1) {
-
-        vk::PhysicalDeviceVulkan13Features vk13features;
-        vk::PhysicalDeviceFeatures2 features = m_VK_physicalDevice.getFeatures2();
-        features.setPNext(vk13features);
-
-        return vk13features.dynamicRendering == vk::True;
-    }
-
-    return false;
-
 }
 
 void Craig::Renderer::createLogicalDevice() {

@@ -146,7 +146,6 @@ namespace Craig {
 
 		std::vector<const char*> mv_VK_deviceExtensions = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME // Required for swapchain support (Like a framebuffer)
-		    
 #if defined(__APPLE__)
 			,VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
 #endif
@@ -277,8 +276,6 @@ namespace Craig {
 		vk::ImageView m_VK_depthImageView;
 
 		vk::Extent2D m_VK_currentExtent;
-
-		bool checkDynamicRendererSupport(const vk::PhysicalDevice& device);
 
 
 #if defined(IMGUI_ENABLED)
