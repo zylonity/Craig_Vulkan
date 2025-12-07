@@ -235,8 +235,8 @@ namespace Craig {
 		//Timeline semaphore
 		vk::Semaphore m_VK_timelineSemaphore;
 		uint64_t m_sempahoreTimelineValue = 0;
-		std::array<uint64_t, kMaxFramesInFlight> m_frameValue;
-		std::vector<uint64_t> m_imageTimelineValue;
+		//std::array<uint64_t, kMaxFramesInFlight> m_frameValue;
+		//std::vector<uint64_t> m_imageTimelineValue;
 
 
 		vk::Buffer m_VK_vertexBuffer;
