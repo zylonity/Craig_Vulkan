@@ -1180,12 +1180,9 @@ void Craig::Renderer::createSyncObjects() {
 
     m_VK_timelineSemaphore = m_VK_device.createSemaphore(timelineInfo);
     m_sempahoreTimelineValue = 0;
-    m_frameValue.fill(0);
 
     mv_VK_imageAvailableSemaphores.resize(kMaxFramesInFlight);
     mv_VK_renderFinishedSemaphores.resize(mv_VK_swapChainImages.size());
-    m_imageTimelineValue.resize(mv_VK_swapChainImages.size());
-    std::fill(m_imageTimelineValue.begin(), m_imageTimelineValue.end(), 0);
 
     vk::SemaphoreCreateInfo semaphoreInfo;
    
@@ -2050,15 +2047,14 @@ void Craig::Renderer::createDepthResources() {
 
 void Craig::Renderer::drawFrame(const float& deltaTime) {
 
-    // Wait until the previous frame has finished
-    uint64_t waitValue = m_frameValue[m_currentFrame];
+    if (m_sempahoreTimelineValue >= kMaxFramesInFlight) {
+        uint64_t waitValue = m_sempahoreTimelineValue - (kMaxFramesInFlight - 1);
 
-    if (waitValue > 0) {
         vk::SemaphoreWaitInfo waitInfo{};
         waitInfo.setSemaphores(m_VK_timelineSemaphore);
         waitInfo.setValues(waitValue);
 
-        // Blocks until GPU reached that value
+        // This only blocks if the GPU is really lagging
         m_VK_device.waitSemaphores(waitInfo, UINT64_MAX);
     }
 
@@ -2066,7 +2062,7 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         return; // Skip this frame
     }
 
-    uint32_t imageIndex = m_currentFrame;
+    uint32_t imageIndex = 0;
     VkResult nextImageResult = vkAcquireNextImageKHR(m_VK_device, m_VK_swapChain, UINT64_MAX, mv_VK_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (nextImageResult == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -2077,20 +2073,9 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
-    uint64_t imageWaitValue = m_imageTimelineValue[imageIndex];
-
-    if (imageWaitValue > 0) {
-        vk::SemaphoreWaitInfo imageWaitInfo{};
-        imageWaitInfo.setSemaphores(m_VK_timelineSemaphore);
-        imageWaitInfo.setValues(imageWaitValue);
-
-        // Blocks until GPU reached that value
-        m_VK_device.waitSemaphores(imageWaitInfo, UINT64_MAX);
-    }
-
     // Record drawing commands into the command buffer
-    mv_VK_commandBuffers[imageIndex].reset();
-    recordCommandBuffer(mv_VK_commandBuffers[imageIndex], imageIndex);
+    mv_VK_commandBuffers[m_currentFrame].reset();
+    recordCommandBuffer(mv_VK_commandBuffers[m_currentFrame], imageIndex);
 
     updateUniformBuffer(m_currentFrame, deltaTime);
 
@@ -2103,9 +2088,6 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
 
     uint64_t signalValue = ++m_sempahoreTimelineValue;
     uint64_t signalValues[] = { signalValue, 0 };
-
-    m_frameValue[imageIndex] = signalValue;
-    m_imageTimelineValue[imageIndex] = signalValue;
 
     vk::TimelineSemaphoreSubmitInfo timelineSubmit;
     timelineSubmit
@@ -2121,7 +2103,7 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         .setSignalSemaphoreCount(2)
         .setPSignalSemaphores(signalSemaphores)
         .setCommandBufferCount(1)
-        .setPCommandBuffers(&mv_VK_commandBuffers[imageIndex]);
+        .setPCommandBuffers(&mv_VK_commandBuffers[m_currentFrame]);
 
 
     m_VK_graphicsQueue.submit(submitInfo, VK_NULL_HANDLE);
