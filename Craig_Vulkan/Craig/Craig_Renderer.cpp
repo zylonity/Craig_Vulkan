@@ -1775,7 +1775,7 @@ void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_
     vk::CommandBuffer tempBuffer = useTransferQueue ? buffer_beginSingleTimeCommands() : buffer_beginSingleTimeCommandsGFX();
 
     //This means we're changing an image from x state to y state, and we gotta sync the access types
-    vk::ImageMemoryBarrier barrier{};
+    vk::ImageMemoryBarrier2 barrier{};
     barrier
         .setImage(image)
         .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
@@ -1784,6 +1784,10 @@ void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_
                          .setBaseArrayLayer(0)
                          .setLayerCount(1)
                          .setLevelCount(1);
+
+    vk::DependencyInfo dep{};
+    dep.setImageMemoryBarrierCount(1)
+        .setPImageMemoryBarriers(&barrier);
 
     int32_t mipWidth = texWidth;
     int32_t mipHeight = texHeight;
@@ -1794,10 +1798,12 @@ void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_
         barrier
             .setOldLayout(vk::ImageLayout::eTransferDstOptimal)
             .setNewLayout(vk::ImageLayout::eTransferSrcOptimal)
-            .setSrcAccessMask(vk::AccessFlagBits::eTransferWrite)
-            .setDstAccessMask(vk::AccessFlagBits::eTransferRead);
+            .setSrcStageMask(vk::PipelineStageFlagBits2::eTransfer)
+            .setDstStageMask(vk::PipelineStageFlagBits2::eTransfer)
+            .setSrcAccessMask(vk::AccessFlagBits2::eTransferWrite)
+            .setDstAccessMask(vk::AccessFlagBits2::eTransferRead);
 
-        tempBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer, {}, nullptr, nullptr, barrier);
+        tempBuffer.pipelineBarrier2(dep);
 
         vk::ImageBlit blit;
         //SRC
@@ -1834,10 +1840,12 @@ void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_
         barrier
             .setOldLayout(vk::ImageLayout::eTransferSrcOptimal)
             .setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
-            .setSrcAccessMask(vk::AccessFlagBits::eTransferRead)
-            .setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+            .setSrcStageMask(vk::PipelineStageFlagBits2::eTransfer)
+            .setDstStageMask(vk::PipelineStageFlagBits2::eFragmentShader)
+            .setSrcAccessMask(vk::AccessFlagBits2::eTransferRead)
+            .setDstAccessMask(vk::AccessFlagBits2::eShaderRead);
 
-        tempBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, {}, nullptr, nullptr, barrier);
+        tempBuffer.pipelineBarrier2(dep);
 
         if (mipWidth > 1) { mipWidth /= 2; };
         if (mipHeight > 1) { mipHeight /= 2; };
@@ -1848,10 +1856,12 @@ void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_
     barrier
         .setOldLayout(vk::ImageLayout::eTransferDstOptimal)
         .setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal)
-        .setSrcAccessMask(vk::AccessFlagBits::eTransferWrite)
-        .setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+        .setSrcStageMask(vk::PipelineStageFlagBits2::eTransfer)
+        .setDstStageMask(vk::PipelineStageFlagBits2::eFragmentShader)
+        .setSrcAccessMask(vk::AccessFlagBits2::eTransferWrite)
+        .setDstAccessMask(vk::AccessFlagBits2::eShaderRead);
 
-    tempBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, {}, nullptr, nullptr, barrier);
+    tempBuffer.pipelineBarrier2(dep);
 
     useTransferQueue ? buffer_endSingleTimeCommands(tempBuffer) : buffer_endSingleTimeCommandsGFX(tempBuffer);
 
