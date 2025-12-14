@@ -1198,11 +1198,29 @@ void Craig::Renderer::transitionSwapImage(vk::CommandBuffer cmd, vk::Image img, 
         .setImage(img)
         .setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
 
-    
-    barrier.setSrcStageMask(vk::PipelineStageFlagBits2::eAllCommands);
-    barrier.setSrcAccessMask(vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite);
-    barrier.setDstStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput);
-    barrier.setDstAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite);
+
+    if (oldLayout == vk::ImageLayout::eUndefined &&
+        newLayout == vk::ImageLayout::eColorAttachmentOptimal)
+    {
+        barrier
+            .setSrcStageMask(vk::PipelineStageFlagBits2::eTopOfPipe)
+            .setSrcAccessMask(vk::AccessFlagBits2::eNone)
+            .setDstStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput)
+            .setDstAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite);
+    }
+    else if (oldLayout == vk::ImageLayout::eColorAttachmentOptimal &&
+        newLayout == vk::ImageLayout::ePresentSrcKHR)
+    {
+        barrier
+            .setSrcStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput)
+            .setSrcAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite)
+            .setDstStageMask(vk::PipelineStageFlagBits2::eBottomOfPipe)
+            .setDstAccessMask(vk::AccessFlagBits2::eNone);
+    }
+    else
+    {
+        throw std::runtime_error("unsupported swapchain layout transition");
+    }
 
     vk::DependencyInfo dep{};
     dep.setImageMemoryBarrierCount(1).setPImageMemoryBarriers(&barrier);
