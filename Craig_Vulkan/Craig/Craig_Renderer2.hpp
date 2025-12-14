@@ -36,9 +36,26 @@ namespace Craig {
 	private:
 
 		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
+
+		//Debugging utils
+		void setupDebugMessenger();
+		std::vector<const char*> mv_VK_Layers; //Validation layers for debugging
+		vk::raii::DebugUtilsMessengerEXT m_VK_debugMessenger = nullptr;
+		static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT type, const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData, void*);
+
+
+		//Initialisation
 		void initVulkan();
+
 		void createInstance();
-		
+		vk::raii::Context m_VK_context;
+		vk::raii::Instance m_VK_instance = nullptr;
+
+		void pickPhysicalDevice();
+		bool isDeviceSuitable(const vk::raii::PhysicalDevice& device);
+		bool checkDeviceExtensionSupport(const vk::raii::PhysicalDevice& device);
+		vk::raii::PhysicalDevice m_VK_physicalDevice = nullptr;
+
 
 	};
 
