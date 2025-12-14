@@ -85,7 +85,7 @@ namespace Craig {
 		void setupDebugMessenger(); // Sets up the Vulkan debug messenger after instance creation
 		void pickPhysicalDevice(); // Picks a suitable physical device for rendering
 		void createLogicalDevice(); //Logical device to interact with the physical device
-		void createRenderPass();
+		//void createRenderPass();
 
 		void createDescriptorSetLayout();
 
@@ -100,7 +100,7 @@ namespace Craig {
 		void recreateSwapChainFull(); //This recreates the graphics pipeline and imgui as well as the swapchain
 		void createSwapChain(); //Create double/triple buffer
 		void createImageViews();
-		void createFrameBuffers();
+		//void createFrameBuffers();
 		void cleanupSwapChain();
 
 		void createVertexBuffer();
@@ -176,6 +176,8 @@ namespace Craig {
 
 		void terminateSampler();
 
+		void transitionSwapImage(vk::CommandBuffer cmd, vk::Image img, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+
 		vk::ImageView createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags, uint32_t mipLevels);
 
 		vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
@@ -214,13 +216,13 @@ namespace Craig {
 		vk::ShaderModule m_VK_vertShaderModule;
 		vk::ShaderModule m_VK_fragShaderModule;
 
-		vk::RenderPass m_VK_renderPass;
+		//vk::RenderPass m_VK_renderPass;
 		vk::DescriptorSetLayout m_VK_descriptorSetLayout;
 		vk::PipelineLayout m_VK_pipelineLayout;
 		vk::Pipeline m_VK_graphicsPipeline;
 		
 
-		std::vector<vk::Framebuffer> mv_VK_swapChainFramebuffers;
+		//std::vector<vk::Framebuffer> mv_VK_swapChainFramebuffers;
 
 		vk::CommandPool m_VK_commandPool;
 		vk::CommandPool m_VK_transferCommandPool;

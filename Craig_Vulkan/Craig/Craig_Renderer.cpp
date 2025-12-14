@@ -81,9 +81,6 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
 	// Use validation layers if this is a debug build
 #if defined(_DEBUG)
     mv_VK_Layers.push_back("VK_LAYER_KHRONOS_validation");
-#endif
-
-#if defined(IMGUI_ENABLED)
     mp_CurrentWindow->getExtensionsVector().push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
@@ -177,7 +174,14 @@ void Craig::Renderer::InitImgui() {
     init_info.ImageCount = kMaxFramesInFlight;
     init_info.MSAASamples = static_cast<VkSampleCountFlagBits>(m_VK_msaaSamples);
     init_info.CheckVkResultFn = check_vk_result;
-    init_info.RenderPass = m_VK_renderPass;
+    init_info.UseDynamicRendering = true;
+
+    // dynamic rendering parameters for imgui to use
+    init_info.PipelineRenderingCreateInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+    init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+    VkFormat colourFormat = static_cast<VkFormat>(m_VK_swapChainImageFormat);
+    init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &colourFormat;
+
     ImGui_ImplVulkan_Init(&init_info);
 
 }
@@ -215,13 +219,15 @@ void Craig::Renderer::InitVulkan() {
 
     createSwapChain();
     createImageViews();
-    createRenderPass();
+    //createRenderPass();
+    createColourResources();
+    createDepthResources();
     createDescriptorSetLayout();
     createGraphicsPipeline();
     createCommandPool();
-    createColourResources();
-    createDepthResources();
-    createFrameBuffers();
+    
+    
+   // createFrameBuffers();
     //createTextureImage();
     //createTextureImageView();
     
@@ -428,9 +434,15 @@ void Craig::Renderer::createLogicalDevice() {
     vk::PhysicalDeviceFeatures deviceFeatures = m_VK_physicalDevice.getFeatures(); // Enable desired features (none yet, placeholder)
     deviceFeatures.setSamplerAnisotropy(vk::True);
 
+    vk::PhysicalDeviceVulkan13Features v13{};
+    v13.setDynamicRendering(true);
+    v13.setSynchronization2(true);
+
     //Enable the timeline semaphore feature
     vk::PhysicalDeviceTimelineSemaphoreFeatures timelineFeatures;
     timelineFeatures.setTimelineSemaphore(true);
+
+    timelineFeatures.setPNext(&v13);
 
     // Fill in device creation info with queue setup and feature requirements
     vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
@@ -735,8 +747,19 @@ void Craig::Renderer::createGraphicsPipeline() {
         throw std::runtime_error("failed to createPipelineLayout!");
     }
 
+    vk::Format colorFormat = m_VK_swapChainImageFormat;
+    vk::Format depthFormat = findDepthFormat();
+
+    vk::PipelineRenderingCreateInfo renderingInfo{};
+    renderingInfo
+        .setColorAttachmentCount(1)
+        .setPColorAttachmentFormats(&colorFormat)
+        .setDepthAttachmentFormat(depthFormat); 
+
+
     vk::GraphicsPipelineCreateInfo pipelineInfo;
     pipelineInfo
+        .setPNext(&renderingInfo)
         .setStageCount(2)
         .setPStages(shaderStages)
         .setPVertexInputState(&vertexInputInfo)
@@ -748,8 +771,7 @@ void Craig::Renderer::createGraphicsPipeline() {
         .setPColorBlendState(&colourBlending)
         .setPDynamicState(&dynamicState)
         .setLayout(m_VK_pipelineLayout)
-        .setRenderPass(m_VK_renderPass)
-        .setSubpass(0);
+        .setRenderPass(VK_NULL_HANDLE);
 
 
     auto result = m_VK_device.createGraphicsPipeline(VK_NULL_HANDLE, pipelineInfo);
@@ -786,156 +808,6 @@ void Craig::Renderer::cleanupGraphicsPipeline() {
 
 }
 
-void Craig::Renderer::createRenderPass() {
-
-    vk::AttachmentDescription colourAttachment;
-    colourAttachment
-        .setFormat(m_VK_swapChainImageFormat)
-        .setSamples(m_VK_msaaSamples)
-        .setLoadOp(vk::AttachmentLoadOp::eClear)
-        .setStoreOp(vk::AttachmentStoreOp::eStore)
-        .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
-        .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
-        .setInitialLayout(vk::ImageLayout::eUndefined)
-        .setFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
-
-    if (m_VK_msaaSamples & vk::SampleCountFlagBits::e1){
-        colourAttachment.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
-    }
-
-    vk::AttachmentDescription depthAttatchment;
-    depthAttatchment
-        .setFormat(findDepthFormat())
-        .setSamples(m_VK_msaaSamples)
-        .setLoadOp(vk::AttachmentLoadOp::eClear)
-        .setStoreOp(vk::AttachmentStoreOp::eDontCare)
-        .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
-        .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
-        .setInitialLayout(vk::ImageLayout::eUndefined)
-        .setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
-
-    vk::AttachmentDescription colourAttachmentResolve;
-    colourAttachmentResolve
-        .setFormat(m_VK_swapChainImageFormat)
-        .setSamples(vk::SampleCountFlagBits::e1)
-        .setLoadOp(vk::AttachmentLoadOp::eDontCare)
-        .setStoreOp(vk::AttachmentStoreOp::eStore)
-        .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
-        .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
-        .setInitialLayout(vk::ImageLayout::eUndefined)
-        .setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
-
-    vk::AttachmentReference colourAttachmentRef;
-    colourAttachmentRef
-        .setAttachment(0) //We only have one attachment description so it'll go to that
-        .setLayout(vk::ImageLayout::eColorAttachmentOptimal);
-
-    vk::AttachmentReference depthAttachmentRef;
-    depthAttachmentRef
-        .setAttachment(1)
-        .setLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
-
-    vk::AttachmentReference colourAttachmentResolveRef;
-    colourAttachmentResolveRef
-        .setAttachment(2) //We only have one attachment description so it'll go to that
-        .setLayout(vk::ImageLayout::eColorAttachmentOptimal);
-
-    vk::SubpassDescription subpass;
-    subpass
-        .setPipelineBindPoint(vk::PipelineBindPoint::eGraphics)
-        .setColorAttachmentCount(1)
-        .setPColorAttachments(&colourAttachmentRef)
-        .setPDepthStencilAttachment(&depthAttachmentRef)
-        .setPResolveAttachments(&colourAttachmentResolveRef);
-        
-    if (m_VK_msaaSamples & vk::SampleCountFlagBits::e1) {
-        subpass.setPResolveAttachments(nullptr);
-    }
-
-    vk::SubpassDependency dependency;
-    dependency
-        .setSrcSubpass(vk::SubpassExternal)
-        .setDstSubpass(0)
-        .setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eLateFragmentTests)
-        .setSrcAccessMask(vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentWrite)
-        .setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput | vk::PipelineStageFlagBits::eEarlyFragmentTests)
-        .setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eDepthStencilAttachmentWrite);
-
-    if (m_VK_msaaSamples & vk::SampleCountFlagBits::e1) {
-        dependency.setSrcAccessMask(vk::AccessFlagBits::eDepthStencilAttachmentWrite);
-    }
-
-    if (m_VK_msaaSamples & vk::SampleCountFlagBits::e1) {
-        std::array<vk::AttachmentDescription, 2> attachments = { colourAttachment, depthAttatchment };
-
-        vk::RenderPassCreateInfo renderPassInfo;
-        renderPassInfo
-            .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-            .setPAttachments(attachments.data())
-            .setSubpassCount(1)
-            .setPSubpasses(&subpass)
-            .setDependencyCount(1)
-            .setDependencies(dependency);
-
-        m_VK_renderPass = m_VK_device.createRenderPass(renderPassInfo);
-    }
-    else {
-        std::array<vk::AttachmentDescription, 3> attachments = { colourAttachment, depthAttatchment, colourAttachmentResolve };
-
-        vk::RenderPassCreateInfo renderPassInfo;
-        renderPassInfo
-            .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-            .setPAttachments(attachments.data())
-            .setSubpassCount(1)
-            .setPSubpasses(&subpass)
-            .setDependencyCount(1)
-            .setDependencies(dependency);
-
-        m_VK_renderPass = m_VK_device.createRenderPass(renderPassInfo);
-    }
-    
-}
-
-void Craig::Renderer::createFrameBuffers() {
-
-    mv_VK_swapChainFramebuffers.resize(mv_VK_swapChainImageViews.size());
-
-    for (size_t i = 0; i < mv_VK_swapChainImageViews.size(); i++)
-    {
-
-        std::vector<vk::ImageView> attachments;
-
-        if (m_VK_msaaSamples & vk::SampleCountFlagBits::e1) {
-            attachments.resize(2);
-            attachments = { mv_VK_swapChainImageViews[i], m_VK_depthImageView }; 
-        }
-        else {
-            attachments.resize(3);
-            attachments = { m_VK_colourImageView, m_VK_depthImageView, mv_VK_swapChainImageViews[i] };
-        }
-
-        vk::FramebufferCreateInfo frameBufferInfo;
-        frameBufferInfo
-            .setRenderPass(m_VK_renderPass)
-            .setAttachmentCount(static_cast<uint32_t>(attachments.size()))
-            .setPAttachments(attachments.data())
-            .setWidth(m_VK_swapChainExtent.width)
-            .setHeight(m_VK_swapChainExtent.height)
-            .setLayers(1);
-
-        try {
-            mv_VK_swapChainFramebuffers[i] = m_VK_device.createFramebuffer(frameBufferInfo);
-        }
-        catch (const vk::SystemError& err) {
-            throw std::runtime_error("failed to create framebuffer!");
-        }
-        
-
-
-    };
-
-}
-
 void Craig::Renderer::cleanupSwapChain() {
 
     m_VK_device.destroyImageView(m_VK_colourImageView);
@@ -944,9 +816,6 @@ void Craig::Renderer::cleanupSwapChain() {
     m_VK_device.destroyImageView(m_VK_depthImageView);
     vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
 
-    for (auto framebuffer : mv_VK_swapChainFramebuffers) {
-        m_VK_device.destroyFramebuffer(framebuffer);
-    }
 
     for (auto imageView : mv_VK_swapChainImageViews) {
         m_VK_device.destroyImageView(imageView);
@@ -973,7 +842,7 @@ void Craig::Renderer::recreateSwapChain() {
     createImageViews();
     createColourResources();
     createDepthResources();
-    createFrameBuffers();
+    //createFrameBuffers();
 }
 
 void Craig::Renderer::recreateSwapChainFull() {
@@ -988,23 +857,16 @@ void Craig::Renderer::recreateSwapChainFull() {
 
     m_VK_device.waitIdle();
 
+#if defined(IMGUI_ENABLED)
     //We have to recreate the imgui stuff since it relies on our renderpass and frame buffer, aside from creating a whole different set for imgui, this is easier lol.
     ImGui_ImplSDL2_Shutdown();
     ImGui_ImplVulkan_Shutdown();
     ImGui::DestroyContext();
+#endif
 
-    //Clean up frame buffers
-    for (auto framebuffer : mv_VK_swapChainFramebuffers) {
-        m_VK_device.destroyFramebuffer(framebuffer);
-    }
 
     cleanupGraphicsPipeline();
 
-    //Clean up render pass
-    if (m_VK_renderPass) {
-        m_VK_device.destroyRenderPass(m_VK_renderPass);
-        m_VK_renderPass = nullptr;
-    }
 
     //Clean up colour resources
     m_VK_device.destroyImageView(m_VK_colourImageView);
@@ -1026,11 +888,13 @@ void Craig::Renderer::recreateSwapChainFull() {
     createImageViews();
     createColourResources();
     createDepthResources();
-    createRenderPass();
     createGraphicsPipeline();
-    createFrameBuffers();
 
+#if defined(IMGUI_ENABLED)
     InitImgui();
+#endif
+
+    
     update(0.0f); //This will create a new imgui frame and fix any imgui issues
 }
 
@@ -1084,22 +948,53 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
         throw std::runtime_error("failed to begin recording command buffer!");
     }
 
-    // Set up render pass for drawing to the framebuffer
-    vk::RenderPassBeginInfo renderPassInfo;
-    renderPassInfo.setRenderPass(m_VK_renderPass)
-        .setFramebuffer(mv_VK_swapChainFramebuffers[imageIndex])
-        .renderArea.setOffset({ 0, 0 })
-                   .setExtent(m_VK_swapChainExtent);
+    transitionSwapImage(commandBuffer, mv_VK_swapChainImages[imageIndex], vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
 
-    // Clear color for this frame
-    std::array<vk::ClearValue, 2> clearValues;
-    clearValues[0].setColor({kClearColour[0], kClearColour[1], kClearColour[2], kClearColour[3]});
-    clearValues[1].setDepthStencil({ 1.0f, 0 });
+    bool msaa = (m_VK_msaaSamples != vk::SampleCountFlagBits::e1);
 
-    renderPassInfo.setClearValueCount(static_cast<uint32_t>(clearValues.size()))
-        .setPClearValues(clearValues.data());
+    vk::ClearValue clearColour;
+    clearColour.setColor({ kClearColour[0], kClearColour[1], kClearColour[2], kClearColour[3] });
 
-    commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+    vk::ClearValue clearDepth;
+    clearDepth.setDepthStencil({ 1.0f, 0 });
+
+    vk::RenderingAttachmentInfo colorAtt{};
+    colorAtt
+        .setLoadOp(vk::AttachmentLoadOp::eClear)
+        .setStoreOp(vk::AttachmentStoreOp::eStore)
+        .setClearValue(clearColour);
+
+    vk::RenderingAttachmentInfo depthAtt{};
+    depthAtt
+        .setImageView(m_VK_depthImageView)
+        .setImageLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal)
+        .setLoadOp(vk::AttachmentLoadOp::eClear)
+        .setStoreOp(vk::AttachmentStoreOp::eDontCare)
+        .setClearValue(clearDepth);
+
+    if (!msaa) {
+        colorAtt
+            .setImageView(mv_VK_swapChainImageViews[imageIndex])
+            .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal);
+    }
+    else {
+        colorAtt
+            .setImageView(m_VK_colourImageView)
+            .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
+            .setResolveImageView(mv_VK_swapChainImageViews[imageIndex])
+            .setResolveImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
+            .setResolveMode(vk::ResolveModeFlagBits::eAverage);
+    }
+
+    vk::RenderingInfo ri{};
+    ri
+        .setRenderArea({ {0,0}, m_VK_swapChainExtent })
+        .setLayerCount(1)
+        .setColorAttachmentCount(1)
+        .setPColorAttachments(&colorAtt)
+        .setPDepthAttachment(&depthAtt);
+
+    commandBuffer.beginRendering(ri);
     
     //Binding the vertex buffer
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_VK_graphicsPipeline);
@@ -1155,8 +1050,9 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 #endif
 
-    commandBuffer.endRenderPass();
+    commandBuffer.endRendering();
 
+    transitionSwapImage(commandBuffer, mv_VK_swapChainImages[imageIndex], vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR);
 
     try {
         commandBuffer.end();
@@ -1306,6 +1202,26 @@ void Craig::Renderer::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk:
 
 }
 
+void Craig::Renderer::transitionSwapImage(vk::CommandBuffer cmd, vk::Image img, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
+    vk::ImageMemoryBarrier2 barrier{};
+    barrier
+        .setOldLayout(oldLayout)
+        .setNewLayout(newLayout)
+        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+        .setImage(img)
+        .setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+
+    
+    barrier.setSrcStageMask(vk::PipelineStageFlagBits2::eAllCommands);
+    barrier.setSrcAccessMask(vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite);
+    barrier.setDstStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput);
+    barrier.setDstAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite);
+
+    vk::DependencyInfo dep{};
+    dep.setImageMemoryBarrierCount(1).setPImageMemoryBarriers(&barrier);
+    cmd.pipelineBarrier2(dep);
+}
 
 //For us to copy the buffer that contains the picture data to the vulkan image, we need to make sure it's the right layout first
 void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, bool useTransferQueue, uint32_t mipLevels) {
@@ -2185,10 +2101,6 @@ CraigError Craig::Renderer::terminate() {
        
     m_VK_device.destroyCommandPool(m_VK_commandPool);
 
-    for (auto framebuffer : mv_VK_swapChainFramebuffers) {
-        m_VK_device.destroyFramebuffer(framebuffer);
-    }
-
     m_VK_device.destroyImageView(m_VK_colourImageView);
     vmaDestroyImage(m_VMA_allocator, m_VK_colourImage, m_VMA_colourImageAllocation);
 
@@ -2205,7 +2117,6 @@ CraigError Craig::Renderer::terminate() {
 
     m_VK_device.destroyPipeline(m_VK_graphicsPipeline);
     m_VK_device.destroyPipelineLayout(m_VK_pipelineLayout);
-    m_VK_device.destroyRenderPass(m_VK_renderPass);
 
     m_VK_device.destroyShaderModule(m_VK_vertShaderModule);
     m_VK_device.destroyShaderModule(m_VK_fragShaderModule);
