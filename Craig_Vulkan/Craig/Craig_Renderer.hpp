@@ -45,249 +45,277 @@ namespace Craig {
 		void updateSamplingLevel(int levelToSet);
 
 	private:
-
-		SceneManager* mp_SceneManager;
-		Craig::Camera m_camera = Craig::Camera();
-
-
+		
 		struct UniformBufferObject {
 			glm::mat4 model;
 			glm::mat4 view;
 			glm::mat4 proj;
 		};
 
-		//Essentially (from what I understand) it's the index (or like ID) of WHERE the queue is, 
-		// so the queue for graphics rendering could be at place 0, and the queue for presenting could be at place 2
+		// Queue family indices (graphics/present/transfer)
 		struct QueueFamilyIndices {
 			std::optional<uint32_t> graphicsFamily;
 			std::optional<uint32_t> presentFamily;
 			std::optional<uint32_t> transferFamily;
 
-			bool isComplete() {
-				return graphicsFamily.has_value() && presentFamily.has_value();
-			}
-
-			bool hasDedicatedTransfer() {
-				return graphicsFamily && transferFamily && transferFamily != graphicsFamily;
-			}
-
+			bool isComplete() { return graphicsFamily.has_value() && presentFamily.has_value(); }
+			bool hasDedicatedTransfer() { return graphicsFamily && transferFamily && transferFamily != graphicsFamily; }
 		};
 
+		// Swapchain support query results
 		struct SwapChainSupportDetails {
 			vk::SurfaceCapabilitiesKHR capabilities;
 			std::vector<vk::SurfaceFormatKHR> formats;
 			std::vector<vk::PresentModeKHR> presentModes;
-
 		};
 
-		// Encapsulates the Vulkan initialization process
-		void InitVulkan();
-		void setupDebugMessenger(); // Sets up the Vulkan debug messenger after instance creation
-		void pickPhysicalDevice(); // Picks a suitable physical device for rendering
-		void createLogicalDevice(); //Logical device to interact with the physical device
-		//void createRenderPass();
+		
+		// Core init / teardown
+		void InitVulkan();                 // Full Vulkan bring-up
+		void setupDebugMessenger();        // Validation callback
+		void pickPhysicalDevice();         // Choose GPU
+		void createLogicalDevice();        // Create vk::Device + queues
+		void initVMA();                    // VMA allocator setup
 
-		void createDescriptorSetLayout();
+		
+		// Swapchain + framebuffer resources
+		void recreateSwapChain();          // Swapchain-only recreation
+		void recreateSwapChainFull();      // Swapchain + pipeline + imgui recreation
+		void createSwapChain();            // Create swapchain images
+		void createImageViews();           // Create swapchain image views
+		void cleanupSwapChain();           // Destroy swapchain-related objects
 
-		void createGraphicsPipeline();
-		void cleanupGraphicsPipeline();
-		void createCommandPool();
-		void initVMA();
-		void createCommandBuffers();
-		void createSyncObjects();
-
-		void recreateSwapChain();
-		void recreateSwapChainFull(); //This recreates the graphics pipeline and imgui as well as the swapchain
-		void createSwapChain(); //Create double/triple buffer
-		void createImageViews();
-		//void createFrameBuffers();
-		void cleanupSwapChain();
-
-		void createVertexBuffer();
-		void createIndexBuffer();
-		void createUniformBuffers();
-		void createDescriptorPool();
-		void createDescriptorSets();
-
-		//void createTextureImage();
-		void createTextureImageView();
-		void createTextureSampler();
-
+		// MSAA + depth attachments
 		void createColourResources();
 		void createDepthResources();
 
+		
+		// Pipeline / descriptors
+		void createDescriptorSetLayout();
+		void createGraphicsPipeline();
+		void cleanupGraphicsPipeline();
+
+		void createDescriptorPool();
+		void createDescriptorSets();
+		void updateDescriptorSets();
+
+		
+		// Buffers / per-frame data
+		void createVertexBuffer();
+		void createIndexBuffer();
+		void createUniformBuffers();
+		void updateUniformBuffer(uint32_t currentImage, const float& deltaTime);
+
+		
+		// Command submission + sync
+		void createCommandPool();
+		void createCommandBuffers();
+		void createSyncObjects();
+
+		void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 		void drawFrame(const float& deltaTime);
 
-		vk::detail::DispatchLoaderStatic onPresentationFail() { return vk::detail::DispatchLoaderStatic{}; };
+		// One-off command helpers (transfer/GFX)
+		vk::CommandBuffer buffer_beginSingleTimeCommands();
+		void buffer_endSingleTimeCommands(vk::CommandBuffer commandBuffer);
+		vk::CommandBuffer buffer_beginSingleTimeCommandsGFX();     // Uses graphics queue
+		void buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandBuffer);
 
-		// Debugging functions
-		void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo); // Fills the debug messenger config
-		static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-			VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-			VkDebugUtilsMessageTypeFlagsEXT type,
-			const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
-			void* userData); // This is the function Vulkan will call to report debug messages
+		
+		// Images / textures helpers
+		void createTextureImageView();
+		void createTextureSampler();
+		void terminateSampler();
 
-		// Physical device selection functions
+		void createBufferVMA(vk::DeviceSize size,
+			vk::BufferUsageFlags usage,
+			const VmaAllocationCreateInfo& aci,
+			vk::Buffer& buffer,
+			VmaAllocation& alloc,
+			VmaAllocationInfo* outInfo = nullptr);
+
+		void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
+
+		void createImage(uint32_t width, uint32_t height, uint32_t mipLevels,
+			vk::SampleCountFlagBits numSamples,
+			vk::Format format,
+			vk::ImageTiling tiling,
+			vk::ImageUsageFlags usage,
+			vk::MemoryPropertyFlags properties,
+			vk::Image& image,
+			VmaAllocation& allocation);
+
+		void transitionImageLayout(vk::Image image, vk::Format format,
+			vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
+			bool useTransferQueue = true, uint32_t mipLevels = 1);
+
+		void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
+
+		void generateMipMaps(vk::Image image, vk::Format format,
+			int32_t texWidth, int32_t texHeight,
+			uint32_t mipLevels, bool useTransferQueue);
+
+		void transitionSwapImage(vk::CommandBuffer cmd, vk::Image img,
+			vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+
+		vk::ImageView createImageView(vk::Image image, vk::Format format,
+			vk::ImageAspectFlags aspectFlags, uint32_t mipLevels);
+
+		
+		// Device / swapchain queries
 		bool isDeviceSuitable(const vk::PhysicalDevice& device);
 		bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
-		
 
 		QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device);
 		SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice& device);
 
 		vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
-		vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
-		vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
-
-		void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
-		
-
-		const std::vector<const char*> mv_VK_deviceExtensions = {
-			VK_KHR_SWAPCHAIN_EXTENSION_NAME // Required for swapchain support (Like a framebuffer)
-#if defined(__APPLE__)
-			,VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
-#endif
-
-
-		};
+		vk::PresentModeKHR   chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
+		vk::Extent2D         chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
-		VmaAllocator m_VMA_allocator = VK_NULL_HANDLE;
-
-		void createBufferVMA(vk::DeviceSize size, vk::BufferUsageFlags usage, const VmaAllocationCreateInfo& aci, vk::Buffer& buffer,VmaAllocation& alloc, VmaAllocationInfo* outInfo = nullptr);
-
-		void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
-
-		vk::CommandBuffer buffer_beginSingleTimeCommands();
-		void buffer_endSingleTimeCommands(vk::CommandBuffer commandBuffer);
-		vk::CommandBuffer buffer_beginSingleTimeCommandsGFX(); //Uses the graphis queue and command buffer
-		void buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandBuffer);
-
-		void updateUniformBuffer(uint32_t currentImage, const float& deltaTime);
-
-		void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, vk::SampleCountFlagBits numSamples, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, VmaAllocation& allocation);
-		void transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, bool useTransferQueue = true, uint32_t mipLevels = 1);
-		void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
-
-		void generateMipMaps(vk::Image image, vk::Format format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels, bool useTransferQueue);
-		uint32_t m_minLODLevel = 0;
-
-		void terminateSampler();
-
-		void transitionSwapImage(vk::CommandBuffer cmd, vk::Image img, vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
-
-		vk::ImageView createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags, uint32_t mipLevels);
-
-		vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
+		// MSAA + formats
+		vk::SampleCountFlagBits getMaxUsableSampleCount();
+		vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates,
+			vk::ImageTiling tiling, vk::FormatFeatureFlags features);
 		vk::Format findDepthFormat();
 		bool hasStencilComponent(vk::Format format);
 
-		Window* mp_CurrentWindow = nullptr; // Pointer to the current window
+		
+		// Debug / utilities
+		void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
+		static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+			VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+			VkDebugUtilsMessageTypeFlagsEXT type,
+			const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
+			void* userData);
 
-		std::vector<const char*> mv_VK_Layers; //Validation layers for debugging
+		
+		// Extensions / layers
+		const std::vector<const char*> mv_VK_deviceExtensions = {
+			VK_KHR_SWAPCHAIN_EXTENSION_NAME
+		#if defined(__APPLE__)
+			, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
+		#endif
+		};
 
-		vk::Instance m_VK_instance; // Vulkan instance for rendering
+		std::vector<const char*> mv_VK_Layers; // Validation layers
 
-		vk::ApplicationInfo m_VK_appInfo; // Application information for Vulkan instance creation
-		vk::InstanceCreateInfo m_VK_instInfo; // Instance creation information for Vulkan instance
+		
+		// Engine-facing state
+		SceneManager* mp_SceneManager = nullptr;
+		Window* mp_CurrentWindow = nullptr;
 
-		vk::DebugUtilsMessengerEXT m_VK_debugMessenger; // Debug messenger for Vulkan validation layers
+		Craig::Camera m_camera = Craig::Camera();
 
-		vk::SurfaceKHR m_VK_surface; // Vulkan surface for rendering (vk::SurfaceKHR wrapper)
-		vk::PhysicalDevice m_VK_physicalDevice; // Physical device for rendering
-		vk::Device m_VK_device; // Logical device for rendering
+		
+		// Vulkan instance / device
+		vk::Instance               m_VK_instance;
+		vk::ApplicationInfo        m_VK_appInfo;
+		vk::InstanceCreateInfo     m_VK_instInfo;
+		vk::DebugUtilsMessengerEXT m_VK_debugMessenger;
 
-		vk::Queue m_VK_graphicsQueue; // Graphics queue for rendering
-		vk::Queue m_VK_presentationQueue; // Presentation queue for rendering
+		vk::SurfaceKHR       m_VK_surface;
+		vk::PhysicalDevice   m_VK_physicalDevice;
+		vk::Device           m_VK_device;
+
+		vk::Queue m_VK_graphicsQueue;
+		vk::Queue m_VK_presentationQueue;
 		vk::Queue m_VK_transferQueue;
 
-		// The swapchain owns a rotating set of images that we render to and present to the screen.
-		// Think of it like a queue of framebuffers managed by the GPU/display system, but framebuffers are the complete image, after applying the imageview
-		vk::SwapchainKHR m_VK_swapChain; 
-		std::vector<vk::Image> mv_VK_swapChainImages;
-		vk::Format m_VK_swapChainImageFormat;
-		vk::Extent2D m_VK_swapChainExtent;
-
-		// Image views describe how we access each swapchain image, like treating raw images as 2D textures.
-		std::vector<vk::ImageView> mv_VK_swapChainImageViews;
-
-		vk::ShaderModule m_VK_vertShaderModule;
-		vk::ShaderModule m_VK_fragShaderModule;
-
-		//vk::RenderPass m_VK_renderPass;
-		vk::DescriptorSetLayout m_VK_descriptorSetLayout;
-		vk::PipelineLayout m_VK_pipelineLayout;
-		vk::Pipeline m_VK_graphicsPipeline;
 		
+		// Swapchain
+		vk::SwapchainKHR           m_VK_swapChain;
+		std::vector<vk::Image>     mv_VK_swapChainImages;
+		std::vector<vk::ImageView> mv_VK_swapChainImageViews;
+		vk::Format                 m_VK_swapChainImageFormat;
+		vk::Extent2D               m_VK_swapChainExtent;
 
-		//std::vector<vk::Framebuffer> mv_VK_swapChainFramebuffers;
+		
+		// Shaders / pipeline
+		vk::ShaderModule       m_VK_vertShaderModule;
+		vk::ShaderModule       m_VK_fragShaderModule;
 
-		vk::CommandPool m_VK_commandPool;
-		vk::CommandPool m_VK_transferCommandPool;
+		vk::DescriptorSetLayout m_VK_descriptorSetLayout;
+		vk::PipelineLayout      m_VK_pipelineLayout;
+		vk::Pipeline            m_VK_graphicsPipeline;
 
-		std::vector <vk::CommandBuffer> mv_VK_commandBuffers;
+		
+		// Commands
+		vk::CommandPool                m_VK_commandPool;
+		vk::CommandPool                m_VK_transferCommandPool;
+		std::vector<vk::CommandBuffer> mv_VK_commandBuffers;
 
+		
+		// Sync
 		uint32_t m_currentFrame = 0;
+
 		std::vector<vk::Semaphore> mv_VK_imageAvailableSemaphores;
 		std::vector<vk::Semaphore> mv_VK_renderFinishedSemaphores;
 
-		//Timeline semaphore
+		// Timeline semaphore (optional sync style)
 		vk::Semaphore m_VK_timelineSemaphore;
-		uint64_t m_sempahoreTimelineValue = 0;
-		//std::array<uint64_t, kMaxFramesInFlight> m_frameValue;
-		//std::vector<uint64_t> m_imageTimelineValue;
+		uint64_t      m_sempahoreTimelineValue = 0;
 
-
-		vk::Buffer m_VK_vertexBuffer;
-		VmaAllocation m_VMA_vertexAllocation;
-
-		vk::Buffer m_VK_indexBuffer;
-		VmaAllocation m_VMA_indexAllocation;
-
-		std::vector<vk::Buffer> mv_VK_uniformBuffers;
-		std::vector<VmaAllocation> mv_VK_uniformBuffersAllocations;
-		std::vector<void*> mv_VK_uniformBuffersMapped;
-
-		void updateDescriptorSets();
-		vk::DescriptorPool m_VK_descriptorPool;
-		std::vector<vk::DescriptorSet> m_VK_descriptorSets;
-
-		vk::SampleCountFlagBits getMaxUsableSampleCount();
-		vk::SampleCountFlagBits m_VK_msaaSamples = vk::SampleCountFlagBits::e1;
-		uint32_t m_MaxSamplingLevel;
-		vk::Image m_VK_colourImage;
-		vk::ImageView m_VK_colourImageView;
-		VmaAllocation m_VMA_colourImageAllocation;
 		
+		// Geometry buffers
+		vk::Buffer     m_VK_vertexBuffer;
+		VmaAllocation  m_VMA_vertexAllocation;
 
-		uint32_t m_VK_mipLevels;
-		vk::Image m_VK_textureImage;
+		vk::Buffer     m_VK_indexBuffer;
+		VmaAllocation  m_VMA_indexAllocation;
+
+		
+		// Uniforms / descriptors
+		std::vector<vk::Buffer>    mv_VK_uniformBuffers;
+		std::vector<VmaAllocation> mv_VK_uniformBuffersAllocations;
+		std::vector<void*>        mv_VK_uniformBuffersMapped;
+
+		vk::DescriptorPool              m_VK_descriptorPool;
+		std::vector<vk::DescriptorSet>  mv_VK_descriptorSets;
+
+		
+		// MSAA / colour / depth
+		vk::SampleCountFlagBits m_VK_msaaSamples = vk::SampleCountFlagBits::e1;
+
+		uint32_t m_MaxSamplingLevel = 0;   // Max sampling level
+		uint32_t m_minLODLevel = 0;        // User-selected min LOD clamp
+
+		vk::Image      m_VK_colourImage;
+		vk::ImageView  m_VK_colourImageView;
+		VmaAllocation  m_VMA_colourImageAllocation;
+
+		vk::Image      m_VK_depthImage;
+		vk::ImageView  m_VK_depthImageView;
+		VmaAllocation  m_VMA_depthImageAllocation;
+
+		
+		// Texture
+		uint32_t      m_VK_mipLevels = 0;
+
+		vk::Image     m_VK_textureImage;
 		VmaAllocation m_VMA_textureImageAllocation;
 
 		vk::ImageView m_VK_textureImageView;
-		vk::Sampler m_VK_textureSampler;
+		vk::Sampler   m_VK_textureSampler;
 
-		VmaPool m_VMA_smallItemsPool;
+		
+		// VMA allocator / pools
+		VmaAllocator m_VMA_allocator = VK_NULL_HANDLE;
+		VmaPool      m_VMA_smallItemsPool = VK_NULL_HANDLE;
 
-		vk::Image m_VK_depthImage;
-		VmaAllocation m_VMA_depthImageAllocation;
-
-		vk::ImageView m_VK_depthImageView;
-
+		// Misc
 		vk::Extent2D m_VK_currentExtent;
+		bool m_vsync = true;
 
-
+		
+		// ImGui
 #if defined(IMGUI_ENABLED)
 		void InitImgui();
 		void createImguiDescriptorPool();
-
 		vk::DescriptorPool m_VK_imguiDescriptorPool;
 #endif
-
-		bool m_vsync = true;
-
 	};
 
 }

@@ -107,19 +107,6 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
         .setEnabledLayerCount(static_cast<uint32_t>(mv_VK_Layers.size()))
         .setPpEnabledLayerNames(mv_VK_Layers.data());
 
-	//Create the Vulkan instance/Initialize Vulkan
-    //VkValidationFeatureEnableEXT enabledFeatures[] = {
-    //    VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
-    //    // Optional extras:
-    //    // VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
-    //    // VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
-    //};
-
-    //VkValidationFeaturesEXT featuresInfo{};
-    /*featuresInfo.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-    featuresInfo.enabledValidationFeatureCount = static_cast<uint32_t>(std::size(enabledFeatures));
-    featuresInfo.pEnabledValidationFeatures = enabledFeatures;*/
-
     VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
     populateDebugMessengerCreateInfo(debugCreateInfo);
 
@@ -202,8 +189,6 @@ CraigError Craig::Renderer::update(const float& deltaTime) {
 #endif
 
     drawFrame(deltaTime);
-
-
 
 	return ret;
 }
@@ -1005,7 +990,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     commandBuffer.setScissor(0, scissor);
 
-    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_VK_pipelineLayout, 0, m_VK_descriptorSets[m_currentFrame], nullptr);
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_VK_pipelineLayout, 0, mv_VK_descriptorSets[m_currentFrame], nullptr);
 
     /*
     indexCount: Even though we don't have a vertex buffer, we technically still have 3 vertices to draw.
@@ -1553,8 +1538,8 @@ void Craig::Renderer::createDescriptorSets() {
         .setDescriptorSetCount(static_cast<uint32_t>(kMaxFramesInFlight))
         .setSetLayouts(layouts);
 
-    m_VK_descriptorSets.resize(kMaxFramesInFlight);
-    m_VK_descriptorSets = m_VK_device.allocateDescriptorSets(allocInfo);
+    mv_VK_descriptorSets.resize(kMaxFramesInFlight);
+    mv_VK_descriptorSets = m_VK_device.allocateDescriptorSets(allocInfo);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
         vk::DescriptorBufferInfo bufferInfo{};
@@ -1570,7 +1555,7 @@ void Craig::Renderer::createDescriptorSets() {
 
         std::array<vk::WriteDescriptorSet, 2> descriptorWrites{};
         descriptorWrites[0]
-            .setDstSet(m_VK_descriptorSets[i])
+            .setDstSet(mv_VK_descriptorSets[i])
             .setDstBinding(0)
             .setDstArrayElement(0)
             .setDescriptorType(vk::DescriptorType::eUniformBuffer)
@@ -1578,7 +1563,7 @@ void Craig::Renderer::createDescriptorSets() {
             .setBufferInfo(bufferInfo);
 
         descriptorWrites[1]
-            .setDstSet(m_VK_descriptorSets[i])
+            .setDstSet(mv_VK_descriptorSets[i])
             .setDstBinding(1)
             .setDstArrayElement(0)
             .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
@@ -1616,7 +1601,7 @@ void Craig::Renderer::updateDescriptorSets() {
 
         vk::WriteDescriptorSet descriptorWrite{};
         descriptorWrite
-            .setDstSet(m_VK_descriptorSets[i])
+            .setDstSet(mv_VK_descriptorSets[i])
             .setDstBinding(1)
             .setDstArrayElement(0)
             .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
