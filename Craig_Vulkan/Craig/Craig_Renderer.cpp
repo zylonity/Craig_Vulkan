@@ -1193,8 +1193,8 @@ void Craig::Renderer::transitionSwapImage(vk::CommandBuffer cmd, vk::Image img, 
     barrier
         .setOldLayout(oldLayout)
         .setNewLayout(newLayout)
-        .setSrcQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
-        .setDstQueueFamilyIndex(VK_QUEUE_FAMILY_IGNORED)
+        .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
+        .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
         .setImage(img)
         .setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
 
@@ -1214,8 +1214,9 @@ void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, 
     //Begin recording to buffer
     vk::CommandBuffer tempBuffer = useTransferQueue ? buffer_beginSingleTimeCommands() : buffer_beginSingleTimeCommandsGFX();
 
-    vk::ImageMemoryBarrier barrier{};
-    barrier.setOldLayout(oldLayout)
+    vk::ImageMemoryBarrier2 barrier{};
+    barrier
+        .setOldLayout(oldLayout)
         .setNewLayout(newLayout)
         .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
         .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
@@ -1230,34 +1231,34 @@ void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, 
                          .setLayerCount(1);
                
 
-    vk::PipelineStageFlags sourceStage, destinationStage;
-
     if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal) {
-        barrier.setDstAccessMask(vk::AccessFlagBits::eTransferWrite);
+        barrier
+            .setSrcStageMask(vk::PipelineStageFlagBits2::eTopOfPipe)
+            .setSrcAccessMask(vk::AccessFlagBits2::eNone)
+            .setDstStageMask(vk::PipelineStageFlagBits2::eTransfer)
+            .setDstAccessMask(vk::AccessFlagBits2::eTransferWrite);
 
-        sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
-        destinationStage = vk::PipelineStageFlagBits::eTransfer;
     }
     else if(oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout == vk::ImageLayout::eShaderReadOnlyOptimal){
 
-        barrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
-
-        barrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
-
-        sourceStage = vk::PipelineStageFlagBits::eTransfer;
-        destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
-
-        
+        barrier
+            .setSrcStageMask(vk::PipelineStageFlagBits2::eTransfer)
+            .setSrcAccessMask(vk::AccessFlagBits2::eTransferWrite)
+            .setDstStageMask(vk::PipelineStageFlagBits2::eFragmentShader)
+            .setDstAccessMask(vk::AccessFlagBits2::eShaderRead);
     }
     else {
         throw std::invalid_argument("unsupported layout transition!");
     }
 
-    tempBuffer.pipelineBarrier(sourceStage, destinationStage,
-        vk::DependencyFlagBits::eByRegion, 
-        nullptr, 
-        nullptr, 
-        barrier);
+
+    vk::DependencyInfo dep{};
+    dep
+        .setImageMemoryBarrierCount(1)
+        .setPImageMemoryBarriers(&barrier)
+        .setDependencyFlags(vk::DependencyFlagBits::eByRegion);
+
+    tempBuffer.pipelineBarrier2(dep);
 
 
     useTransferQueue ? buffer_endSingleTimeCommands(tempBuffer) : buffer_endSingleTimeCommandsGFX(tempBuffer);
