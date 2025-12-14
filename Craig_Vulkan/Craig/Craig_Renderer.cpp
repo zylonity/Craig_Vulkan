@@ -172,7 +172,7 @@ void Craig::Renderer::InitImgui() {
     init_info.Subpass = 0;
     init_info.MinImageCount = 2;
     init_info.ImageCount = kMaxFramesInFlight;
-    init_info.MSAASamples = static_cast<VkSampleCountFlagBits>(m_VK_msaaSamples);
+    init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     init_info.CheckVkResultFn = check_vk_result;
     init_info.UseDynamicRendering = true;
 
@@ -219,17 +219,11 @@ void Craig::Renderer::InitVulkan() {
 
     createSwapChain();
     createImageViews();
-    //createRenderPass();
     createColourResources();
     createDepthResources();
     createDescriptorSetLayout();
     createGraphicsPipeline();
     createCommandPool();
-    
-    
-   // createFrameBuffers();
-    //createTextureImage();
-    //createTextureImageView();
     
     Craig::ResourceManager::getInstance().setRendererPtr(this);
     Craig::ResourceManager::getInstance().loadModel(); 
@@ -258,9 +252,8 @@ void Craig::Renderer::initVMA() {
     vmaCreateInfo.physicalDevice = m_VK_physicalDevice;
     vmaCreateInfo.device = m_VK_device;
     vmaCreateInfo.vulkanApiVersion = VK_API_VERSION_1_4;
-    //printf("Using vulkan api version: %i\n", props.apiVersion);
 
-    VmaVulkanFunctions vmaFunctions{};                 // <-- important
+    VmaVulkanFunctions vmaFunctions{};                 
     vmaFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
     vmaFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
     vmaCreateInfo.pVulkanFunctions = &vmaFunctions;
@@ -537,7 +530,7 @@ void Craig::Renderer::createSwapChain() {
 
     printf("Creating draw buffer/swap chain with %i images\n", imageCount);
 
-    vk::SwapchainCreateInfoKHR createInfo;
+    vk::SwapchainCreateInfoKHR createInfo{};
     createInfo
         .setSurface(m_VK_surface)
         .setMinImageCount(imageCount)
@@ -590,7 +583,7 @@ void Craig::Renderer::createSwapChain() {
 }
 
 vk::ImageView Craig::Renderer::createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags, uint32_t mipLevels) {
-    vk::ImageViewCreateInfo createInfo;
+    vk::ImageViewCreateInfo createInfo{};
     createInfo
         .setImage(image)
         .setViewType(vk::ImageViewType::e2D)
@@ -648,13 +641,13 @@ void Craig::Renderer::createGraphicsPipeline() {
 
 
     // Set up shader stages for the pipeline
-    vk::PipelineShaderStageCreateInfo vertShaderStageInfo;
+    vk::PipelineShaderStageCreateInfo vertShaderStageInfo{};
     vertShaderStageInfo
         .setStage(vk::ShaderStageFlagBits::eVertex)
         .setModule(m_VK_vertShaderModule)
         .setPName("main");
 
-    vk::PipelineShaderStageCreateInfo fragShaderStageInfo;
+    vk::PipelineShaderStageCreateInfo fragShaderStageInfo{};
     fragShaderStageInfo
         .setStage(vk::ShaderStageFlagBits::eFragment)
         .setModule(m_VK_fragShaderModule)
@@ -666,25 +659,25 @@ void Craig::Renderer::createGraphicsPipeline() {
     std::array<vk::VertexInputAttributeDescription, 3>  attributeDescriptions = Vertex::getAttributeDescriptions();
 
     //No vertex data to load for now since its hardcoded into the shader.
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo
         .setVertexBindingDescriptionCount(1)
         .setPVertexBindingDescriptions(&bindingDescription) //These should point to an array of structs w vertex descriptions
         .setVertexAttributeDescriptionCount(static_cast<uint32_t>(attributeDescriptions.size()))
         .setPVertexAttributeDescriptions(attributeDescriptions.data());
 
-    vk::PipelineInputAssemblyStateCreateInfo inputAssembly;
+    vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly
         .setTopology(vk::PrimitiveTopology::eTriangleList)
         .setPrimitiveRestartEnable(vk::False);
 
     // Viewport/scissor are dynamic (set later in the command buffer)
-    vk::PipelineViewportStateCreateInfo viewportState;
+    vk::PipelineViewportStateCreateInfo viewportState{};
     viewportState
         .setViewportCount(1)
         .setScissorCount(1);
 
-    vk::PipelineRasterizationStateCreateInfo rasterizer;
+    vk::PipelineRasterizationStateCreateInfo rasterizer{};
     rasterizer
         .setDepthClampEnable(vk::False)
         .setPolygonMode(vk::PolygonMode::eFill)
@@ -695,7 +688,7 @@ void Craig::Renderer::createGraphicsPipeline() {
 
     //Multisampling/Anti-Aliasing
     //Keeping it disabled for now but will follow up later in the tutorial
-    vk::PipelineMultisampleStateCreateInfo multisampling;
+    vk::PipelineMultisampleStateCreateInfo multisampling{};
     multisampling
         .setSampleShadingEnable(vk::False)
         .setRasterizationSamples(m_VK_msaaSamples);
@@ -708,7 +701,7 @@ void Craig::Renderer::createGraphicsPipeline() {
         .setDepthBoundsTestEnable(false)
         .setStencilTestEnable(false);
 
-    vk::PipelineColorBlendAttachmentState colourBlendAttachment;
+    vk::PipelineColorBlendAttachmentState colourBlendAttachment{};
     colourBlendAttachment
         .setColorWriteMask(
         vk::ColorComponentFlagBits::eR |
@@ -717,7 +710,7 @@ void Craig::Renderer::createGraphicsPipeline() {
         vk::ColorComponentFlagBits::eA)
         .setBlendEnable(vk::False);
 
-    vk::PipelineColorBlendStateCreateInfo colourBlending;
+    vk::PipelineColorBlendStateCreateInfo colourBlending{};
     colourBlending
         .setLogicOpEnable(vk::False)
         .setLogicOp(vk::LogicOp::eCopy)
@@ -730,13 +723,13 @@ void Craig::Renderer::createGraphicsPipeline() {
         vk::DynamicState::eScissor
     };
 
-    vk::PipelineDynamicStateCreateInfo dynamicState;
+    vk::PipelineDynamicStateCreateInfo dynamicState{};
     dynamicState
         .setDynamicStateCount(static_cast<uint32_t>(dynamicStates.size()))
         .setPDynamicStates(dynamicStates.data());
 
 
-    vk::PipelineLayoutCreateInfo pipelineLayoutInfo;
+    vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.setSetLayoutCount(1)
         .setSetLayouts(m_VK_descriptorSetLayout);
 
@@ -757,7 +750,7 @@ void Craig::Renderer::createGraphicsPipeline() {
         .setDepthAttachmentFormat(depthFormat); 
 
 
-    vk::GraphicsPipelineCreateInfo pipelineInfo;
+    vk::GraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo
         .setPNext(&renderingInfo)
         .setStageCount(2)
@@ -857,14 +850,6 @@ void Craig::Renderer::recreateSwapChainFull() {
 
     m_VK_device.waitIdle();
 
-#if defined(IMGUI_ENABLED)
-    //We have to recreate the imgui stuff since it relies on our renderpass and frame buffer, aside from creating a whole different set for imgui, this is easier lol.
-    ImGui_ImplSDL2_Shutdown();
-    ImGui_ImplVulkan_Shutdown();
-    ImGui::DestroyContext();
-#endif
-
-
     cleanupGraphicsPipeline();
 
 
@@ -889,28 +874,23 @@ void Craig::Renderer::recreateSwapChainFull() {
     createColourResources();
     createDepthResources();
     createGraphicsPipeline();
-
-#if defined(IMGUI_ENABLED)
-    InitImgui();
-#endif
-
-    
-    update(0.0f); //This will create a new imgui frame and fix any imgui issues
 }
 
 void Craig::Renderer::createCommandPool() {
 
     QueueFamilyIndices queueFamilyIndices = findQueueFamilies(m_VK_physicalDevice);
 
-    vk::CommandPoolCreateInfo poolInfo;
-    poolInfo.setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer)
+    vk::CommandPoolCreateInfo poolInfo{};
+    poolInfo
+        .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer)
         .setQueueFamilyIndex(queueFamilyIndices.graphicsFamily.value());
 
     m_VK_commandPool = m_VK_device.createCommandPool(poolInfo);
 
     if (queueFamilyIndices.hasDedicatedTransfer()) {
-        vk::CommandPoolCreateInfo info;
-        info.setQueueFamilyIndex(queueFamilyIndices.transferFamily.value())
+        vk::CommandPoolCreateInfo info{};
+        info
+            .setQueueFamilyIndex(queueFamilyIndices.transferFamily.value())
             .setFlags(vk::CommandPoolCreateFlagBits::eTransient); // copies are short-lived
 
         m_VK_transferCommandPool = m_VK_device.createCommandPool(info);
@@ -925,8 +905,9 @@ void Craig::Renderer::createCommandPool() {
 void Craig::Renderer::createCommandBuffers() {
     mv_VK_commandBuffers.resize(kMaxFramesInFlight);
 
-    vk::CommandBufferAllocateInfo allocInfo;
-    allocInfo.setCommandPool(m_VK_commandPool)
+    vk::CommandBufferAllocateInfo allocInfo{};
+    allocInfo
+        .setCommandPool(m_VK_commandPool)
         .setLevel(vk::CommandBufferLevel::ePrimary)
         .setCommandBufferCount((uint32_t)mv_VK_commandBuffers.size());
 
@@ -942,7 +923,7 @@ void Craig::Renderer::createCommandBuffers() {
 
 void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex) {
 
-    vk::CommandBufferBeginInfo beginInfo;
+    vk::CommandBufferBeginInfo beginInfo{};
 
     if (commandBuffer.begin(&beginInfo) != vk::Result::eSuccess) {
         throw std::runtime_error("failed to begin recording command buffer!");
@@ -1045,12 +1026,35 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     
 
-#if defined(IMGUI_ENABLED)
-    ImGui::Render();
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
-#endif
+//#if defined(IMGUI_ENABLED)
+//    ImGui::Render();
+//    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+//#endif
 
     commandBuffer.endRendering();
+    
+#if defined(IMGUI_ENABLED)
+    vk::RenderingAttachmentInfo uiColourAtt{};
+    uiColourAtt
+        .setImageView(mv_VK_swapChainImageViews[imageIndex])
+        .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
+        .setLoadOp(vk::AttachmentLoadOp::eLoad)     // keep what scene wrote
+        .setStoreOp(vk::AttachmentStoreOp::eStore);
+
+    vk::RenderingInfo uiRi{};
+    uiRi
+        .setRenderArea({ {0,0}, m_VK_swapChainExtent })
+        .setLayerCount(1)
+        .setColorAttachmentCount(1)
+        .setPColorAttachments(&uiColourAtt)
+        .setPDepthAttachment(nullptr);   // key line (or just don’t set it)
+    commandBuffer.beginRendering(uiRi);
+
+    ImGui::Render();
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+
+    commandBuffer.endRendering();
+#endif
 
     transitionSwapImage(commandBuffer, mv_VK_swapChainImages[imageIndex], vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR);
 
@@ -1066,12 +1070,12 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
 void Craig::Renderer::createSyncObjects() {
 
-    vk::SemaphoreTypeCreateInfo typeInfo;
+    vk::SemaphoreTypeCreateInfo typeInfo{};
     typeInfo
         .setSemaphoreType(vk::SemaphoreType::eTimeline)
         .setInitialValue(0);
     
-    vk::SemaphoreCreateInfo timelineInfo;
+    vk::SemaphoreCreateInfo timelineInfo{};
     timelineInfo.setPNext(&typeInfo);
 
     m_VK_timelineSemaphore = m_VK_device.createSemaphore(timelineInfo);
@@ -1080,7 +1084,7 @@ void Craig::Renderer::createSyncObjects() {
     mv_VK_imageAvailableSemaphores.resize(kMaxFramesInFlight);
     mv_VK_renderFinishedSemaphores.resize(mv_VK_swapChainImages.size());
 
-    vk::SemaphoreCreateInfo semaphoreInfo;
+    vk::SemaphoreCreateInfo semaphoreInfo{};
    
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
         mv_VK_imageAvailableSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
@@ -1120,7 +1124,7 @@ void Craig::Renderer::createBufferVMA(
 
 vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommands() {
     //Allocate a temporary command buffer
-    vk::CommandBufferAllocateInfo allocInfo;
+    vk::CommandBufferAllocateInfo allocInfo{};
     allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
         .setCommandPool(m_VK_transferCommandPool)
         .setCommandBufferCount(1);
@@ -1129,7 +1133,7 @@ vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommands() {
     vk::CommandBuffer commandBuffer = m_VK_device.allocateCommandBuffers(allocInfo)[0];
 
     //Start recording the command buffer
-    vk::CommandBufferBeginInfo beginInfo;
+    vk::CommandBufferBeginInfo beginInfo{};
     beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
 
     commandBuffer.begin(beginInfo);
@@ -1142,7 +1146,7 @@ void Craig::Renderer::buffer_endSingleTimeCommands(vk::CommandBuffer commandBuff
     //Stop recording
     commandBuffer.end();
 
-    vk::SubmitInfo submitInfo;
+    vk::SubmitInfo submitInfo{};
     submitInfo.setCommandBufferCount(1)
         .setCommandBuffers(commandBuffer);
 
@@ -1154,7 +1158,7 @@ void Craig::Renderer::buffer_endSingleTimeCommands(vk::CommandBuffer commandBuff
 
 vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommandsGFX() {
     //Allocate a temporary command buffer
-    vk::CommandBufferAllocateInfo allocInfo;
+    vk::CommandBufferAllocateInfo allocInfo{};
     allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
         .setCommandPool(m_VK_commandPool)
         .setCommandBufferCount(1);
@@ -1163,7 +1167,7 @@ vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommandsGFX() {
     vk::CommandBuffer commandBuffer = m_VK_device.allocateCommandBuffers(allocInfo)[0];
 
     //Start recording the command buffer
-    vk::CommandBufferBeginInfo beginInfo;
+    vk::CommandBufferBeginInfo beginInfo{};
     beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
 
     commandBuffer.begin(beginInfo);
@@ -1176,7 +1180,7 @@ void Craig::Renderer::buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandB
     //Stop recording
     commandBuffer.end();
 
-    vk::SubmitInfo submitInfo;
+    vk::SubmitInfo submitInfo{};
     submitInfo.setCommandBufferCount(1)
         .setCommandBuffers(commandBuffer);
 
@@ -1192,7 +1196,7 @@ void Craig::Renderer::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk:
     vk::CommandBuffer tempBuffer = buffer_beginSingleTimeCommands();
 
     //Copy over the data
-    vk::BufferCopy copyRegion;
+    vk::BufferCopy copyRegion{};
     copyRegion.setSize(size);
     tempBuffer.copyBuffer(srcBuffer, dstBuffer, copyRegion);
 
@@ -1228,7 +1232,7 @@ void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, 
     //Begin recording to buffer
     vk::CommandBuffer tempBuffer = useTransferQueue ? buffer_beginSingleTimeCommands() : buffer_beginSingleTimeCommandsGFX();
 
-    vk::ImageMemoryBarrier barrier;
+    vk::ImageMemoryBarrier barrier{};
     barrier.setOldLayout(oldLayout)
         .setNewLayout(newLayout)
         .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
@@ -1281,7 +1285,7 @@ void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, 
 void Craig::Renderer::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height) {
     vk::CommandBuffer tempBuffer = buffer_beginSingleTimeCommands();
 
-    vk::BufferImageCopy region;
+    vk::BufferImageCopy region{};
     region.setBufferOffset(0)
         .setBufferRowLength(0)
         .setBufferImageHeight(0);
@@ -1325,7 +1329,7 @@ void Craig::Renderer::createVertexBuffer() {
 
     vk::DeviceSize bufferSize = sizeof(model.subMeshes[0]->m_vertices[0]) * totalVertexCount;
 
-    vk::Buffer stagingBuffer;
+    vk::Buffer stagingBuffer{};
     VmaAllocation stagingAlloc{};
 
     VmaAllocationCreateInfo stagingAci{};
@@ -1380,7 +1384,7 @@ void Craig::Renderer::createIndexBuffer() {
 
     vk::DeviceSize bufferSize = sizeof(model.subMeshes[0]->m_indices[0]) * totalIndexCount;
 
-    vk::Buffer stagingBuffer;
+    vk::Buffer stagingBuffer{};
     VmaAllocation stagingAlloc{};
 
     VmaAllocationCreateInfo stagingAci{};
@@ -1433,14 +1437,14 @@ void Craig::Renderer::createIndexBuffer() {
 //A descriptor set specifies the actual buffer or image resources that will be bound to the descriptors, just like a framebuffer specifies the actual image views to bind to render pass attachments.
 void Craig::Renderer::createDescriptorSetLayout() {
 
-    vk::DescriptorSetLayoutBinding uboLayoutBinding;
+    vk::DescriptorSetLayoutBinding uboLayoutBinding{};
     uboLayoutBinding
         .setBinding(0)
         .setDescriptorType(vk::DescriptorType::eUniformBuffer)
         .setDescriptorCount(1)
         .setStageFlags(vk::ShaderStageFlagBits::eVertex);
 
-    vk::DescriptorSetLayoutBinding samplerLayourBinding;
+    vk::DescriptorSetLayoutBinding samplerLayourBinding{};
     samplerLayourBinding
         .setBinding(1)
         .setDescriptorCount(1)
@@ -1450,7 +1454,7 @@ void Craig::Renderer::createDescriptorSetLayout() {
 
     std::array<vk::DescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayourBinding };
 
-    vk::DescriptorSetLayoutCreateInfo layoutInfo;
+    vk::DescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo
         .setBindingCount(static_cast<uint32_t>(bindings.size()))
         .setBindings(bindings);
@@ -1500,7 +1504,7 @@ void Craig::Renderer::createUniformBuffers() {
 
     vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
     
-    vk::Buffer stagingBuffer;
+    vk::Buffer stagingBuffer{};
     VmaAllocation stagingAlloc{};
 
     VmaAllocationCreateInfo stagingAci{};
@@ -1534,7 +1538,7 @@ void Craig::Renderer::createDescriptorPool() {
         .setType(vk::DescriptorType::eCombinedImageSampler)
         .setDescriptorCount(static_cast<uint32_t>(kMaxFramesInFlight));
 
-    vk::DescriptorPoolCreateInfo poolInfo;
+    vk::DescriptorPoolCreateInfo poolInfo{};
     poolInfo
         .setPoolSizeCount(static_cast<uint32_t>(poolSizes.size()))
         .setPoolSizes(poolSizes)
@@ -1547,7 +1551,7 @@ void Craig::Renderer::createDescriptorPool() {
 void Craig::Renderer::createDescriptorSets() {
 
     std::vector<vk::DescriptorSetLayout> layouts(kMaxFramesInFlight, m_VK_descriptorSetLayout);
-    vk::DescriptorSetAllocateInfo allocInfo;
+    vk::DescriptorSetAllocateInfo allocInfo{};
     allocInfo.setDescriptorPool(m_VK_descriptorPool)
         .setDescriptorSetCount(static_cast<uint32_t>(kMaxFramesInFlight))
         .setSetLayouts(layouts);
@@ -1556,12 +1560,12 @@ void Craig::Renderer::createDescriptorSets() {
     m_VK_descriptorSets = m_VK_device.allocateDescriptorSets(allocInfo);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
-        vk::DescriptorBufferInfo bufferInfo;
+        vk::DescriptorBufferInfo bufferInfo{};
         bufferInfo.setBuffer(mv_VK_uniformBuffers[i])
             .setOffset(0)
             .setRange(sizeof(UniformBufferObject));
 
-        vk::DescriptorImageInfo imageInfo;
+        vk::DescriptorImageInfo imageInfo{};
         imageInfo
             .setImageView(m_VK_textureImageView)
             .setSampler(m_VK_textureSampler)
@@ -1607,13 +1611,13 @@ void Craig::Renderer::updateDescriptorSets() {
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
 
-        vk::DescriptorImageInfo imageInfo;
+        vk::DescriptorImageInfo imageInfo{};
         imageInfo
             .setImageView(m_VK_textureImageView)
             .setSampler(m_VK_textureSampler)
             .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 
-        vk::WriteDescriptorSet descriptorWrite;
+        vk::WriteDescriptorSet descriptorWrite{};
         descriptorWrite
             .setDstSet(m_VK_descriptorSets[i])
             .setDstBinding(1)
@@ -1698,7 +1702,7 @@ void Craig::Renderer::createTextureImageView() {
 
 void Craig::Renderer::createTextureSampler() {
     
-    vk::PhysicalDeviceProperties physicalDeviceProperties;
+    vk::PhysicalDeviceProperties physicalDeviceProperties{};
     physicalDeviceProperties = m_VK_physicalDevice.getProperties();
 
     vk::SamplerCreateInfo samplerInfo;
@@ -1763,7 +1767,6 @@ void Craig::Renderer::updateSamplingLevel(int levelToSet) {
     default:
         break;
     }
-
     recreateSwapChainFull();
 
 }
