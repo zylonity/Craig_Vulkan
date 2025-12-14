@@ -49,7 +49,7 @@ CraigError Craig::Window::update(const float& deltaTime) {
 	while (SDL_PollEvent(&event)) {
 		m_currentCamera->processSDLEvent(event);
 #if defined(IMGUI_ENABLED)
-		ImGui_ImplSDL2_ProcessEvent(&event);
+		//ImGui_ImplSDL2_ProcessEvent(&event);
 #endif
 
 		switch (event.type) {

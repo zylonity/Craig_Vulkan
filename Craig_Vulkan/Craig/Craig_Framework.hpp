@@ -9,7 +9,7 @@ namespace Craig {
 	
 	//Forward declarations
 	class Window;
-	class Renderer;
+	class Renderer2;
 	class ImguiEditor;
 	class SceneManager;
 
@@ -23,7 +23,7 @@ namespace Craig {
 	private:
 
 		Craig::Window* mp_Window			= nullptr;
-		Craig::Renderer* mp_Renderer		= nullptr;
+		Craig::Renderer2* mp_Renderer		= nullptr;
 		Craig::SceneManager* mp_SceneManager = nullptr;
 
 #if defined(IMGUI_ENABLED)

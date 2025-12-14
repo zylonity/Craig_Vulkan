@@ -180,6 +180,7 @@ xcopy /Y /D "$(VULKAN_SDK)\Bin\SDL2.dll" "$(OutDir)."</Command>
     <ClCompile Include="Craig\Craig_Editor.cpp" />
     <ClCompile Include="Craig\Craig_Framework.cpp" />
     <ClCompile Include="Craig\Craig_Renderer.cpp" />
+    <ClCompile Include="Craig\Craig_Renderer2.cpp" />
     <ClCompile Include="Craig\Craig_ResourceManager.cpp" />
     <ClCompile Include="Craig\Craig_Scene.cpp" />
     <ClCompile Include="Craig\Craig_SceneManager.cpp" />
@@ -201,6 +202,7 @@ xcopy /Y /D "$(VULKAN_SDK)\Bin\SDL2.dll" "$(OutDir)."</Command>
     <ClInclude Include="Craig\Craig_Editor.hpp" />
     <ClInclude Include="Craig\Craig_Framework.hpp" />
     <ClInclude Include="Craig\Craig_Renderer.hpp" />
+    <ClInclude Include="Craig\Craig_Renderer2.hpp" />
     <ClInclude Include="Craig\Craig_ResourceManager.hpp" />
     <ClInclude Include="Craig\Craig_Scene.hpp" />
     <ClInclude Include="Craig\Craig_SceneManager.hpp" />

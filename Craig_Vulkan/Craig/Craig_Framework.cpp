@@ -5,7 +5,7 @@
 //Craig includes
 #include "Craig_Framework.hpp"
 #include "Craig_Window.hpp"
-#include "Craig_Renderer.hpp"
+#include "Craig_Renderer2.hpp"
 #include "Craig_ResourceManager.hpp"
 #include "Craig_Editor.hpp"
 #include "Craig_SceneManager.hpp"
@@ -24,8 +24,7 @@ CraigError Craig::Framework::init() {
 	assert(ret == CRAIG_SUCCESS);											// Always checking if we have a valid return code
 
 	// Initialize our Renderer
-	mp_Renderer = new Craig::Renderer;
-	Craig::ImguiEditor::getInstance().setRenderer(mp_Renderer);
+	mp_Renderer = new Craig::Renderer2;
 	assert(mp_Renderer != nullptr && "mp_Renderer failed to allocate memory");
 	ret = mp_Renderer->init(mp_Window);
 	assert(ret == CRAIG_SUCCESS);											
@@ -39,7 +38,6 @@ CraigError Craig::Framework::init() {
 	ret = mp_SceneManager->init();
 	assert(ret == CRAIG_SUCCESS);
 
-	mp_Renderer->setSceneManager(mp_SceneManager);
 
 	m_LastFrameTime = std::chrono::steady_clock::now();
 
