@@ -764,7 +764,7 @@ void Craig::Renderer::createGraphicsPipeline() {
         .setPColorBlendState(&colourBlending)
         .setPDynamicState(&dynamicState)
         .setLayout(m_VK_pipelineLayout)
-        .setRenderPass(VK_NULL_HANDLE);
+        .setRenderPass(VK_NULL_HANDLE); //Needs to be null as we're using a dynamic renderer
 
 
     auto result = m_VK_device.createGraphicsPipeline(VK_NULL_HANDLE, pipelineInfo);
@@ -929,9 +929,8 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
         throw std::runtime_error("failed to begin recording command buffer!");
     }
 
+    //We have to transition the swap image manually, render passes used to do this implicitly :(
     transitionSwapImage(commandBuffer, mv_VK_swapChainImages[imageIndex], vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
-
-    bool msaa = (m_VK_msaaSamples != vk::SampleCountFlagBits::e1);
 
     vk::ClearValue clearColour;
     clearColour.setColor({ kClearColour[0], kClearColour[1], kClearColour[2], kClearColour[3] });
@@ -939,8 +938,9 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     vk::ClearValue clearDepth;
     clearDepth.setDepthStencil({ 1.0f, 0 });
 
-    vk::RenderingAttachmentInfo colorAtt{};
-    colorAtt
+    // Dynamic rendering attachments fdor colour and depth
+    vk::RenderingAttachmentInfo colourAtt{};
+    colourAtt
         .setLoadOp(vk::AttachmentLoadOp::eClear)
         .setStoreOp(vk::AttachmentStoreOp::eStore)
         .setClearValue(clearColour);
@@ -953,13 +953,15 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
         .setStoreOp(vk::AttachmentStoreOp::eDontCare)
         .setClearValue(clearDepth);
 
+    bool msaa = (m_VK_msaaSamples != vk::SampleCountFlagBits::e1);
+
     if (!msaa) {
-        colorAtt
+        colourAtt
             .setImageView(mv_VK_swapChainImageViews[imageIndex])
             .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal);
     }
     else {
-        colorAtt
+        colourAtt
             .setImageView(m_VK_colourImageView)
             .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
             .setResolveImageView(mv_VK_swapChainImageViews[imageIndex])
@@ -967,12 +969,13 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
             .setResolveMode(vk::ResolveModeFlagBits::eAverage);
     }
 
+    // vk::RenderingInfo begins a dynamic rendering instance.
     vk::RenderingInfo ri{};
     ri
         .setRenderArea({ {0,0}, m_VK_swapChainExtent })
         .setLayerCount(1)
         .setColorAttachmentCount(1)
-        .setPColorAttachments(&colorAtt)
+        .setPColorAttachments(&colourAtt)
         .setPDepthAttachment(&depthAtt);
 
     commandBuffer.beginRendering(ri);
@@ -1024,16 +1027,10 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
             0);
     }
 
-    
-
-//#if defined(IMGUI_ENABLED)
-//    ImGui::Render();
-//    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
-//#endif
-
     commandBuffer.endRendering();
     
 #if defined(IMGUI_ENABLED)
+    //gotta render imgui's UI separately
     vk::RenderingAttachmentInfo uiColourAtt{};
     uiColourAtt
         .setImageView(mv_VK_swapChainImageViews[imageIndex])
