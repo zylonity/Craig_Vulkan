@@ -1685,11 +1685,17 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
 
     m_camera.m_aspect = m_VK_swapChainExtent.width / (float)m_VK_swapChainExtent.height;
     
-    //TODO: Figure this shit out
-    ubo.model = glm::mat4(1.0f);//glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));// *glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    
+    std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
+    Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
+
+    for (Craig::GameObject& gameObject : currentSceneObjects)
+    {
+        ubo.model = gameObject.GetModelMatrix();
+        
+    }
     ubo.view = m_camera.getView();
     ubo.proj = m_camera.getProj();
-
     m_camera.update(deltaTime);
     
 
@@ -2158,10 +2164,6 @@ CraigError Craig::Renderer::terminate() {
     vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
 
     m_VK_device.destroySampler(m_VK_textureSampler);
-
-   /* m_VK_device.destroyImageView(m_VK_textureImageView);
-
-    vmaDestroyImage(m_VMA_allocator, m_VK_textureImage, m_VMA_textureImageAllocation);*/
 
     Craig::ResourceManager::getInstance().terminateModels(m_VK_device, m_VMA_allocator);
 
