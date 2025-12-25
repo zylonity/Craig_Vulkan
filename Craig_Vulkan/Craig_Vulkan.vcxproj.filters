@@ -88,6 +88,9 @@
     <ClCompile Include="Craig\Craig_SceneManager.cpp">
       <Filter>Source Files\Craig</Filter>
     </ClCompile>
+    <ClCompile Include="Craig\Craig_GameObject.cpp">
+      <Filter>Source Files\Craig</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Craig\Craig_Framework.hpp">
@@ -161,6 +164,9 @@
     </ClInclude>
     <ClInclude Include="External\json.hpp">
       <Filter>Header Files\External</Filter>
+    </ClInclude>
+    <ClInclude Include="Craig\Craig_GameObject.hpp">
+      <Filter>Header Files\Craig</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

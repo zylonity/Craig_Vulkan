@@ -1,17 +1,16 @@
 #pragma once
 #include "Craig_Constants.hpp"
-#include "Craig_Scene.hpp"
+
 
 namespace Craig {
 
-	class SceneManager {
+	class GameObject {
 
 	public:
 		CraigError init();
-		CraigError update(const float& deltaTime);
+		CraigError update();
 		CraigError terminate();
 	private:
-		Craig::Scene* mp_CurrentScene;
 
 
 	};

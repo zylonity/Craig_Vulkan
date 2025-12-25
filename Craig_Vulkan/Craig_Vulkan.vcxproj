@@ -179,6 +179,7 @@ xcopy /Y /D "$(VULKAN_SDK)\Bin\SDL2.dll" "$(OutDir)."</Command>
     <ClCompile Include="Craig\Craig_Camera.cpp" />
     <ClCompile Include="Craig\Craig_Editor.cpp" />
     <ClCompile Include="Craig\Craig_Framework.cpp" />
+    <ClCompile Include="Craig\Craig_GameObject.cpp" />
     <ClCompile Include="Craig\Craig_Renderer.cpp" />
     <ClCompile Include="Craig\Craig_ResourceManager.cpp" />
     <ClCompile Include="Craig\Craig_Scene.cpp" />
@@ -200,6 +201,7 @@ xcopy /Y /D "$(VULKAN_SDK)\Bin\SDL2.dll" "$(OutDir)."</Command>
     <ClInclude Include="Craig\Craig_Constants.hpp" />
     <ClInclude Include="Craig\Craig_Editor.hpp" />
     <ClInclude Include="Craig\Craig_Framework.hpp" />
+    <ClInclude Include="Craig\Craig_GameObject.hpp" />
     <ClInclude Include="Craig\Craig_Renderer.hpp" />
     <ClInclude Include="Craig\Craig_ResourceManager.hpp" />
     <ClInclude Include="Craig\Craig_Scene.hpp" />
