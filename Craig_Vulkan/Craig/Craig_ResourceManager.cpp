@@ -44,9 +44,11 @@ std::array<vk::VertexInputAttributeDescription, 3> Craig::Vertex::getAttributeDe
     return attributeDescriptions;
 }
 
-CraigError Craig::ResourceManager::init() {
+CraigError Craig::ResourceManager::init(Craig::Renderer* rendererToSet) {
 
     CraigError ret = CRAIG_SUCCESS;
+
+    m_renderer = rendererToSet;
 
     return ret;
 }

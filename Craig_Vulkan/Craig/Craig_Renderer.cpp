@@ -65,15 +65,19 @@ void Craig::Renderer::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCrea
     createInfo.pfnUserCallback = debugCallback;
 }
 
-CraigError Craig::Renderer::init(Window* CurrentWindowPtr) {
+CraigError Craig::Renderer::init(Window* CurrentWindowPtr, SceneManager* sceneManagerPtr) {
 
 	CraigError ret = CRAIG_SUCCESS;
 
 	// Check if the current window pointer is valid
 	assert(CurrentWindowPtr != nullptr && "CurrentWindowPtr is null, cannot initialize Renderer without a valid window pointer.");
-
 	//Pass in the current window pointer (Done in framework)
 	mp_CurrentWindow = CurrentWindowPtr; 
+
+    // Check if the current scene manager pointer is valid
+    assert(sceneManagerPtr != nullptr && "sceneManagerPtr is null, cannot initialize Renderer without a valid window pointer.");
+    //Pass in the current scene manager pointer (Done in framework)
+    mp_SceneManager = sceneManagerPtr;
 
 	// Ensure that the current window pointer is not null (just to be extra safe)
 	assert(mp_CurrentWindow != nullptr && "mp_CurrentWindow is null, somehow didn't get passed to our member variable");
@@ -210,7 +214,7 @@ void Craig::Renderer::InitVulkan() {
     createGraphicsPipeline();
     createCommandPool();
     
-    Craig::ResourceManager::getInstance().setRendererPtr(this);
+    
     Craig::ResourceManager::getInstance().loadModel(); 
     createTextureSampler();
     createVertexBuffer();

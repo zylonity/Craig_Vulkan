@@ -23,23 +23,22 @@ CraigError Craig::Framework::init() {
 	ret = mp_Window->init();
 	assert(ret == CRAIG_SUCCESS);											// Always checking if we have a valid return code
 
-	// Initialize our Renderer
-	mp_Renderer = new Craig::Renderer;
-	Craig::ImguiEditor::getInstance().setRenderer(mp_Renderer);
-	assert(mp_Renderer != nullptr && "mp_Renderer failed to allocate memory");
-	ret = mp_Renderer->init(mp_Window);
-	assert(ret == CRAIG_SUCCESS);											
-
-	// Initialize the Resource Manager Singleton
-	Craig::ResourceManager::getInstance().init();
-
 	// Initialize our scene manager
 	mp_SceneManager = new Craig::SceneManager;
 	assert(mp_SceneManager != nullptr && "mp_SceneManager failed to allocate memory");
 	ret = mp_SceneManager->init();
 	assert(ret == CRAIG_SUCCESS);
 
-	mp_Renderer->setSceneManager(mp_SceneManager);
+	// Initialize our Renderer
+	mp_Renderer = new Craig::Renderer;
+	Craig::ImguiEditor::getInstance().setRenderer(mp_Renderer);
+	Craig::ResourceManager::getInstance().init(mp_Renderer); // Initialize the Resource Manager Singleton
+	assert(mp_Renderer != nullptr && "mp_Renderer failed to allocate memory");
+	ret = mp_Renderer->init(mp_Window, mp_SceneManager);
+	assert(ret == CRAIG_SUCCESS);											
+
+	
+
 
 	m_LastFrameTime = std::chrono::steady_clock::now();
 
@@ -59,11 +58,12 @@ CraigError Craig::Framework::update() {
 		return CRAIG_CLOSED; // If the window is closed, we return that code
 	}
 
+	ret = mp_SceneManager->update(elapsed);
+	assert(ret == CRAIG_SUCCESS && "mp_SceneManager failed to update");
+
 	ret = mp_Renderer->update(elapsed);
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer failed to update");
 
-	ret = mp_SceneManager->update(elapsed);
-	assert(ret == CRAIG_SUCCESS && "mp_SceneManager failed to update");
 
 	return ret;
 }
@@ -77,15 +77,15 @@ CraigError Craig::Framework::terminate() {
 	delete mp_Window; //Delete the scene manager
 	mp_Window = nullptr; //Set the pointer to null (Might not be done by default, just in case)
 
+	ret = mp_SceneManager->terminate();
+	assert(ret == CRAIG_SUCCESS && "mp_SceneManager didn't terminate properly");
+	delete mp_SceneManager;
+	mp_SceneManager = nullptr;
+
 	ret = mp_Renderer->terminate(); //Delete left over items in memory
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer didn't terminate properly"); //Check it closed properly
 	delete mp_Renderer; //Delete the scene manager
 	mp_Renderer = nullptr; //Set the pointer to null (Might not be done by default, just in case)
-
-	ret = mp_SceneManager->terminate(); 
-	assert(ret == CRAIG_SUCCESS && "mp_SceneManager didn't terminate properly");
-	delete mp_SceneManager; 
-	mp_SceneManager = nullptr; 
 
 	Craig::ResourceManager::getInstance().terminate();
 

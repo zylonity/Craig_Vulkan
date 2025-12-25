@@ -52,15 +52,13 @@ namespace Craig {
 	class ResourceManager {
 
 	public:
-		CraigError init();
+		CraigError init(Craig::Renderer* rendererToSet);
 		CraigError terminate();
 
 		void loadModel();
 		void terminateModel();
 
 		Craig::Model m_testModel;
-
-		void setRendererPtr(Craig::Renderer* rendererToSet) { m_renderer = rendererToSet; };
 
 		//===============================================================================
 		// Singleton Implementations

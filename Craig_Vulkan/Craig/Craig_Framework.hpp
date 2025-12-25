@@ -22,8 +22,8 @@ namespace Craig {
 		CraigError terminate();
 	private:
 
-		Craig::Window* mp_Window			= nullptr;
-		Craig::Renderer* mp_Renderer		= nullptr;
+		Craig::Window* mp_Window			 = nullptr;
+		Craig::Renderer* mp_Renderer		 = nullptr;
 		Craig::SceneManager* mp_SceneManager = nullptr;
 
 #if defined(IMGUI_ENABLED)
