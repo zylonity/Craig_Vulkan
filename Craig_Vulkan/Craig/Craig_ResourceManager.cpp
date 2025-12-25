@@ -241,3 +241,17 @@ void Craig::ResourceManager::terminateModel() {
     m_testModel.subMeshes.clear();
 
 }
+
+void Craig::ResourceManager::terminateModels(vk::Device& device, VmaAllocator& memoryAllocator) {
+
+    for (size_t i = 0; i < m_testModel.subMeshes.size(); i++)
+    {
+        delete m_testModel.subMeshes[i];
+        m_testModel.subMeshes[i] = nullptr;
+    }
+    m_testModel.subMeshes.clear();
+
+    device.destroyImageView(m_testModel.m_texture.m_VK_textureImageView);
+    vmaDestroyImage(memoryAllocator, m_testModel.m_texture.m_VK_textureImage, m_testModel.m_texture.m_VMA_textureImageAllocation);
+
+}

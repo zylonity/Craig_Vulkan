@@ -2163,7 +2163,7 @@ CraigError Craig::Renderer::terminate() {
 
     vmaDestroyImage(m_VMA_allocator, m_VK_textureImage, m_VMA_textureImageAllocation);*/
 
-    Craig::ResourceManager::getInstance().terminateModel();
+    Craig::ResourceManager::getInstance().terminateModels(m_VK_device, m_VMA_allocator);
 
     m_VK_device.destroyPipeline(m_VK_graphicsPipeline);
     m_VK_device.destroyPipelineLayout(m_VK_pipelineLayout);

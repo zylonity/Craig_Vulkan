@@ -70,6 +70,7 @@ namespace Craig {
 
 		void loadModel(std::string modelPath);
 		void terminateModel();
+		void terminateModels(vk::Device& device, VmaAllocator& memoryAllocator);
 
 		Craig::Model& getModel(std::string modelPath) { return m_testModel; };
 
