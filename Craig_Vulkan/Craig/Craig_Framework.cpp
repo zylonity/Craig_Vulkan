@@ -16,26 +16,26 @@ CraigError Craig::Framework::init() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-	// Initialize our Window
-	// NEEDS to be done first so we can pass it to the Renderer WITH data
+	//Create our objects and get the pointers we need to initialise later
 	mp_Window = new Craig::Window;
-	assert(mp_Window != nullptr && "mp_Window failed to allocate memory");	// Always checking with any new if we have successfully allocated memory for it
-	ret = mp_Window->init();
-	assert(ret == CRAIG_SUCCESS);											// Always checking if we have a valid return code
-
-	// Initialize our scene manager
 	mp_SceneManager = new Craig::SceneManager;
+	mp_Renderer = new Craig::Renderer;
+
+	//Check they were succesfully allocated just in case
+	assert(mp_Window != nullptr && "mp_Window failed to allocate memory");
 	assert(mp_SceneManager != nullptr && "mp_SceneManager failed to allocate memory");
-	ret = mp_SceneManager->init();
+	assert(mp_Renderer != nullptr && "mp_Renderer failed to allocate memory");
+
+	//Initialise the objects
+	ret = mp_Window->init();
 	assert(ret == CRAIG_SUCCESS);
 
-	// Initialize our Renderer
-	mp_Renderer = new Craig::Renderer;
 	Craig::ImguiEditor::getInstance().setRenderer(mp_Renderer);
-	Craig::ResourceManager::getInstance().init(mp_Renderer); // Initialize the Resource Manager Singleton
-	assert(mp_Renderer != nullptr && "mp_Renderer failed to allocate memory");
+	Craig::ResourceManager::getInstance().init(mp_Renderer); // Initialize the Resource Manager Singleton, this needs to be done before the renderer
+
 	ret = mp_Renderer->init(mp_Window, mp_SceneManager);
-	assert(ret == CRAIG_SUCCESS);											
+	assert(ret == CRAIG_SUCCESS);
+									
 
 	
 

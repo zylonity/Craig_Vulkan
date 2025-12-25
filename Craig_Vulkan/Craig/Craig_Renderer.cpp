@@ -18,6 +18,7 @@
 #include "Craig_Window.hpp"
 #include "Craig_ShaderCompilation.hpp"
 #include "Craig_Editor.hpp"
+#include "Craig_SceneManager.hpp"
 
 #if defined(IMGUI_ENABLED)
 static void check_vk_result(VkResult err)
@@ -214,8 +215,9 @@ void Craig::Renderer::InitVulkan() {
     createGraphicsPipeline();
     createCommandPool();
     
-    
-    Craig::ResourceManager::getInstance().loadModel(); 
+    mp_SceneManager->init();
+    //assert(ret == CRAIG_SUCCESS);
+
     createTextureSampler();
     createVertexBuffer();
     createIndexBuffer();
@@ -1004,16 +1006,22 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     firstInstance: Used as an offset for instanced rendering, defines the lowest value of gl_InstanceIndex.
     */
     
-    for (size_t i = 0; i < Craig::ResourceManager::getInstance().m_testModel.subMeshesCount; i++)
-    {
-        Craig::SubMesh* submesh = Craig::ResourceManager::getInstance().m_testModel.subMeshes[i];
+    std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
+    Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
-        commandBuffer.drawIndexed(
-            submesh->m_indices.size(),
-            1, 
-            submesh->indexOffset,
-            submesh->vertexOffset,
-            0);
+    for (Craig::GameObject& gameObject : currentSceneObjects)
+    {
+        for (size_t i = 0; i < resources.getModel(gameObject.getModelPath()).subMeshesCount; i++)
+        {
+            Craig::SubMesh* submesh = resources.getModel(gameObject.getModelPath()).subMeshes[i];
+
+            commandBuffer.drawIndexed(
+                submesh->m_indices.size(),
+                1,
+                submesh->indexOffset,
+                submesh->vertexOffset,
+                0);
+        }
     }
 
     commandBuffer.endRendering();
@@ -1315,123 +1323,138 @@ void Craig::Renderer::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint
 
 void Craig::Renderer::createVertexBuffer() {
 
-    Craig::Model& model = Craig::ResourceManager::getInstance().m_testModel;
+    std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
+    Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
-    uint32_t totalVertexCount = 0;
-    for (size_t i = 0; i < model.subMeshesCount; i++)
+    for (Craig::GameObject& gameObject : currentSceneObjects)
     {
-        Craig::SubMesh* submesh = model.subMeshes[i];
-        submesh->vertexOffset = totalVertexCount; // store where this submesh starts
-        totalVertexCount += static_cast<uint32_t>(submesh->m_vertices.size());
+        Craig::Model& model = resources.getModel(gameObject.getModelPath());
+        
+        uint32_t totalVertexCount = 0;
+        for (size_t i = 0; i < model.subMeshesCount; i++)
+        {
+            Craig::SubMesh* submesh = model.subMeshes[i];
+            submesh->vertexOffset = totalVertexCount; // store where this submesh starts
+            totalVertexCount += static_cast<uint32_t>(submesh->m_vertices.size());
 
+        }
+
+        if (totalVertexCount == 0) {
+            // nothing to upload, bail early
+            return;
+        }
+
+
+        vk::DeviceSize bufferSize = sizeof(model.subMeshes[0]->m_vertices[0]) * totalVertexCount;
+
+        vk::Buffer stagingBuffer{};
+        VmaAllocation stagingAlloc{};
+
+        VmaAllocationCreateInfo stagingAci{};
+        stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
+        stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+
+        createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
+
+        void* data;
+        vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
+
+        Craig::Vertex* dst = static_cast<Vertex*>(data);
+
+        uint32_t cursor = 0;
+        for (size_t i = 0; i < model.subMeshesCount; ++i) {
+            std::vector<Craig::Vertex>& verts = model.subMeshes[i]->m_vertices;
+
+            std::memcpy(dst + cursor,
+                verts.data(),
+                sizeof(Vertex) * verts.size());
+
+            model.subMeshes[i]->vertexOffset = cursor;
+            cursor += static_cast<uint32_t>(verts.size());
+        }
+
+        vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, bufferSize);
+        vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
+
+        VmaAllocationCreateInfo gpuAci{};
+        gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
+        gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+        createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, gpuAci, m_VK_vertexBuffer, m_VMA_vertexAllocation);
+
+        copyBuffer(stagingBuffer, m_VK_vertexBuffer, bufferSize);
+        vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
     }
+
     
-    if (totalVertexCount == 0) {
-        // nothing to upload, bail early
-        return;
-    }
-
-
-    vk::DeviceSize bufferSize = sizeof(model.subMeshes[0]->m_vertices[0]) * totalVertexCount;
-
-    vk::Buffer stagingBuffer{};
-    VmaAllocation stagingAlloc{};
-
-    VmaAllocationCreateInfo stagingAci{};
-    stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
-    stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-
-    createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
-
-    void* data;
-    vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
-
-    Craig::Vertex* dst = static_cast<Vertex*>(data);
-
-    uint32_t cursor = 0;
-    for (size_t i = 0; i < model.subMeshesCount; ++i) {
-        std::vector<Craig::Vertex>& verts = model.subMeshes[i]->m_vertices;
-
-        std::memcpy(dst + cursor,
-            verts.data(),
-            sizeof(Vertex) * verts.size());
-
-        model.subMeshes[i]->vertexOffset = cursor;
-        cursor += static_cast<uint32_t>(verts.size());
-    }
-
-    vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, bufferSize);
-    vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
-
-    VmaAllocationCreateInfo gpuAci{};
-    gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
-    gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-    createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, gpuAci, m_VK_vertexBuffer, m_VMA_vertexAllocation);
-
-    copyBuffer(stagingBuffer, m_VK_vertexBuffer, bufferSize);
-    vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
 }
 
 void Craig::Renderer::createIndexBuffer() {
 
-    Craig::Model& model = Craig::ResourceManager::getInstance().m_testModel;
+    std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
+    Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
-    uint32_t totalIndexCount = 0;
-    for (size_t i = 0; i < model.subMeshesCount; ++i) {
-        totalIndexCount += static_cast<uint32_t>(model.subMeshes[i]->m_indices.size());
-    }
+    for (Craig::GameObject& gameObject : currentSceneObjects)
+    {
+        Craig::Model& model = resources.getModel(gameObject.getModelPath());
 
-    if (totalIndexCount == 0) {
-        // nothing to upload, bail early
-        return;
-    }
-
-    vk::DeviceSize bufferSize = sizeof(model.subMeshes[0]->m_indices[0]) * totalIndexCount;
-
-    vk::Buffer stagingBuffer{};
-    VmaAllocation stagingAlloc{};
-
-    VmaAllocationCreateInfo stagingAci{};
-    stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
-    stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-
-    createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
-
-    void* data;
-    vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
-
-    uint32_t* dst = static_cast<uint32_t*>(data);
-    uint32_t cursor = 0;
-
-    for (size_t i = 0; i < model.subMeshesCount; ++i) {
-        Craig::SubMesh* submesh = model.subMeshes[i];
-        std::vector<uint32_t>& indices = submesh->m_indices;
-
-        if (indices.empty()) {
-            submesh->indexOffset = cursor;
-            continue;
+        uint32_t totalIndexCount = 0;
+        for (size_t i = 0; i < model.subMeshesCount; ++i) {
+            totalIndexCount += static_cast<uint32_t>(model.subMeshes[i]->m_indices.size());
         }
 
-        std::memcpy(dst + cursor,
-            indices.data(),
-            sizeof(uint32_t) * indices.size());
+        if (totalIndexCount == 0) {
+            // nothing to upload, bail early
+            return;
+        }
 
-        submesh->indexOffset = cursor;
-        cursor += static_cast<uint32_t>(indices.size());
+        vk::DeviceSize bufferSize = sizeof(model.subMeshes[0]->m_indices[0]) * totalIndexCount;
+
+        vk::Buffer stagingBuffer{};
+        VmaAllocation stagingAlloc{};
+
+        VmaAllocationCreateInfo stagingAci{};
+        stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
+        stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+
+        createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
+
+        void* data;
+        vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
+
+        uint32_t* dst = static_cast<uint32_t*>(data);
+        uint32_t cursor = 0;
+
+        for (size_t i = 0; i < model.subMeshesCount; ++i) {
+            Craig::SubMesh* submesh = model.subMeshes[i];
+            std::vector<uint32_t>& indices = submesh->m_indices;
+
+            if (indices.empty()) {
+                submesh->indexOffset = cursor;
+                continue;
+            }
+
+            std::memcpy(dst + cursor,
+                indices.data(),
+                sizeof(uint32_t) * indices.size());
+
+            submesh->indexOffset = cursor;
+            cursor += static_cast<uint32_t>(indices.size());
+        }
+
+        vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, bufferSize);
+        vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
+
+        VmaAllocationCreateInfo gpuAci{};
+        gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
+        gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+        createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, gpuAci, m_VK_indexBuffer, m_VMA_indexAllocation);
+
+        copyBuffer(stagingBuffer, m_VK_indexBuffer, bufferSize);
+        vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
     }
 
-    vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, bufferSize);
-    vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
-
-    VmaAllocationCreateInfo gpuAci{};
-    gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
-    gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-    createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, gpuAci, m_VK_indexBuffer, m_VMA_indexAllocation);
-
-    copyBuffer(stagingBuffer, m_VK_indexBuffer, bufferSize);
-    vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
 }
 
 
@@ -1565,16 +1588,24 @@ void Craig::Renderer::createDescriptorSets() {
     mv_VK_descriptorSets = m_VK_device.allocateDescriptorSets(allocInfo);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
+
         vk::DescriptorBufferInfo bufferInfo{};
         bufferInfo.setBuffer(mv_VK_uniformBuffers[i])
             .setOffset(0)
             .setRange(sizeof(UniformBufferObject));
 
+        std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
+        Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
+
         vk::DescriptorImageInfo imageInfo{};
-        imageInfo
-            .setImageView(m_VK_textureImageView)
-            .setSampler(m_VK_textureSampler)
-            .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        for (Craig::GameObject& gameObject : currentSceneObjects)
+        {
+            imageInfo
+                .setImageView(resources.getModel(gameObject.getModelPath()).m_texture.m_VK_textureImageView)
+                .setSampler(m_VK_textureSampler)
+                .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+        }
 
         std::array<vk::WriteDescriptorSet, 2> descriptorWrites{};
         descriptorWrites[0]
@@ -1616,12 +1647,18 @@ void Craig::Renderer::updateDescriptorSets() {
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
 
-        vk::DescriptorImageInfo imageInfo{};
-        imageInfo
-            .setImageView(m_VK_textureImageView)
-            .setSampler(m_VK_textureSampler)
-            .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+        std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
+        Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
+        vk::DescriptorImageInfo imageInfo{};
+
+        for (Craig::GameObject& gameObject : currentSceneObjects)
+        {
+            imageInfo
+                .setImageView(resources.getModel(gameObject.getModelPath()).m_texture.m_VK_textureImageView)
+                .setSampler(m_VK_textureSampler)
+                .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+        }
         vk::WriteDescriptorSet descriptorWrite{};
         descriptorWrite
             .setDstSet(mv_VK_descriptorSets[i])
@@ -1632,7 +1669,6 @@ void Craig::Renderer::updateDescriptorSets() {
             .setImageInfo(imageInfo);
 
         m_VK_device.updateDescriptorSets(descriptorWrite, nullptr);
-
     }
 
 }
@@ -1660,14 +1696,14 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
     memcpy(mv_VK_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
 
-void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels) {
+void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels, Craig::Texture* outTexture) { // VmaAllocation* textureMemoryAlloc, vk::Image* outTextureImage, vk::ImageView* outTextureImageView) {
     vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
     if (!pixels) {
         throw std::runtime_error("failed to load texture image!");
     }
 
-    m_VK_mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+    outTexture->m_VK_mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
 
     vk::Buffer stagingBuffer;
     VmaAllocation stagingAlloc{};
@@ -1686,23 +1722,19 @@ void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, i
 
     //stbi_image_free(pixels);
 
-    createImage(texWidth, texHeight, m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_textureImage, m_VMA_textureImageAllocation);
+    createImage(texWidth, texHeight, outTexture->m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, outTexture->m_VK_textureImage, outTexture->m_VMA_textureImageAllocation);
 
-    transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, true, m_VK_mipLevels);
-    copyBufferToImage(stagingBuffer, m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+    transitionImageLayout(outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, true, outTexture->m_VK_mipLevels);
+    copyBufferToImage(stagingBuffer, outTexture->m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
     //transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, false, m_VK_mipLevels); <- now done when generating mipMaps
 
     vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
 
-    generateMipMaps(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight, m_VK_mipLevels, false);
+    generateMipMaps(outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight, outTexture->m_VK_mipLevels, false);
 
-    createTextureImageView();
-}
-
-void Craig::Renderer::createTextureImageView() {
+    outTexture->m_VK_textureImageView = createImageView(outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor, outTexture->m_VK_mipLevels);
     
-    m_VK_textureImageView = createImageView(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor, m_VK_mipLevels);
 }
 
 void Craig::Renderer::createTextureSampler() {
@@ -2127,9 +2159,9 @@ CraigError Craig::Renderer::terminate() {
 
     m_VK_device.destroySampler(m_VK_textureSampler);
 
-    m_VK_device.destroyImageView(m_VK_textureImageView);
+   /* m_VK_device.destroyImageView(m_VK_textureImageView);
 
-    vmaDestroyImage(m_VMA_allocator, m_VK_textureImage, m_VMA_textureImageAllocation);
+    vmaDestroyImage(m_VMA_allocator, m_VK_textureImage, m_VMA_textureImageAllocation);*/
 
     Craig::ResourceManager::getInstance().terminateModel();
 

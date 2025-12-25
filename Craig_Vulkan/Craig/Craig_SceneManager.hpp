@@ -10,6 +10,8 @@ namespace Craig {
 		CraigError init();
 		CraigError update(const float& deltaTime);
 		CraigError terminate();
+
+		Craig::Scene* getCurrentScene() { return mp_CurrentScene; };
 	private:
 		Craig::Scene* mp_CurrentScene;
 

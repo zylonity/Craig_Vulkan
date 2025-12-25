@@ -62,12 +62,12 @@ CraigError Craig::ResourceManager::terminate() {
     return ret;
 }
 
-void Craig::ResourceManager::loadModel() {
+void Craig::ResourceManager::loadModel(std::string modelPath) {
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
     std::string err, warn;
 
-    bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, m_testModel.modelPath.c_str());
+    bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, modelPath.c_str());
     // use LoadBinaryFromFile for .glb
 
     if (!warn.empty()) {
@@ -218,7 +218,7 @@ void Craig::ResourceManager::loadModel() {
 
                         // Here you replace your old stb_image path:
                         // createVulkanTextureFromPixels(pixels, width, height, comp);
-                        m_renderer->createTextureImage2(pixels, width, height, comp);
+                        m_renderer->createTextureImage2(pixels, width, height, comp, &getModel(modelPath).m_texture);
                     }
                 }
             }

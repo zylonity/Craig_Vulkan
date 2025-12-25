@@ -1,9 +1,10 @@
 #include "Craig_GameObject.hpp"
+#include "Craig_ResourceManager.hpp"
 
 CraigError Craig::GameObject::init() {
 
 	CraigError ret = CRAIG_SUCCESS;
-
+	Craig::ResourceManager::getInstance().loadModel(m_modelPath);
 	return ret;
 }
 

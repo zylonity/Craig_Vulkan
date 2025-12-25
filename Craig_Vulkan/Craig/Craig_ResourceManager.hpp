@@ -9,7 +9,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <vulkan/vulkan.hpp>
-
+#include "../External/vk_mem_alloc.h"
 
 
 namespace Craig {
@@ -41,13 +41,26 @@ namespace Craig {
 		int      materialIndex; // prim.material
 	};
 
+	struct Texture
+	{
+		uint32_t      m_VK_mipLevels = 0;
+
+		vk::Image     m_VK_textureImage;
+		VmaAllocation m_VMA_textureImageAllocation;
+
+		vk::ImageView m_VK_textureImageView;
+
+	};
+
 	struct Model {
 		std::vector<Craig::SubMesh*> subMeshes;
 		uint32_t subMeshesCount;
-		std::string modelPath = "data/models/BarramundiFish.glb";
-		std::string texturePath = "data/textures/viking_room.png";
+		std::string modelPath;
+		Craig::Texture m_texture;
 
 	};
+
+	
 
 	class ResourceManager {
 
@@ -55,10 +68,10 @@ namespace Craig {
 		CraigError init(Craig::Renderer* rendererToSet);
 		CraigError terminate();
 
-		void loadModel();
+		void loadModel(std::string modelPath);
 		void terminateModel();
 
-		Craig::Model m_testModel;
+		Craig::Model& getModel(std::string modelPath) { return m_testModel; };
 
 		//===============================================================================
 		// Singleton Implementations
@@ -79,6 +92,7 @@ namespace Craig {
 		//===============================================================================
 
 		Craig::Renderer* m_renderer;
+		Craig::Model m_testModel;
 	};
 
 

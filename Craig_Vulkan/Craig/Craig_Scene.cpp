@@ -4,6 +4,9 @@ CraigError Craig::Scene::init() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+	m_MainObject.init();
+	mv_Gameobjects.push_back(m_MainObject);
+
 	return ret;
 }
 

@@ -33,10 +33,9 @@ namespace Craig {
 
 		bool& getVSyncState() { return m_vsync; };
 		void refreshSwapChain() { recreateSwapChain(); };
-	
-		void createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels);
+		void createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels, Texture* outTexture);
 
-		const uint32_t& getMaxLOD() const { return m_VK_mipLevels; };
+		const uint32_t& getMaxLOD() const { return 1; };
 		void updateMinLOD(int minLOD);
 
 		const uint32_t& getMaxSamplingLevel() const { return m_MaxSamplingLevel; };
@@ -121,7 +120,7 @@ namespace Craig {
 
 		
 		// Images / textures helpers
-		void createTextureImageView();
+		//void createTextureImageView();
 		void createTextureSampler();
 		void terminateSampler();
 
@@ -290,12 +289,12 @@ namespace Craig {
 
 		
 		// Texture
-		uint32_t      m_VK_mipLevels = 0;
+		/*uint32_t      m_VK_mipLevels = 0;
 
 		vk::Image     m_VK_textureImage;
 		VmaAllocation m_VMA_textureImageAllocation;
 
-		vk::ImageView m_VK_textureImageView;
+		vk::ImageView m_VK_textureImageView;*/
 		vk::Sampler   m_VK_textureSampler;
 
 		
