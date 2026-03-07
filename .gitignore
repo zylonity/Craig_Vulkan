@@ -367,3 +367,6 @@ imgui.ini
 
 # Allow model OBJ files
 !Craig_Vulkan/data/models/**/*.obj
+
+# shader files
+*.spv

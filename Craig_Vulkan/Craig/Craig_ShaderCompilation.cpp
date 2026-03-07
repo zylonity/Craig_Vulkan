@@ -111,13 +111,14 @@ vk::ShaderModule Craig::ShaderCompilation::CompileHLSLToShaderModule(vk::Device 
 	return shaderModule;
 }
 
-#elif defined(__APPLE__)
+#elif defined(__APPLE__) || defined(__linux__)
 #include <fstream>
+#include <filesystem>
 
 vk::ShaderModule Craig::ShaderCompilation::CompileHLSLToShaderModule(vk::Device device, const std::wstring& filename) {
 
 	std::ifstream file;
-	file.open(filename, std::ios::ate | std::ios::binary);
+	file.open(std::filesystem::path(filename), std::ios::ate | std::ios::binary);
 
 	if (!file.is_open()) {
 		throw std::runtime_error("failed to open file!");
