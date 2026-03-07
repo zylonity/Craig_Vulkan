@@ -100,7 +100,7 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr, SceneManager* sceneMa
     // vk::InstanceCreateInfo is where the programmer specifies the layers and/or extensions that
     // are needed.
     m_VK_instInfo = vk::InstanceCreateInfo()
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(__linux__)
         .setFlags(vk::InstanceCreateFlags())
 #elif defined(__APPLE__)
         .setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR)
@@ -621,7 +621,7 @@ void Craig::Renderer::createGraphicsPipeline() {
 #if defined(_WIN32)
     m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/VertexShader.vert");
     m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/FragmentShader.frag");
-#elif defined(__APPLE__)
+#elif defined(__APPLE__) || defined(__linux__)
 
     m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/vert.spv");
     m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_VK_device, L"data/shaders/frag.spv");
