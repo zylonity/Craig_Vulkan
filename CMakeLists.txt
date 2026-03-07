@@ -1,13 +1,16 @@
 cmake_minimum_required(VERSION 4.0)
 project(Craig_Vulkan)
 
+#add the libraries i'm using
+#on mac, installed with homebrew
+#on linux, installed with the package manager (dnf in my case)
 find_package(Vulkan REQUIRED)
 find_package(SDL2 REQUIRED)
 find_package(glm REQUIRED)
-#find_package( REQUIRED)
 
 set(CMAKE_CXX_STANDARD 20)
 
+#get all my files to build
 file(GLOB_RECURSE CRAIG_SOURCES
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/Craig/*.cpp
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/Craig/*.hpp
@@ -31,7 +34,12 @@ target_include_directories(Craig_Vulkan PRIVATE
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/External/Imgui
 )
 
-target_compile_definitions(Craig_Vulkan PUBLIC IMGUI_ENABLED)
+#Imgui flag for CLION, id rather set this in the IDE
+option(ENABLE_IMGUI "Enable ImGui" OFF)
+if(ENABLE_IMGUI)
+    target_compile_definitions(Craig_Vulkan PUBLIC IMGUI_ENABLED)
+endif()
+
 target_compile_definitions(Craig_Vulkan PUBLIC
         $<$<CONFIG:Debug>:_DEBUG>
         $<$<CONFIG:Release>:NDEBUG>
@@ -45,6 +53,8 @@ target_link_libraries(Craig_Vulkan PUBLIC
 )
 
 
+# on windows, we do this at runtime, but on mac/linux we're missing a ton of windows only libraries for hsls
+# so we compile it with dxc before building
 function(compile_hlsl OUTPUT INPUT PROFILE)
     message(STATUS "Shader: ${INPUT} -> ${OUTPUT} (${PROFILE})")
     add_custom_command(

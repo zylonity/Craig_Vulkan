@@ -94,10 +94,10 @@ void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
 		ImGui::DragFloat("Camera Rotation Speed", &mp_camera->m_rotSpeed);
 		//ImGui::Checkbox("Show wireframe", &mp_Renderer->getWifeFrameVisibility());*/
 
-		ImGui::SeparatorText("Mip Levels");
-		if (ImGui::SliderInt("Minimum mip level", &m_currentMipLevel, 0, (int)mp_renderer->getMaxLOD())) {
-			mp_renderer->updateMinLOD(m_currentMipLevel);
-		}
+		ImGui::SeparatorText("Mip Levels currently disabled for mip level issues");
+		// if (ImGui::SliderInt("Minimum mip level", &m_currentMipLevel, 0, (int)mp_renderer->getMaxLOD())) {
+		// 	mp_renderer->updateMinLOD(m_currentMipLevel);
+		// }
 
 		ImGui::SeparatorText("MSAA");
 		if (ImGui::Combo("MSAA level", &m_MSAADropdownIndex, mv_MSAADropdownOptions.data(), mv_MSAADropdownOptions.size())) {

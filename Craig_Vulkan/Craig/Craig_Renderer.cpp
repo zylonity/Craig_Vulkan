@@ -288,7 +288,7 @@ void Craig::Renderer::pickPhysicalDevice() {
 
     if (m_VK_physicalDevice) {
         vk::PhysicalDeviceProperties props = m_VK_physicalDevice.getProperties();
-		printf("\nFound GPU: %s\n", props.deviceName);
+		printf("\nFound GPU: %s\n", props.deviceName.data());
     }
     else {
         throw std::runtime_error("failed to find a suitable GPU!");
@@ -922,6 +922,9 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     //We have to transition the swap image manually, render passes used to do this implicitly :(
     transitionSwapImage(commandBuffer, mv_VK_swapChainImages[imageIndex], vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
+    transitionSwapImage(commandBuffer, m_VK_colourImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal); //MSAA colour image too
+    transitionSwapImage(commandBuffer, m_VK_depthImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
 
     vk::ClearValue clearColour;
     clearColour.setColor({ kClearColour[0], kClearColour[1], kClearColour[2], kClearColour[3] });
@@ -1025,7 +1028,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     }
 
     commandBuffer.endRendering();
-    
+
 #if defined(IMGUI_ENABLED)
     //gotta render imgui's UI separately
     vk::RenderingAttachmentInfo uiColourAtt{};
@@ -1041,7 +1044,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
         .setLayerCount(1)
         .setColorAttachmentCount(1)
         .setPColorAttachments(&uiColourAtt)
-        .setPDepthAttachment(nullptr);   // key line (or just don’t set it)
+        .setPDepthAttachment(nullptr);
     commandBuffer.beginRendering(uiRi);
 
     ImGui::Render();
@@ -1201,6 +1204,11 @@ void Craig::Renderer::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk:
 }
 
 void Craig::Renderer::transitionSwapImage(vk::CommandBuffer cmd, vk::Image img, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
+    vk::ImageAspectFlags aspect = (newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal)
+    ? (vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil)
+    : vk::ImageAspectFlagBits::eColor;
+
+
     vk::ImageMemoryBarrier2 barrier{};
     barrier
         .setOldLayout(oldLayout)
@@ -1208,7 +1216,7 @@ void Craig::Renderer::transitionSwapImage(vk::CommandBuffer cmd, vk::Image img, 
         .setSrcQueueFamilyIndex(vk::QueueFamilyIgnored)
         .setDstQueueFamilyIndex(vk::QueueFamilyIgnored)
         .setImage(img)
-        .setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+        .setSubresourceRange({ aspect, 0, 1, 0, 1 });
 
 
     if (oldLayout == vk::ImageLayout::eUndefined &&
@@ -1219,6 +1227,15 @@ void Craig::Renderer::transitionSwapImage(vk::CommandBuffer cmd, vk::Image img, 
             .setSrcAccessMask(vk::AccessFlagBits2::eNone)
             .setDstStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput)
             .setDstAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite);
+    }
+    else if (oldLayout == vk::ImageLayout::eUndefined &&
+        newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal)
+    {
+        barrier
+            .setSrcStageMask(vk::PipelineStageFlagBits2::eTopOfPipe)
+            .setSrcAccessMask({})
+            .setDstStageMask(vk::PipelineStageFlagBits2::eEarlyFragmentTests)
+            .setDstAccessMask(vk::AccessFlagBits2::eDepthStencilAttachmentRead | vk::AccessFlagBits2::eDepthStencilAttachmentWrite);
     }
     else if (oldLayout == vk::ImageLayout::eColorAttachmentOptimal &&
         newLayout == vk::ImageLayout::ePresentSrcKHR)
