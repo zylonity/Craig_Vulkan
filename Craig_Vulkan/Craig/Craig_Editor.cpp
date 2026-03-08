@@ -27,11 +27,13 @@ CraigError Craig::ImguiEditor::editorInit() {
 		ImGuiID dock_id_top = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.3f, nullptr, &dockspace_id);
 		ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.3f, nullptr, &dockspace_id);
 
-		ImGui::DockBuilderDockWindow("###RenderingSettings", dock_id_left);
+		ImGui::DockBuilderDockWindow("###RenderingSettings", dock_id_right);
+		ImGui::DockBuilderDockWindow("###SceneDetails", dock_id_left);
 		ImGui::DockBuilderFinish(dockspace_id);
 
 		//Default windows to open
 		m_ShowRendererProperties = true;
+		m_ShowSceneDetails = true;
 
 		//When we initialise the renderer we have the max sampling level set, so for now this is good enough since we change it in both places at once
 		//TODO: Keep track of the current level in the renderer, not both there and here
@@ -55,6 +57,7 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 	editorInit();
 
 	showRenderProperties(deltaTime);
+	showSceneDetails(deltaTime);
 
 	return ret;
 }
@@ -108,6 +111,17 @@ void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
 
 		ImGui::End();
 		
+	}
+}
+
+void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
+{
+	if (m_ShowSceneDetails)
+	{
+		// The ### is for a unique ID, otherwsise the window doesn't stay docked on the right since the name/id changes
+		ImGui::Begin("Scene Details###SceneDetails", &m_ShowRendererProperties);
+
+		ImGui::End();
 	}
 }
 

@@ -21,6 +21,9 @@ namespace Craig {
 
 		glm::mat4 GetModelMatrix() { return m_modelMatrix; }
 
+		void setPosition(glm::vec3 position);
+		const glm::vec3& getPosition() const { return mv3_position; }
+
 		const std::string& getModelPath() const { return m_modelPath; }
 	private:
 		void updateModelMatrix();

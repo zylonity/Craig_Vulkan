@@ -16,6 +16,7 @@ namespace Craig {
 	private:
 
 		Craig::GameObject m_MainObject;
+		Craig::GameObject m_secondObject;
 
 		std::vector<Craig::GameObject> mv_Gameobjects;
 	};

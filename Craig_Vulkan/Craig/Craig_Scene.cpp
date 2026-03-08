@@ -8,6 +8,7 @@ CraigError Craig::Scene::init() {
 	for (size_t i = 0; i < mv_Gameobjects.size(); i++)
 	{
 		mv_Gameobjects[i].init();
+		mv_Gameobjects[i].setPosition({mv_Gameobjects[i].getPosition().x + 10, mv_Gameobjects[i].getPosition().y, mv_Gameobjects[i].getPosition().z});
 	}
 	return ret;
 }

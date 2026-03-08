@@ -59,5 +59,11 @@ CraigError Craig::GameObject::terminate() {
 	return ret;
 }
 
+void Craig::GameObject::setPosition(glm::vec3 position)
+{
+	mv3_position = position;
+
+}
+
 
 

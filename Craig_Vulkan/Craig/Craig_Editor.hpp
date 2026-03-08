@@ -37,6 +37,9 @@ namespace Craig {
 		void showRenderProperties(const float& deltaTime);
 		bool m_ShowRendererProperties = false;
 
+		void showSceneDetails(const float& deltaTime);
+		bool m_ShowSceneDetails = false;
+
 		Craig::Renderer* mp_renderer;
 		Craig::Camera* mp_camera;
 

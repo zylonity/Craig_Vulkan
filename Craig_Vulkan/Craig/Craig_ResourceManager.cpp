@@ -107,7 +107,7 @@ void Craig::ResourceManager::loadModel(std::string modelPath) {
             //POSITION STUFF
             auto itPos = prim.attributes.find("POSITION");
             if (itPos == prim.attributes.end()) {
-                continue; // no positions means we can skip the primitive
+                continue; // no positions mean we can skip the primitive
             }
 
             const tinygltf::Accessor& posAccessor = model.accessors[itPos->second];
@@ -216,7 +216,6 @@ void Craig::ResourceManager::loadModel(std::string modelPath) {
                         int height = img.height;
                         int comp = img.component; // usually 4 (RGBA)
 
-                        // Here you replace your old stb_image path:
                         // createVulkanTextureFromPixels(pixels, width, height, comp);
                         m_renderer->createTextureImage2(pixels, width, height, comp, &getModel(modelPath).m_texture);
                     }
