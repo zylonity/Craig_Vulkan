@@ -72,11 +72,6 @@ CraigError Craig::Framework::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-	ret = mp_Window->terminate(); //Delete left over items in memory
-	assert(ret == CRAIG_SUCCESS && "mp_Window didn't terminate properly"); //Check it closed properly
-	delete mp_Window; //Delete the scene manager
-	mp_Window = nullptr; //Set the pointer to null (Might not be done by default, just in case)
-
 	ret = mp_SceneManager->terminate();
 	assert(ret == CRAIG_SUCCESS && "mp_SceneManager didn't terminate properly");
 	delete mp_SceneManager;
@@ -86,6 +81,11 @@ CraigError Craig::Framework::terminate() {
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer didn't terminate properly"); //Check it closed properly
 	delete mp_Renderer; //Delete the scene manager
 	mp_Renderer = nullptr; //Set the pointer to null (Might not be done by default, just in case)
+
+	ret = mp_Window->terminate(); //Delete left over items in memory
+	assert(ret == CRAIG_SUCCESS && "mp_Window didn't terminate properly"); //Check it closed properly
+	delete mp_Window; //Delete the scene manager
+	mp_Window = nullptr; //Set the pointer to null (Might not be done by default, just in case)
 
 	Craig::ResourceManager::getInstance().terminate();
 

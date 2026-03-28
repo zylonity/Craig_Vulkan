@@ -117,14 +117,6 @@ namespace Craig {
 
 		void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
 
-		// vk::Image createImage(uint32_t width, uint32_t height, uint32_t mipLevels,
-		// 	vk::SampleCountFlagBits numSamples,
-		// 	vk::Format format,
-		// 	vk::ImageTiling tiling,
-		// 	vk::ImageUsageFlags usage,
-		// 	vk::MemoryPropertyFlags properties,
-		// 	VmaAllocation& allocation);
-
 		void transitionImageLayout(vk::Image image, vk::Format format,
 			vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
 			bool useTransferQueue = true, uint32_t mipLevels = 1);
