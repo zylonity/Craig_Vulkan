@@ -13,7 +13,9 @@ set(CMAKE_CXX_STANDARD 20)
 #get all my files to build
 file(GLOB_RECURSE CRAIG_SOURCES
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/Craig/*.cpp
+        ${CMAKE_SOURCE_DIR}/Craig_Vulkan/Craig/Renderer/*.cpp
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/Craig/*.hpp
+        ${CMAKE_SOURCE_DIR}/Craig_Vulkan/Craig/Renderer/*.hpp
 )
 
 file(GLOB_RECURSE IMGUI_SOURCES

@@ -20,6 +20,9 @@
 #include "Craig_Editor.hpp"
 #include "Craig_SceneManager.hpp"
 
+#include "Renderer/Craig_Swapchain.hpp"
+#include "Renderer/Craig_Device.hpp"
+
 #if defined(IMGUI_ENABLED)
 static void check_vk_result(VkResult err)
 {
@@ -157,7 +160,7 @@ void Craig::Renderer::InitImgui() {
     init_info.PhysicalDevice = m_VK_physicalDevice;
     init_info.Device = m_VK_device;
 
-    QueueFamilyIndices indices = findQueueFamilies(m_VK_physicalDevice);
+    Craig::Device::QueueFamilyIndices indices = Craig::Device::findQueueFamilies(m_VK_physicalDevice, m_VK_surface);
     init_info.QueueFamily = indices.graphicsFamily.value();
     init_info.Queue = m_VK_graphicsQueue;
     init_info.DescriptorPool = m_VK_imguiDescriptorPool;
@@ -171,7 +174,7 @@ void Craig::Renderer::InitImgui() {
     // dynamic rendering parameters for imgui to use
     init_info.PipelineRenderingCreateInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
     init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-    VkFormat colourFormat = static_cast<VkFormat>(m_VK_swapChainImageFormat);
+    VkFormat colourFormat = static_cast<VkFormat>(m_swapChain.m_VK_swapChainImageFormat);
     init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &colourFormat;
 
     ImGui_ImplVulkan_Init(&init_info);
@@ -184,7 +187,7 @@ CraigError Craig::Renderer::update(const float& deltaTime) {
 	CraigError ret = CRAIG_SUCCESS;
 
 #if defined(IMGUI_ENABLED)
-    if (m_VK_currentExtent.width > 0 && m_VK_currentExtent.height > 0) {
+    if (m_swapChain.m_VK_currentExtent.width > 0 && m_swapChain.m_VK_currentExtent.height > 0) {
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
@@ -202,12 +205,23 @@ CraigError Craig::Renderer::update(const float& deltaTime) {
 void Craig::Renderer::InitVulkan() {
     
     setupDebugMessenger(); // Actually enable the messenger
+
 	pickPhysicalDevice(); // Pick a suitable physical device for rendering
+
+
+
 	createLogicalDevice(); // Create a logical device to interact with the physical device
 
     initVMA();
 
-    createSwapChain();
+    Swapchain::SwapchainInitInfo swapInitInfo;
+    swapInitInfo.surface = m_VK_surface;
+    swapInitInfo.device = m_VK_device;
+    swapInitInfo.physicalDevice = m_VK_physicalDevice;
+    swapInitInfo.pWindow = mp_CurrentWindow;
+
+    m_swapChain.init(swapInitInfo);
+    createSwapChain2();
     createImageViews();
     createColourResources();
     createDepthResources();
@@ -297,77 +311,77 @@ void Craig::Renderer::pickPhysicalDevice() {
 
 }
 
-//From the tutorial:
-/* It has been briefly touched upon before that almost every operation in Vulkan, anything from drawing to uploading textures, 
-requires commands to be submitted to a queue. There are different types of queues that originate from different queue families 
-and each family of queues allows only a subset of commands. For example, there could be a queue family that only allows processing 
-of compute commands or one that only allows memory transfer related commands.*/
+// //From the tutorial:
+// /* It has been briefly touched upon before that almost every operation in Vulkan, anything from drawing to uploading textures,
+// requires commands to be submitted to a queue. There are different types of queues that originate from different queue families
+// and each family of queues allows only a subset of commands. For example, there could be a queue family that only allows processing
+// of compute commands or one that only allows memory transfer related commands.*/
+//
+// Craig::Device::QueueFamilyIndices Craig::Renderer::findQueueFamilies(const vk::PhysicalDevice& device) {
+//     Device::QueueFamilyIndices indices;
+//     // Logic to find queue family indices to populate struct with
+//
+//     auto queueFamilies = device.getQueueFamilyProperties();
+//
+//
+// 	//Find at least one queue family that supports graphics operations
+//     uint32_t i = 0;
+//     for (const auto& queueFamily : queueFamilies) {
+//         //Skip if the queuecount is 0
+//         if (queueFamily.queueCount == 0) continue;
+//
+//         //Skip if we already assigned the graphics family queue index
+//         if (!indices.graphicsFamily && (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics)) {
+//             indices.graphicsFamily = i;
+//         }
+//
+//         //Skip if we already assigned the presentation family queue index
+//         if(!indices.presentFamily && device.getSurfaceSupportKHR(i, m_VK_surface)) {
+//             indices.presentFamily = i; // If the queue family supports presentation to the surface, set the present family
+// 		}
+//
+//
+//         if ((queueFamily.queueFlags & vk::QueueFlagBits::eTransfer) &&
+//             !(queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) &&
+//             !(queueFamily.queueFlags & vk::QueueFlagBits::eCompute) &&
+//             !indices.transferFamily) {
+//             indices.transferFamily = i;
+//         }
+//
+//         if (indices.isComplete() && indices.hasDedicatedTransfer()) {
+// 			break; // If we already found a suitable family, no need to keep searching
+//         }
+//
+//         i++;
+//     }
+//
+//     // Fallback: if no dedicated transfer, use graphics (it�s implicitly transfer-capable)
+//     if (!indices.transferFamily && indices.graphicsFamily) {
+//         indices.transferFamily = indices.graphicsFamily;
+//     }
+//
+//     return indices;
+// }
 
-Craig::Renderer::QueueFamilyIndices Craig::Renderer::findQueueFamilies(const vk::PhysicalDevice& device) {
-    QueueFamilyIndices indices;
-    // Logic to find queue family indices to populate struct with
-
-    auto queueFamilies = device.getQueueFamilyProperties();
-
-
-	//Find at least one queue family that supports graphics operations
-    uint32_t i = 0;
-    for (const auto& queueFamily : queueFamilies) {
-        //Skip if the queuecount is 0
-        if (queueFamily.queueCount == 0) continue;
-
-        //Skip if we already assigned the graphics family queue index
-        if (!indices.graphicsFamily && (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics)) {
-            indices.graphicsFamily = i;
-        }
-
-        //Skip if we already assigned the presentation family queue index
-        if(!indices.presentFamily && device.getSurfaceSupportKHR(i, m_VK_surface)) {
-            indices.presentFamily = i; // If the queue family supports presentation to the surface, set the present family
-		}
-
-
-        if ((queueFamily.queueFlags & vk::QueueFlagBits::eTransfer) && 
-            !(queueFamily.queueFlags & vk::QueueFlagBits::eGraphics) &&
-            !(queueFamily.queueFlags & vk::QueueFlagBits::eCompute) &&
-            !indices.transferFamily) {
-            indices.transferFamily = i;
-        }
-
-        if (indices.isComplete() && indices.hasDedicatedTransfer()) {
-			break; // If we already found a suitable family, no need to keep searching
-        }
-
-        i++;
-    }
-
-    // Fallback: if no dedicated transfer, use graphics (it�s implicitly transfer-capable)
-    if (!indices.transferFamily && indices.graphicsFamily) {
-        indices.transferFamily = indices.graphicsFamily;
-    }
-        
-    return indices;
-}
-
-Craig::Renderer::SwapChainSupportDetails Craig::Renderer::querySwapChainSupport(const vk::PhysicalDevice& device) {
-    SwapChainSupportDetails details;
-
-    details.capabilities = device.getSurfaceCapabilitiesKHR(m_VK_surface);
-    details.formats = device.getSurfaceFormatsKHR(m_VK_surface);
-    details.presentModes = device.getSurfacePresentModesKHR(m_VK_surface);
-
-
-    return details;
-}
+// Craig::Swapchain::SwapChainSupportDetails Craig::Renderer::querySwapChainSupport(const vk::PhysicalDevice& device) {
+//     Swapchain::SwapChainSupportDetails details;
+//
+//     details.capabilities = device.getSurfaceCapabilitiesKHR(m_VK_surface);
+//     details.formats = device.getSurfaceFormatsKHR(m_VK_surface);
+//     details.presentModes = device.getSurfacePresentModesKHR(m_VK_surface);
+//
+//
+//     return details;
+// }
 
 bool Craig::Renderer::isDeviceSuitable(const vk::PhysicalDevice& device) {
-    QueueFamilyIndices indices = findQueueFamilies(device); //Check gfx device can render and present to the screen
+    Device::QueueFamilyIndices indices = Device::findQueueFamilies(device, m_VK_surface); //Check gfx device can render and present to the screen
 
     bool extensionsSupported = checkDeviceExtensionSupport(device); //Check it supports extensions, especifically the swapchain extension
 
     bool swapChainAdequate = false; 
     if (extensionsSupported) {
-        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device); //Check the swapchaine extension it has is actually what we want for this
+        Swapchain::SwapChainSupportDetails swapChainSupport = m_swapChain.querySwapChainSupport(device, m_VK_surface); //Check the swapchaine extension it has is actually what we want for this
         swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
     }
 
@@ -396,7 +410,7 @@ bool Craig::Renderer::checkDeviceExtensionSupport(const vk::PhysicalDevice& devi
 
 void Craig::Renderer::createLogicalDevice() {
     // Query the queue families that support graphics and presentation
-    QueueFamilyIndices indices = findQueueFamilies(m_VK_physicalDevice);
+    Device::QueueFamilyIndices indices = Device::findQueueFamilies(m_VK_physicalDevice, m_VK_surface);
 
     std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
     // Use a set to avoid duplicating queue create info if graphics == presentation
@@ -451,127 +465,136 @@ void Craig::Renderer::createLogicalDevice() {
     }
 }
 
-vk::SurfaceFormatKHR Craig::Renderer::chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) {
+// vk::SurfaceFormatKHR Craig::Renderer::chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats) {
+//
+//     //Check the colour format and colour space are correct
+//     for (const auto& availableFormat : availableFormats) {
+//         if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) { //TODO: Maybe add hdr?
+//             return availableFormat;
+//         }
+//     }
+//
+//     return availableFormats[0];
+// }
+//
+// vk::PresentModeKHR Craig::Renderer::chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) {
+//
+//
+//     //VK_PRESENT_MODE_IMMEDIATE_KHR: Images submitted by your application are transferred to the screen right away, which may result in tearing.
+//     //VK_PRESENT_MODE_FIFO_KHR : The swap chain is a queue where the display takes an image from the front of the queue when the display is refreshed and the program inserts rendered images at the back of the queue.If the queue is full then the program has to wait.This is most similar to vertical sync as found in modern games.The moment that the display is refreshed is known as "vertical blank".
+//     //VK_PRESENT_MODE_FIFO_RELAXED_KHR : This mode only differs from the previous one if the application is late and the queue was empty at the last vertical blank.Instead of waiting for the next vertical blank, the image is transferred right away when it finally arrives.This may result in visible tearing.
+//     //VK_PRESENT_MODE_MAILBOX_KHR : This is another variation of the second mode.Instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer ones.This mode can be used to render frames as fast as possible while still avoiding tearing, resulting in fewer latency issues than standard vertical sync.This is commonly known as "triple buffering", although the existence of three buffers alone does not necessarily mean that the framerate is unlocked.
+//
+//     for (const auto& availablePresentMode : availablePresentModes) {
+//         vk::PresentModeKHR modeToUse = m_vsync ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eImmediate;
+//         if (availablePresentMode == modeToUse) {
+//             return availablePresentMode;
+//         }
+//     }
+//
+//
+//     return vk::PresentModeKHR::eFifo;
+// }
+//
+// vk::Extent2D Craig::Renderer::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) {
+//
+//     if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+//         return capabilities.currentExtent;
+//     }
+//     else {
+//         //Rendering resolution, basically.
+//         int width, height;
+//         SDL_Vulkan_GetDrawableSize(mp_CurrentWindow->getSDLWindow(), &width, &height);
+//
+//         vk::Extent2D actualExtent;
+//         actualExtent.width = std::clamp(static_cast<uint32_t>(width), capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+//         actualExtent.height = std::clamp(static_cast<uint32_t>(height), capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+//
+//         return actualExtent;
+//     }
+//
+//
+// }
 
-    //Check the colour format and colour space are correct
-    for (const auto& availableFormat : availableFormats) {
-        if (availableFormat.format == vk::Format::eB8G8R8A8Srgb && availableFormat.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear) { //TODO: Maybe add hdr?
-            return availableFormat;
-        }
-    }
+void Craig::Renderer::createSwapChain2()
+{
 
-    return availableFormats[0];
-}
-
-vk::PresentModeKHR Craig::Renderer::chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) {
-
-
-    //VK_PRESENT_MODE_IMMEDIATE_KHR: Images submitted by your application are transferred to the screen right away, which may result in tearing.
-    //VK_PRESENT_MODE_FIFO_KHR : The swap chain is a queue where the display takes an image from the front of the queue when the display is refreshed and the program inserts rendered images at the back of the queue.If the queue is full then the program has to wait.This is most similar to vertical sync as found in modern games.The moment that the display is refreshed is known as "vertical blank".
-    //VK_PRESENT_MODE_FIFO_RELAXED_KHR : This mode only differs from the previous one if the application is late and the queue was empty at the last vertical blank.Instead of waiting for the next vertical blank, the image is transferred right away when it finally arrives.This may result in visible tearing.
-    //VK_PRESENT_MODE_MAILBOX_KHR : This is another variation of the second mode.Instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer ones.This mode can be used to render frames as fast as possible while still avoiding tearing, resulting in fewer latency issues than standard vertical sync.This is commonly known as "triple buffering", although the existence of three buffers alone does not necessarily mean that the framerate is unlocked.
-
-    for (const auto& availablePresentMode : availablePresentModes) {
-        vk::PresentModeKHR modeToUse = m_vsync ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eImmediate;
-        if (availablePresentMode == modeToUse) {
-            return availablePresentMode;
-        }
-    }
-
-
-    return vk::PresentModeKHR::eFifo; 
-}
-
-vk::Extent2D Craig::Renderer::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities) {
-
-    if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-        return capabilities.currentExtent;
-    }
-    else {
-        //Rendering resolution, basically.
-        int width, height;
-        SDL_Vulkan_GetDrawableSize(mp_CurrentWindow->getSDLWindow(), &width, &height);
-
-        vk::Extent2D actualExtent;
-        actualExtent.width = std::clamp(static_cast<uint32_t>(width), capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-        actualExtent.height = std::clamp(static_cast<uint32_t>(height), capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
-
-        return actualExtent;
-    }
-
-
-}
-
-void Craig::Renderer::createSwapChain() {
-    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_VK_physicalDevice);
-
-    vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-    vk::PresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-    m_VK_currentExtent = chooseSwapExtent(swapChainSupport.capabilities);
-
-    if (swapChainSupport.capabilities.minImageCount > kMaxFramesInFlight) {
-        assert("too many frames in flight for this system!");
-    }
-
-    uint32_t imageCount = kMaxFramesInFlight;
-
-    if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
-        imageCount = swapChainSupport.capabilities.maxImageCount;
-    }
-
-    printf("Creating draw buffer/swap chain with %i images\n", imageCount);
-
-    vk::SwapchainCreateInfoKHR createInfo{};
-    createInfo
-        .setSurface(m_VK_surface)
-        .setMinImageCount(imageCount)
-        .setImageFormat(surfaceFormat.format)
-        .setImageColorSpace(surfaceFormat.colorSpace)
-        .setImageExtent(m_VK_currentExtent)
-        .setImageArrayLayers(1) //"always 1 unless you are developing a stereoscopic 3D application"
-        .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
-
-    QueueFamilyIndices indices = findQueueFamilies(m_VK_physicalDevice);
-
-    uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
-
-    //In case we have separate graphics and presentation queues.
-    /*According to vulkan-tutorial.com
-    VK_SHARING_MODE_EXCLUSIVE: An image is owned by one queue family at a time and ownership must be explicitly transferred before using it in another queue family.
-    VK_SHARING_MODE_CONCURRENT: Images can be used across multiple queue families without explicit ownership transfers.
-    */
-    if (indices.graphicsFamily != indices.presentFamily) {
-        createInfo
-            .setImageSharingMode(vk::SharingMode::eConcurrent)
-            .setQueueFamilyIndexCount(2)
-            .setPQueueFamilyIndices(queueFamilyIndices);
-    }
-    else {
-        createInfo.setImageSharingMode(vk::SharingMode::eExclusive);
-    }
-
-    //We can transform the image here (like a 90 degree clockwise rotation or horizontal flip.)
-    //Since we don't want any, we just specify the current transformation applied (which should be none)
-    createInfo
-        .setPreTransform(swapChainSupport.capabilities.currentTransform)
-        .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque) //Blending with other windows in the window system (will mostly always be opaque)
-        .setPresentMode(presentMode)
-        .setClipped(VK_TRUE) //The GPU won't render pixels that are obscured (by other windows, for example)  it also means we can't trust the data in the pixels since they might've not rendered.
-        .setOldSwapchain(VK_NULL_HANDLE);
-
-
-    try {
-        m_VK_swapChain = m_VK_device.createSwapchainKHR(createInfo);
-    }
-    catch (const vk::SystemError& err) {
-        throw std::runtime_error("failed to create swap chain!");
-    }
-
-    mv_VK_swapChainImages = m_VK_device.getSwapchainImagesKHR(m_VK_swapChain);
-    m_VK_swapChainImageFormat = surfaceFormat.format;
-    m_VK_swapChainExtent = m_VK_currentExtent;
+    m_swapChain.createSwapChain();
 
 }
+
+// void Craig::Renderer::createSwapChain() {
+//
+//
+//     Swapchain::SwapChainSupportDetails swapChainSupport = m_swapChain.querySwapChainSupport(m_VK_physicalDevice);
+//
+//     vk::SurfaceFormatKHR surfaceFormat = m_swapChain.chooseSwapSurfaceFormat(swapChainSupport.formats);
+//     vk::PresentModeKHR presentMode = m_swapChain.chooseSwapPresentMode(swapChainSupport.presentModes);
+//     m_VK_currentExtent = m_swapChain.chooseSwapExtent(swapChainSupport.capabilities);
+//
+//     if (swapChainSupport.capabilities.minImageCount > kMaxFramesInFlight) {
+//         assert("too many frames in flight for this system!");
+//     }
+//
+//     uint32_t imageCount = kMaxFramesInFlight;
+//
+//     if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
+//         imageCount = swapChainSupport.capabilities.maxImageCount;
+//     }
+//
+//     printf("Creating draw buffer/swap chain with %i images\n", imageCount);
+//
+//     vk::SwapchainCreateInfoKHR createInfo{};
+//     createInfo
+//         .setSurface(m_VK_surface)
+//         .setMinImageCount(imageCount)
+//         .setImageFormat(surfaceFormat.format)
+//         .setImageColorSpace(surfaceFormat.colorSpace)
+//         .setImageExtent(m_VK_currentExtent)
+//         .setImageArrayLayers(1) //"always 1 unless you are developing a stereoscopic 3D application"
+//         .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
+//
+//     Device::QueueFamilyIndices indices = Device::findQueueFamilies(m_VK_physicalDevice, m_VK_surface);
+//
+//     uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+//
+//     //In case we have separate graphics and presentation queues.
+//     /*According to vulkan-tutorial.com
+//     VK_SHARING_MODE_EXCLUSIVE: An image is owned by one queue family at a time and ownership must be explicitly transferred before using it in another queue family.
+//     VK_SHARING_MODE_CONCURRENT: Images can be used across multiple queue families without explicit ownership transfers.
+//     */
+//     if (indices.graphicsFamily != indices.presentFamily) {
+//         createInfo
+//             .setImageSharingMode(vk::SharingMode::eConcurrent)
+//             .setQueueFamilyIndexCount(2)
+//             .setPQueueFamilyIndices(queueFamilyIndices);
+//     }
+//     else {
+//         createInfo.setImageSharingMode(vk::SharingMode::eExclusive);
+//     }
+//
+//     //We can transform the image here (like a 90 degree clockwise rotation or horizontal flip.)
+//     //Since we don't want any, we just specify the current transformation applied (which should be none)
+//     createInfo
+//         .setPreTransform(swapChainSupport.capabilities.currentTransform)
+//         .setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque) //Blending with other windows in the window system (will mostly always be opaque)
+//         .setPresentMode(presentMode)
+//         .setClipped(VK_TRUE) //The GPU won't render pixels that are obscured (by other windows, for example)  it also means we can't trust the data in the pixels since they might've not rendered.
+//         .setOldSwapchain(VK_NULL_HANDLE);
+//
+//
+//     try {
+//         m_VK_swapChain = m_VK_device.createSwapchainKHR(createInfo);
+//     }
+//     catch (const vk::SystemError& err) {
+//         throw std::runtime_error("failed to create swap chain!");
+//     }
+//
+//     mv_VK_swapChainImages = m_VK_device.getSwapchainImagesKHR(m_VK_swapChain);
+//     m_VK_swapChainImageFormat = surfaceFormat.format;
+//     m_VK_swapChainExtent = m_VK_currentExtent;
+//
+// }
 
 vk::ImageView Craig::Renderer::createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags, uint32_t mipLevels) {
     vk::ImageViewCreateInfo createInfo{};
@@ -607,11 +630,11 @@ vk::ImageView Craig::Renderer::createImageView(vk::Image image, vk::Format forma
 void Craig::Renderer::createImageViews() {
 
 
-    mv_VK_swapChainImageViews.resize(mv_VK_swapChainImages.size());
+    m_swapChain.mv_VK_swapChainImageViews.resize(m_swapChain.mv_VK_swapChainImages.size());
 
-    for (size_t i = 0; i < mv_VK_swapChainImages.size(); i++)
+    for (size_t i = 0; i < m_swapChain.mv_VK_swapChainImages.size(); i++)
     {
-        mv_VK_swapChainImageViews[i] = createImageView(mv_VK_swapChainImages[i], m_VK_swapChainImageFormat, vk::ImageAspectFlagBits::eColor, 1);
+        m_swapChain.mv_VK_swapChainImageViews[i] = createImageView(m_swapChain.mv_VK_swapChainImages[i], m_swapChain.m_VK_swapChainImageFormat, vk::ImageAspectFlagBits::eColor, 1);
 
     }
     
@@ -731,7 +754,7 @@ void Craig::Renderer::createGraphicsPipeline() {
         throw std::runtime_error("failed to createPipelineLayout!");
     }
 
-    vk::Format colorFormat = m_VK_swapChainImageFormat;
+    vk::Format colorFormat = m_swapChain.m_VK_swapChainImageFormat;
     vk::Format depthFormat = findDepthFormat();
 
     vk::PipelineRenderingCreateInfo renderingInfo{};
@@ -801,19 +824,19 @@ void Craig::Renderer::cleanupSwapChain() {
     vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
 
 
-    for (auto imageView : mv_VK_swapChainImageViews) {
+    for (auto imageView : m_swapChain.mv_VK_swapChainImageViews) {
         m_VK_device.destroyImageView(imageView);
     }
 
-    m_VK_device.destroySwapchainKHR(m_VK_swapChain);
+    m_VK_device.destroySwapchainKHR(m_swapChain.m_VK_swapChain);
 }
 
 void Craig::Renderer::recreateSwapChain() {
 
-    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_VK_physicalDevice);
-    m_VK_currentExtent = chooseSwapExtent(swapChainSupport.capabilities);
+    Swapchain::SwapChainSupportDetails swapChainSupport = m_swapChain.querySwapChainSupport(m_VK_physicalDevice, m_VK_surface);
+    m_swapChain.m_VK_currentExtent = m_swapChain.chooseSwapExtent(swapChainSupport.capabilities);
 
-    if (m_VK_currentExtent.width <= 0 || m_VK_currentExtent.height <= 0) {
+    if (m_swapChain.m_VK_currentExtent.width <= 0 || m_swapChain.m_VK_currentExtent.height <= 0) {
         return; // Skip this frame
     }
 
@@ -822,7 +845,7 @@ void Craig::Renderer::recreateSwapChain() {
 
     cleanupSwapChain();
 
-    createSwapChain();
+    createSwapChain2();
     createImageViews();
     createColourResources();
     createDepthResources();
@@ -831,10 +854,10 @@ void Craig::Renderer::recreateSwapChain() {
 
 void Craig::Renderer::recreateSwapChainFull() {
 
-    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_VK_physicalDevice);
-    m_VK_currentExtent = chooseSwapExtent(swapChainSupport.capabilities);
+    Swapchain::SwapChainSupportDetails swapChainSupport = m_swapChain.querySwapChainSupport(m_VK_physicalDevice, m_VK_surface);
+    m_swapChain.m_VK_currentExtent = m_swapChain.chooseSwapExtent(swapChainSupport.capabilities);
 
-    if (m_VK_currentExtent.width <= 0 || m_VK_currentExtent.height <= 0) {
+    if (m_swapChain.m_VK_currentExtent.width <= 0 || m_swapChain.m_VK_currentExtent.height <= 0) {
         return; // Skip this frame
     }
 
@@ -853,14 +876,14 @@ void Craig::Renderer::recreateSwapChainFull() {
     vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
 
     //Clean up the swapchain
-    for (auto imageView : mv_VK_swapChainImageViews) {
+    for (auto imageView : m_swapChain.mv_VK_swapChainImageViews) {
         m_VK_device.destroyImageView(imageView);
     }
 
-    m_VK_device.destroySwapchainKHR(m_VK_swapChain);
+    m_VK_device.destroySwapchainKHR(m_swapChain.m_VK_swapChain);
 
     //recreate with the new sample number
-    createSwapChain();
+    createSwapChain2();
     createImageViews();
     createColourResources();
     createDepthResources();
@@ -869,7 +892,7 @@ void Craig::Renderer::recreateSwapChainFull() {
 
 void Craig::Renderer::createCommandPool() {
 
-    QueueFamilyIndices queueFamilyIndices = findQueueFamilies(m_VK_physicalDevice);
+    Device::QueueFamilyIndices queueFamilyIndices = Device::findQueueFamilies(m_VK_physicalDevice, m_VK_surface);
 
     vk::CommandPoolCreateInfo poolInfo{};
     poolInfo
@@ -921,7 +944,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     }
 
     //We have to transition the swap image manually, render passes used to do this implicitly :(
-    transitionSwapImage(commandBuffer, mv_VK_swapChainImages[imageIndex], vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
+    transitionSwapImage(commandBuffer, m_swapChain.mv_VK_swapChainImages[imageIndex], vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
     transitionSwapImage(commandBuffer, m_VK_colourImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal); //MSAA colour image too
     transitionSwapImage(commandBuffer, m_VK_depthImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
@@ -951,14 +974,14 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     if (!msaa) {
         colourAtt
-            .setImageView(mv_VK_swapChainImageViews[imageIndex])
+            .setImageView(m_swapChain.mv_VK_swapChainImageViews[imageIndex])
             .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal);
     }
     else {
         colourAtt
             .setImageView(m_VK_colourImageView)
             .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
-            .setResolveImageView(mv_VK_swapChainImageViews[imageIndex])
+            .setResolveImageView(m_swapChain.mv_VK_swapChainImageViews[imageIndex])
             .setResolveImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
             .setResolveMode(vk::ResolveModeFlagBits::eAverage);
     }
@@ -966,7 +989,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     // vk::RenderingInfo begins a dynamic rendering instance.
     vk::RenderingInfo ri{};
     ri
-        .setRenderArea({ {0,0}, m_VK_swapChainExtent })
+        .setRenderArea({ {0,0}, m_swapChain.m_VK_swapChainExtent })
         .setLayerCount(1)
         .setColorAttachmentCount(1)
         .setPColorAttachments(&colourAtt)
@@ -985,8 +1008,8 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     vk::Viewport viewport;
     viewport.setX(0.0f)
         .setY(0.0f)
-        .setWidth(static_cast<float>(m_VK_swapChainExtent.width))
-        .setHeight(static_cast<float>(m_VK_swapChainExtent.height))
+        .setWidth(static_cast<float>(m_swapChain.m_VK_swapChainExtent.width))
+        .setHeight(static_cast<float>(m_swapChain.m_VK_swapChainExtent.height))
         .setMinDepth(0.0f)
         .setMaxDepth(1.0f);
 
@@ -995,7 +1018,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     // Set the dynamic scissor (no cropping � covers entire area)
     vk::Rect2D scissor;
     scissor.setOffset({ 0, 0 })
-        .setExtent(m_VK_swapChainExtent);
+        .setExtent(m_swapChain.m_VK_swapChainExtent);
 
     commandBuffer.setScissor(0, scissor);
 
@@ -1033,14 +1056,14 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     //gotta render imgui's UI separately
     vk::RenderingAttachmentInfo uiColourAtt{};
     uiColourAtt
-        .setImageView(mv_VK_swapChainImageViews[imageIndex])
+        .setImageView(m_swapChain.mv_VK_swapChainImageViews[imageIndex])
         .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
         .setLoadOp(vk::AttachmentLoadOp::eLoad)     // keep what scene wrote
         .setStoreOp(vk::AttachmentStoreOp::eStore);
 
     vk::RenderingInfo uiRi{};
     uiRi
-        .setRenderArea({ {0,0}, m_VK_swapChainExtent })
+        .setRenderArea({ {0,0}, m_swapChain.m_VK_swapChainExtent })
         .setLayerCount(1)
         .setColorAttachmentCount(1)
         .setPColorAttachments(&uiColourAtt)
@@ -1053,7 +1076,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     commandBuffer.endRendering();
 #endif
 
-    transitionSwapImage(commandBuffer, mv_VK_swapChainImages[imageIndex], vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR);
+    transitionSwapImage(commandBuffer, m_swapChain.mv_VK_swapChainImages[imageIndex], vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR);
 
     try {
         commandBuffer.end();
@@ -1079,7 +1102,7 @@ void Craig::Renderer::createSyncObjects() {
     m_sempahoreTimelineValue = 0;
 
     mv_VK_imageAvailableSemaphores.resize(kMaxFramesInFlight);
-    mv_VK_renderFinishedSemaphores.resize(mv_VK_swapChainImages.size());
+    mv_VK_renderFinishedSemaphores.resize(m_swapChain.mv_VK_swapChainImages.size());
 
     vk::SemaphoreCreateInfo semaphoreInfo{};
    
@@ -1087,7 +1110,7 @@ void Craig::Renderer::createSyncObjects() {
         mv_VK_imageAvailableSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
     }
 
-    for (size_t i = 0; i < mv_VK_swapChainImages.size(); i++) {
+    for (size_t i = 0; i < m_swapChain.mv_VK_swapChainImages.size(); i++) {
         mv_VK_renderFinishedSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
     }
 
@@ -1107,7 +1130,7 @@ void Craig::Renderer::createBufferVMA(
     bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     // If you truly need concurrent:
-    if (auto idx = findQueueFamilies(m_VK_physicalDevice); idx.hasDedicatedTransfer()) {
+    if (auto idx = Device::findQueueFamilies(m_VK_physicalDevice, m_VK_surface); idx.hasDedicatedTransfer()) {
         uint32_t q[2] = { idx.graphicsFamily.value(), idx.transferFamily.value() };
         bi.sharingMode = VK_SHARING_MODE_CONCURRENT;
         bi.queueFamilyIndexCount = 2;
@@ -1648,9 +1671,9 @@ void Craig::Renderer::createDescriptorSets() {
 }
 
 void Craig::Renderer::createColourResources() {
-    vk::Format colourFormat = m_VK_swapChainImageFormat;
+    vk::Format colourFormat = m_swapChain.m_VK_swapChainImageFormat;
 
-    createImage(m_VK_swapChainExtent.width, m_VK_swapChainExtent.height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
+    createImage(m_swapChain.m_VK_swapChainExtent.width, m_swapChain.m_VK_swapChainExtent.height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
         vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
         vk::MemoryPropertyFlagBits::eDeviceLocal,
         m_VK_colourImage, m_VMA_colourImageAllocation);
@@ -1700,7 +1723,7 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
 
     UniformBufferObject ubo;
 
-    m_camera.m_aspect = m_VK_swapChainExtent.width / (float)m_VK_swapChainExtent.height;
+    m_camera.m_aspect = m_swapChain.m_VK_swapChainExtent.width / (float)m_swapChain.m_VK_swapChainExtent.height;
     
     
     std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
@@ -1961,7 +1984,7 @@ void Craig::Renderer::createImage(uint32_t width, uint32_t height, uint32_t mipL
     imageInfo.setUsage(usage);
     imageInfo.setSamples(numSamples); //From Vulkan-Tutorial.com - The samples flag is related to multisampling. This is only relevant for images that will be used as attachments, so stick to one sample.
 
-    QueueFamilyIndices q = findQueueFamilies(m_VK_physicalDevice);
+    Device::QueueFamilyIndices q = Device::findQueueFamilies(m_VK_physicalDevice, m_VK_surface);
     if (q.hasDedicatedTransfer()) {
         uint32_t families[] = { q.graphicsFamily.value(), q.transferFamily.value() };
 
@@ -2028,7 +2051,7 @@ void Craig::Renderer::createDepthResources() {
 
     vk::Format depthFormat = findDepthFormat();
 
-    createImage(m_VK_swapChainExtent.width, m_VK_swapChainExtent.height, 1, m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_depthImage, m_VMA_depthImageAllocation);
+    createImage(m_swapChain.m_VK_swapChainExtent.width, m_swapChain.m_VK_swapChainExtent.height, 1, m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_depthImage, m_VMA_depthImageAllocation);
 
     m_VK_depthImageView = createImageView(m_VK_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
 
@@ -2047,12 +2070,12 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         m_VK_device.waitSemaphores(waitInfo, UINT64_MAX);
     }
 
-    if (m_VK_currentExtent.width <= 0 || m_VK_currentExtent.height <= 0) {
+    if (m_swapChain.m_VK_currentExtent.width <= 0 || m_swapChain.m_VK_currentExtent.height <= 0) {
         return; // Skip this frame
     }
 
     uint32_t imageIndex = 0;
-    VkResult nextImageResult = vkAcquireNextImageKHR(m_VK_device, m_VK_swapChain, UINT64_MAX, mv_VK_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult nextImageResult = vkAcquireNextImageKHR(m_VK_device, m_swapChain.m_VK_swapChain, UINT64_MAX, mv_VK_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (nextImageResult == VK_ERROR_OUT_OF_DATE_KHR) {
         recreateSwapChain();
@@ -2103,7 +2126,7 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         .setWaitSemaphoreCount(1)
         .setPWaitSemaphores(&mv_VK_renderFinishedSemaphores[imageIndex])
         .setSwapchainCount(1)
-        .setPSwapchains(&m_VK_swapChain)
+        .setPSwapchains(&m_swapChain.m_VK_swapChain)
         .setPImageIndices(&imageIndex);
 
 
@@ -2162,7 +2185,7 @@ CraigError Craig::Renderer::terminate() {
         m_VK_device.destroySemaphore(mv_VK_imageAvailableSemaphores[i]);
     }    
 
-    for (size_t i = 0; i < mv_VK_swapChainImages.size(); i++) {
+    for (size_t i = 0; i < m_swapChain.mv_VK_swapChainImages.size(); i++) {
         m_VK_device.destroySemaphore(mv_VK_renderFinishedSemaphores[i]);
     }
 
@@ -2190,12 +2213,12 @@ CraigError Craig::Renderer::terminate() {
     m_VK_device.destroyShaderModule(m_VK_vertShaderModule);
     m_VK_device.destroyShaderModule(m_VK_fragShaderModule);
 
-    for (auto imageView : mv_VK_swapChainImageViews) {
+    for (auto imageView : m_swapChain.mv_VK_swapChainImageViews) {
         m_VK_device.destroyImageView(imageView);
     }
 
 
-    m_VK_device.destroySwapchainKHR(m_VK_swapChain);
+    m_VK_device.destroySwapchainKHR(m_swapChain.m_VK_swapChain);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
         vmaDestroyBuffer(m_VMA_allocator, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i]);

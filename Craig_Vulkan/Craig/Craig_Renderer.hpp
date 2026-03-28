@@ -17,6 +17,8 @@
 #include "Craig_Constants.hpp"
 #include "Craig_Camera.hpp"
 #include "Craig_ResourceManager.hpp"
+#include "Renderer/Craig_Swapchain.hpp"
+#include "Renderer/Craig_Device.hpp"
 
 namespace Craig {
 
@@ -49,22 +51,22 @@ namespace Craig {
 			glm::mat4 proj;
 		};
 
-		// Queue family indices (graphics/present/transfer)
-		struct QueueFamilyIndices {
-			std::optional<uint32_t> graphicsFamily;
-			std::optional<uint32_t> presentFamily;
-			std::optional<uint32_t> transferFamily;
-
-			bool isComplete() { return graphicsFamily.has_value() && presentFamily.has_value(); }
-			bool hasDedicatedTransfer() { return graphicsFamily && transferFamily && transferFamily != graphicsFamily; }
-		};
+		// // Queue family indices (graphics/present/transfer)
+		// struct QueueFamilyIndices {
+		// 	std::optional<uint32_t> graphicsFamily;
+		// 	std::optional<uint32_t> presentFamily;
+		// 	std::optional<uint32_t> transferFamily;
+		//
+		// 	bool isComplete() { return graphicsFamily.has_value() && presentFamily.has_value(); }
+		// 	bool hasDedicatedTransfer() { return graphicsFamily && transferFamily && transferFamily != graphicsFamily; }
+		// };
 
 		// Swapchain support query results
-		struct SwapChainSupportDetails {
-			vk::SurfaceCapabilitiesKHR capabilities;
-			std::vector<vk::SurfaceFormatKHR> formats;
-			std::vector<vk::PresentModeKHR> presentModes;
-		};
+		// struct SwapChainSupportDetails {
+		// 	vk::SurfaceCapabilitiesKHR capabilities;
+		// 	std::vector<vk::SurfaceFormatKHR> formats;
+		// 	std::vector<vk::PresentModeKHR> presentModes;
+		// };
 
 		
 		// Core init / teardown
@@ -78,7 +80,8 @@ namespace Craig {
 		// Swapchain + framebuffer resources
 		void recreateSwapChain();          // Swapchain-only recreation
 		void recreateSwapChainFull();      // Swapchain + pipeline + imgui recreation
-		void createSwapChain();            // Create swapchain images
+		//void createSwapChain();            // Create swapchain images
+		void createSwapChain2();            // Create swapchain images
 		void createImageViews();           // Create swapchain image views
 		void cleanupSwapChain();           // Destroy swapchain-related objects
 
@@ -163,12 +166,12 @@ namespace Craig {
 		bool isDeviceSuitable(const vk::PhysicalDevice& device);
 		bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
 
-		QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device);
-		SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice& device);
+		//QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device); Moved to craig_device
+		//Swapchain::SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice& device);
 
-		vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
-		vk::PresentModeKHR   chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
-		vk::Extent2D         chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
+		// vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
+		// vk::PresentModeKHR   chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
+		// vk::Extent2D         chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
@@ -206,7 +209,9 @@ namespace Craig {
 
 		Craig::Camera m_camera = Craig::Camera();
 
-		
+		//New swapchain
+		Craig::Swapchain m_swapChain;
+
 		// Vulkan instance / device
 		vk::Instance               m_VK_instance;
 		vk::ApplicationInfo        m_VK_appInfo;
@@ -223,11 +228,11 @@ namespace Craig {
 
 		
 		// Swapchain
-		vk::SwapchainKHR           m_VK_swapChain;
-		std::vector<vk::Image>     mv_VK_swapChainImages;
-		std::vector<vk::ImageView> mv_VK_swapChainImageViews;
-		vk::Format                 m_VK_swapChainImageFormat;
-		vk::Extent2D               m_VK_swapChainExtent;
+		// vk::SwapchainKHR           m_VK_swapChain;
+		// std::vector<vk::Image>     mv_VK_swapChainImages;
+		// std::vector<vk::ImageView> mv_VK_swapChainImageViews;
+		// vk::Format                 m_VK_swapChainImageFormat;
+		// vk::Extent2D               m_VK_swapChainExtent;
 
 		
 		// Shaders / pipeline
@@ -289,12 +294,6 @@ namespace Craig {
 
 		
 		// Texture
-		/*uint32_t      m_VK_mipLevels = 0;
-
-		vk::Image     m_VK_textureImage;
-		VmaAllocation m_VMA_textureImageAllocation;
-
-		vk::ImageView m_VK_textureImageView;*/
 		vk::Sampler   m_VK_textureSampler;
 
 		
@@ -303,7 +302,7 @@ namespace Craig {
 		VmaPool      m_VMA_smallItemsPool = VK_NULL_HANDLE;
 
 		// Misc
-		vk::Extent2D m_VK_currentExtent;
+		//vk::Extent2D m_VK_currentExtent;
 		bool m_vsync = true;
 
 		
