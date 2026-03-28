@@ -50,24 +50,6 @@ namespace Craig {
 			glm::mat4 view;
 			glm::mat4 proj;
 		};
-
-		// // Queue family indices (graphics/present/transfer)
-		// struct QueueFamilyIndices {
-		// 	std::optional<uint32_t> graphicsFamily;
-		// 	std::optional<uint32_t> presentFamily;
-		// 	std::optional<uint32_t> transferFamily;
-		//
-		// 	bool isComplete() { return graphicsFamily.has_value() && presentFamily.has_value(); }
-		// 	bool hasDedicatedTransfer() { return graphicsFamily && transferFamily && transferFamily != graphicsFamily; }
-		// };
-
-		// Swapchain support query results
-		// struct SwapChainSupportDetails {
-		// 	vk::SurfaceCapabilitiesKHR capabilities;
-		// 	std::vector<vk::SurfaceFormatKHR> formats;
-		// 	std::vector<vk::PresentModeKHR> presentModes;
-		// };
-
 		
 		// Core init / teardown
 		void InitVulkan();                 // Full Vulkan bring-up
@@ -167,11 +149,6 @@ namespace Craig {
 		bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
 
 		//QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device); Moved to craig_device
-		//Swapchain::SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice& device);
-
-		// vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
-		// vk::PresentModeKHR   chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
-		// vk::Extent2D         chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
@@ -209,9 +186,6 @@ namespace Craig {
 
 		Craig::Camera m_camera = Craig::Camera();
 
-		//New swapchain
-		Craig::Swapchain m_swapChain;
-
 		// Vulkan instance / device
 		vk::Instance               m_VK_instance;
 		vk::ApplicationInfo        m_VK_appInfo;
@@ -228,12 +202,7 @@ namespace Craig {
 
 		
 		// Swapchain
-		// vk::SwapchainKHR           m_VK_swapChain;
-		// std::vector<vk::Image>     mv_VK_swapChainImages;
-		// std::vector<vk::ImageView> mv_VK_swapChainImageViews;
-		// vk::Format                 m_VK_swapChainImageFormat;
-		// vk::Extent2D               m_VK_swapChainExtent;
-
+		Craig::Swapchain m_swapChain;
 		
 		// Shaders / pipeline
 		vk::ShaderModule       m_VK_vertShaderModule;
