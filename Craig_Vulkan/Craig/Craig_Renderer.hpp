@@ -64,7 +64,6 @@ namespace Craig {
 		void recreateSwapChainFull();      // Swapchain + pipeline + imgui recreation
 		//void createSwapChain();            // Create swapchain images
 		void createSwapChain2();            // Create swapchain images
-		void createImageViews();           // Create swapchain image views
 		void cleanupSwapChain();           // Destroy swapchain-related objects
 
 		// MSAA + depth attachments
@@ -139,9 +138,6 @@ namespace Craig {
 
 		void transitionSwapImage(vk::CommandBuffer cmd, vk::Image img,
 			vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
-
-		vk::ImageView createImageView(vk::Image image, vk::Format format,
-			vk::ImageAspectFlags aspectFlags, uint32_t mipLevels);
 
 		
 		// Device / swapchain queries

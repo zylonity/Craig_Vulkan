@@ -5,6 +5,7 @@
 #include "Craig_Window.hpp"
 #include "Craig/Craig_Constants.hpp"
 #include "Renderer/Craig_Device.hpp"
+#include "Renderer/Craig_Image.hpp"
 
 namespace Craig {
 
@@ -17,7 +18,6 @@ namespace Craig {
             vk::SurfaceKHR       surface;
             vk::PhysicalDevice   physicalDevice;
             vk::Device           device;
-            //bool                 vSync;
             Window*              pWindow;
         };
         // Swapchain support query results
@@ -31,6 +31,24 @@ namespace Craig {
         CraigError update();
         CraigError terminate();
 
+        SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface);
+        vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
+        vk::PresentModeKHR   chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
+        vk::Extent2D         chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
+
+        void createSwapChain();            // Create swapchain images
+        void createImageViews();           // Create swapchain image views
+
+        //Getters
+        const vk::SwapchainKHR&           getSwapChain() const { return m_VK_swapChain; };
+        const std::vector<vk::Image>&     getImages() const { return mv_VK_swapChainImages; };
+        const std::vector<vk::ImageView>& getImageViews() const { return mv_VK_swapChainImageViews; };
+        vk::Format&                 getImageFormat() { return m_VK_swapChainImageFormat; };
+        vk::Extent2D&               getFullExtent() { return m_VK_swapChainExtent; };
+        vk::Extent2D&               getCurrentExtent() { return m_VK_currentExtent; };
+
+    private:
+
         vk::SwapchainKHR           m_VK_swapChain;
         std::vector<vk::Image>     mv_VK_swapChainImages;
         std::vector<vk::ImageView> mv_VK_swapChainImageViews;
@@ -38,18 +56,8 @@ namespace Craig {
         vk::Extent2D               m_VK_swapChainExtent;
         vk::Extent2D               m_VK_currentExtent;
 
-        SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface);
-        vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
-        vk::PresentModeKHR   chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
-        vk::Extent2D         chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
-
-        void createSwapChain();            // Create swapchain images
-    private:
-
-
         vk::SurfaceKHR       mSC_surface;
         vk::PhysicalDevice   mSC_physicalDevice;
-        //vk::Extent2D         mSC_currentExtent;
         vk::Device           mSC_device;
         Window*              mp_Window;
 
@@ -57,7 +65,7 @@ namespace Craig {
         // void recreateSwapChain();          // Swapchain-only recreation
         // void recreateSwapChainFull();      // Swapchain + pipeline + imgui recreation
 
-        // void createImageViews();           // Create swapchain image views
+
         // void cleanupSwapChain();           // Destroy swapchain-related objects
 
 

@@ -155,6 +155,19 @@ vk::Extent2D Craig::Swapchain::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR
 
 }
 
+void Craig::Swapchain::createImageViews() {
+
+
+    mv_VK_swapChainImageViews.resize(mv_VK_swapChainImages.size());
+
+    for (size_t i = 0; i < mv_VK_swapChainImages.size(); i++)
+    {
+        mv_VK_swapChainImageViews[i] = Craig::Image::createImageView(mSC_device, mv_VK_swapChainImages[i], m_VK_swapChainImageFormat, vk::ImageAspectFlagBits::eColor, 1);
+
+    }
+
+}
+
 CraigError Craig::Swapchain::terminate() {
 
     CraigError ret = CRAIG_SUCCESS;

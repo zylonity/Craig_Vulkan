@@ -22,6 +22,7 @@
 
 #include "Renderer/Craig_Swapchain.hpp"
 #include "Renderer/Craig_Device.hpp"
+#include "Renderer/Craig_Image.hpp"
 
 #if defined(IMGUI_ENABLED)
 static void check_vk_result(VkResult err)
@@ -174,7 +175,7 @@ void Craig::Renderer::InitImgui() {
     // dynamic rendering parameters for imgui to use
     init_info.PipelineRenderingCreateInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
     init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-    VkFormat colourFormat = static_cast<VkFormat>(m_swapChain.m_VK_swapChainImageFormat);
+    VkFormat colourFormat = static_cast<VkFormat>(m_swapChain.getImageFormat());
     init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &colourFormat;
 
     ImGui_ImplVulkan_Init(&init_info);
@@ -187,7 +188,7 @@ CraigError Craig::Renderer::update(const float& deltaTime) {
 	CraigError ret = CRAIG_SUCCESS;
 
 #if defined(IMGUI_ENABLED)
-    if (m_swapChain.m_VK_currentExtent.width > 0 && m_swapChain.m_VK_currentExtent.height > 0) {
+    if (m_swapChain.getCurrentExtent().width > 0 && m_swapChain.getCurrentExtent().height > 0) {
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
@@ -222,7 +223,7 @@ void Craig::Renderer::InitVulkan() {
 
     m_swapChain.init(swapInitInfo);
     createSwapChain2();
-    createImageViews();
+    m_swapChain.createImageViews();
     createColourResources();
     createDepthResources();
     createDescriptorSetLayout();
@@ -409,50 +410,6 @@ void Craig::Renderer::createSwapChain2()
 
 }
 
-vk::ImageView Craig::Renderer::createImageView(vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags, uint32_t mipLevels) {
-    vk::ImageViewCreateInfo createInfo{};
-    createInfo
-        .setImage(image)
-        .setViewType(vk::ImageViewType::e2D)
-        .setFormat(format)
-        .setComponents(vk::ComponentMapping{
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity,
-            vk::ComponentSwizzle::eIdentity
-            })
-        .setSubresourceRange(vk::ImageSubresourceRange{
-            aspectFlags,  // aspectMask
-            0, mipLevels, // baseMipLevel, levelCount
-            0, 1          // baseArrayLayer, layerCount
-            });
-
-
-    vk::ImageView imageView;
-
-    try {
-        imageView = m_VK_device.createImageView(createInfo);
-    }
-    catch (const vk::SystemError& err) {
-        throw std::runtime_error("failed to create image views!");
-    }
-
-    return imageView;
-}
-
-void Craig::Renderer::createImageViews() {
-
-
-    m_swapChain.mv_VK_swapChainImageViews.resize(m_swapChain.mv_VK_swapChainImages.size());
-
-    for (size_t i = 0; i < m_swapChain.mv_VK_swapChainImages.size(); i++)
-    {
-        m_swapChain.mv_VK_swapChainImageViews[i] = createImageView(m_swapChain.mv_VK_swapChainImages[i], m_swapChain.m_VK_swapChainImageFormat, vk::ImageAspectFlagBits::eColor, 1);
-
-    }
-    
-}
-
 void Craig::Renderer::createGraphicsPipeline() {
 
     // Compile HLSL shaders to SPIR-V shader modules
@@ -567,7 +524,7 @@ void Craig::Renderer::createGraphicsPipeline() {
         throw std::runtime_error("failed to createPipelineLayout!");
     }
 
-    vk::Format colorFormat = m_swapChain.m_VK_swapChainImageFormat;
+    vk::Format colorFormat = m_swapChain.getImageFormat();
     vk::Format depthFormat = findDepthFormat();
 
     vk::PipelineRenderingCreateInfo renderingInfo{};
@@ -637,19 +594,19 @@ void Craig::Renderer::cleanupSwapChain() {
     vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
 
 
-    for (auto imageView : m_swapChain.mv_VK_swapChainImageViews) {
+    for (auto imageView : m_swapChain.getImageViews()) {
         m_VK_device.destroyImageView(imageView);
     }
 
-    m_VK_device.destroySwapchainKHR(m_swapChain.m_VK_swapChain);
+    m_VK_device.destroySwapchainKHR(m_swapChain.getSwapChain());
 }
 
 void Craig::Renderer::recreateSwapChain() {
 
     Swapchain::SwapChainSupportDetails swapChainSupport = m_swapChain.querySwapChainSupport(m_VK_physicalDevice, m_VK_surface);
-    m_swapChain.m_VK_currentExtent = m_swapChain.chooseSwapExtent(swapChainSupport.capabilities);
+    m_swapChain.getCurrentExtent() = m_swapChain.chooseSwapExtent(swapChainSupport.capabilities);
 
-    if (m_swapChain.m_VK_currentExtent.width <= 0 || m_swapChain.m_VK_currentExtent.height <= 0) {
+    if (m_swapChain.getCurrentExtent().width <= 0 || m_swapChain.getCurrentExtent().height <= 0) {
         return; // Skip this frame
     }
 
@@ -659,7 +616,7 @@ void Craig::Renderer::recreateSwapChain() {
     cleanupSwapChain();
 
     createSwapChain2();
-    createImageViews();
+    m_swapChain.createImageViews();
     createColourResources();
     createDepthResources();
     //createFrameBuffers();
@@ -668,9 +625,9 @@ void Craig::Renderer::recreateSwapChain() {
 void Craig::Renderer::recreateSwapChainFull() {
 
     Swapchain::SwapChainSupportDetails swapChainSupport = m_swapChain.querySwapChainSupport(m_VK_physicalDevice, m_VK_surface);
-    m_swapChain.m_VK_currentExtent = m_swapChain.chooseSwapExtent(swapChainSupport.capabilities);
+    m_swapChain.getCurrentExtent() = m_swapChain.chooseSwapExtent(swapChainSupport.capabilities);
 
-    if (m_swapChain.m_VK_currentExtent.width <= 0 || m_swapChain.m_VK_currentExtent.height <= 0) {
+    if (m_swapChain.getCurrentExtent().width <= 0 || m_swapChain.getCurrentExtent().height <= 0) {
         return; // Skip this frame
     }
 
@@ -689,15 +646,15 @@ void Craig::Renderer::recreateSwapChainFull() {
     vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
 
     //Clean up the swapchain
-    for (auto imageView : m_swapChain.mv_VK_swapChainImageViews) {
+    for (auto imageView : m_swapChain.getImageViews()) {
         m_VK_device.destroyImageView(imageView);
     }
 
-    m_VK_device.destroySwapchainKHR(m_swapChain.m_VK_swapChain);
+    m_VK_device.destroySwapchainKHR(m_swapChain.getSwapChain());
 
     //recreate with the new sample number
     createSwapChain2();
-    createImageViews();
+    m_swapChain.createImageViews();
     createColourResources();
     createDepthResources();
     createGraphicsPipeline();
@@ -757,7 +714,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     }
 
     //We have to transition the swap image manually, render passes used to do this implicitly :(
-    transitionSwapImage(commandBuffer, m_swapChain.mv_VK_swapChainImages[imageIndex], vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
+    transitionSwapImage(commandBuffer, m_swapChain.getImages()[imageIndex], vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
     transitionSwapImage(commandBuffer, m_VK_colourImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal); //MSAA colour image too
     transitionSwapImage(commandBuffer, m_VK_depthImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
@@ -787,14 +744,14 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     if (!msaa) {
         colourAtt
-            .setImageView(m_swapChain.mv_VK_swapChainImageViews[imageIndex])
+            .setImageView(m_swapChain.getImageViews()[imageIndex])
             .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal);
     }
     else {
         colourAtt
             .setImageView(m_VK_colourImageView)
             .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
-            .setResolveImageView(m_swapChain.mv_VK_swapChainImageViews[imageIndex])
+            .setResolveImageView(m_swapChain.getImageViews()[imageIndex])
             .setResolveImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
             .setResolveMode(vk::ResolveModeFlagBits::eAverage);
     }
@@ -802,7 +759,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     // vk::RenderingInfo begins a dynamic rendering instance.
     vk::RenderingInfo ri{};
     ri
-        .setRenderArea({ {0,0}, m_swapChain.m_VK_swapChainExtent })
+        .setRenderArea({ {0,0}, m_swapChain.getFullExtent() })
         .setLayerCount(1)
         .setColorAttachmentCount(1)
         .setPColorAttachments(&colourAtt)
@@ -821,8 +778,8 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     vk::Viewport viewport;
     viewport.setX(0.0f)
         .setY(0.0f)
-        .setWidth(static_cast<float>(m_swapChain.m_VK_swapChainExtent.width))
-        .setHeight(static_cast<float>(m_swapChain.m_VK_swapChainExtent.height))
+        .setWidth(static_cast<float>(m_swapChain.getFullExtent().width))
+        .setHeight(static_cast<float>(m_swapChain.getFullExtent().height))
         .setMinDepth(0.0f)
         .setMaxDepth(1.0f);
 
@@ -831,7 +788,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     // Set the dynamic scissor (no cropping � covers entire area)
     vk::Rect2D scissor;
     scissor.setOffset({ 0, 0 })
-        .setExtent(m_swapChain.m_VK_swapChainExtent);
+        .setExtent(m_swapChain.getFullExtent());
 
     commandBuffer.setScissor(0, scissor);
 
@@ -869,14 +826,14 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     //gotta render imgui's UI separately
     vk::RenderingAttachmentInfo uiColourAtt{};
     uiColourAtt
-        .setImageView(m_swapChain.mv_VK_swapChainImageViews[imageIndex])
+        .setImageView(m_swapChain.getImageViews()[imageIndex])
         .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
         .setLoadOp(vk::AttachmentLoadOp::eLoad)     // keep what scene wrote
         .setStoreOp(vk::AttachmentStoreOp::eStore);
 
     vk::RenderingInfo uiRi{};
     uiRi
-        .setRenderArea({ {0,0}, m_swapChain.m_VK_swapChainExtent })
+        .setRenderArea({ {0,0}, m_swapChain.getFullExtent() })
         .setLayerCount(1)
         .setColorAttachmentCount(1)
         .setPColorAttachments(&uiColourAtt)
@@ -889,7 +846,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     commandBuffer.endRendering();
 #endif
 
-    transitionSwapImage(commandBuffer, m_swapChain.mv_VK_swapChainImages[imageIndex], vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR);
+    transitionSwapImage(commandBuffer, m_swapChain.getImages()[imageIndex], vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR);
 
     try {
         commandBuffer.end();
@@ -915,7 +872,7 @@ void Craig::Renderer::createSyncObjects() {
     m_sempahoreTimelineValue = 0;
 
     mv_VK_imageAvailableSemaphores.resize(kMaxFramesInFlight);
-    mv_VK_renderFinishedSemaphores.resize(m_swapChain.mv_VK_swapChainImages.size());
+    mv_VK_renderFinishedSemaphores.resize(m_swapChain.getImages().size());
 
     vk::SemaphoreCreateInfo semaphoreInfo{};
    
@@ -923,7 +880,7 @@ void Craig::Renderer::createSyncObjects() {
         mv_VK_imageAvailableSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
     }
 
-    for (size_t i = 0; i < m_swapChain.mv_VK_swapChainImages.size(); i++) {
+    for (size_t i = 0; i < m_swapChain.getImages().size(); i++) {
         mv_VK_renderFinishedSemaphores[i] = m_VK_device.createSemaphore(semaphoreInfo);
     }
 
@@ -1484,14 +1441,14 @@ void Craig::Renderer::createDescriptorSets() {
 }
 
 void Craig::Renderer::createColourResources() {
-    vk::Format colourFormat = m_swapChain.m_VK_swapChainImageFormat;
+    vk::Format colourFormat = m_swapChain.getImageFormat();
 
-    createImage(m_swapChain.m_VK_swapChainExtent.width, m_swapChain.m_VK_swapChainExtent.height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
+    createImage(m_swapChain.getFullExtent().width, m_swapChain.getFullExtent().height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
         vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
         vk::MemoryPropertyFlagBits::eDeviceLocal,
         m_VK_colourImage, m_VMA_colourImageAllocation);
 
-    m_VK_colourImageView = createImageView(m_VK_colourImage, colourFormat, vk::ImageAspectFlagBits::eColor, 1);
+    m_VK_colourImageView = Craig::Image::createImageView(m_VK_device, m_VK_colourImage, colourFormat, vk::ImageAspectFlagBits::eColor, 1);
 
 
 }
@@ -1536,7 +1493,7 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
 
     UniformBufferObject ubo;
 
-    m_camera.m_aspect = m_swapChain.m_VK_swapChainExtent.width / (float)m_swapChain.m_VK_swapChainExtent.height;
+    m_camera.m_aspect = m_swapChain.getFullExtent().width / (float)m_swapChain.getFullExtent().height;
     
     
     std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
@@ -1592,7 +1549,7 @@ void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, i
 
     generateMipMaps(outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight, outTexture->m_VK_mipLevels, false);
 
-    outTexture->m_VK_textureImageView = createImageView(outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor, outTexture->m_VK_mipLevels);
+    outTexture->m_VK_textureImageView = Craig::Image::createImageView(m_VK_device, outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor, outTexture->m_VK_mipLevels);
     
 }
 
@@ -1864,9 +1821,9 @@ void Craig::Renderer::createDepthResources() {
 
     vk::Format depthFormat = findDepthFormat();
 
-    createImage(m_swapChain.m_VK_swapChainExtent.width, m_swapChain.m_VK_swapChainExtent.height, 1, m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_depthImage, m_VMA_depthImageAllocation);
+    createImage(m_swapChain.getFullExtent().width, m_swapChain.getFullExtent().height, 1, m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_depthImage, m_VMA_depthImageAllocation);
 
-    m_VK_depthImageView = createImageView(m_VK_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
+    m_VK_depthImageView = Craig::Image::createImageView(m_VK_device,m_VK_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
 
 }
 
@@ -1883,12 +1840,12 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         m_VK_device.waitSemaphores(waitInfo, UINT64_MAX);
     }
 
-    if (m_swapChain.m_VK_currentExtent.width <= 0 || m_swapChain.m_VK_currentExtent.height <= 0) {
+    if (m_swapChain.getCurrentExtent().width <= 0 || m_swapChain.getCurrentExtent().height <= 0) {
         return; // Skip this frame
     }
 
     uint32_t imageIndex = 0;
-    VkResult nextImageResult = vkAcquireNextImageKHR(m_VK_device, m_swapChain.m_VK_swapChain, UINT64_MAX, mv_VK_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult nextImageResult = vkAcquireNextImageKHR(m_VK_device, m_swapChain.getSwapChain(), UINT64_MAX, mv_VK_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (nextImageResult == VK_ERROR_OUT_OF_DATE_KHR) {
         recreateSwapChain();
@@ -1939,7 +1896,7 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         .setWaitSemaphoreCount(1)
         .setPWaitSemaphores(&mv_VK_renderFinishedSemaphores[imageIndex])
         .setSwapchainCount(1)
-        .setPSwapchains(&m_swapChain.m_VK_swapChain)
+        .setPSwapchains(&m_swapChain.getSwapChain())
         .setPImageIndices(&imageIndex);
 
 
@@ -1998,7 +1955,7 @@ CraigError Craig::Renderer::terminate() {
         m_VK_device.destroySemaphore(mv_VK_imageAvailableSemaphores[i]);
     }    
 
-    for (size_t i = 0; i < m_swapChain.mv_VK_swapChainImages.size(); i++) {
+    for (size_t i = 0; i < m_swapChain.getImages().size(); i++) {
         m_VK_device.destroySemaphore(mv_VK_renderFinishedSemaphores[i]);
     }
 
@@ -2026,12 +1983,12 @@ CraigError Craig::Renderer::terminate() {
     m_VK_device.destroyShaderModule(m_VK_vertShaderModule);
     m_VK_device.destroyShaderModule(m_VK_fragShaderModule);
 
-    for (auto imageView : m_swapChain.mv_VK_swapChainImageViews) {
+    for (auto imageView : m_swapChain.getImageViews()) {
         m_VK_device.destroyImageView(imageView);
     }
 
 
-    m_VK_device.destroySwapchainKHR(m_swapChain.m_VK_swapChain);
+    m_VK_device.destroySwapchainKHR(m_swapChain.getSwapChain());
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
         vmaDestroyBuffer(m_VMA_allocator, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i]);
