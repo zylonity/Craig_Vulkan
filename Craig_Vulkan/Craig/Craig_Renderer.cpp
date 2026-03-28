@@ -1443,10 +1443,11 @@ void Craig::Renderer::createDescriptorSets() {
 void Craig::Renderer::createColourResources() {
     vk::Format colourFormat = m_swapChain.getImageFormat();
 
-    createImage(m_swapChain.getFullExtent().width, m_swapChain.getFullExtent().height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
+    m_VK_colourImage = Image::createImage(m_VK_physicalDevice, m_VK_surface, m_swapChain.getFullExtent().width, m_swapChain.getFullExtent().height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
         vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
         vk::MemoryPropertyFlagBits::eDeviceLocal,
-        m_VK_colourImage, m_VMA_colourImageAllocation);
+        m_VMA_allocator,
+        m_VMA_colourImageAllocation);
 
     m_VK_colourImageView = Craig::Image::createImageView(m_VK_device, m_VK_colourImage, colourFormat, vk::ImageAspectFlagBits::eColor, 1);
 
@@ -1538,7 +1539,7 @@ void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, i
 
     //stbi_image_free(pixels);
 
-    createImage(texWidth, texHeight, outTexture->m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, outTexture->m_VK_textureImage, outTexture->m_VMA_textureImageAllocation);
+    outTexture->m_VK_textureImage = Image::createImage(m_VK_physicalDevice, m_VK_surface, texWidth, texHeight, outTexture->m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VMA_allocator,outTexture->m_VMA_textureImageAllocation);
 
     transitionImageLayout(outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, true, outTexture->m_VK_mipLevels);
     copyBufferToImage(stagingBuffer, outTexture->m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
@@ -1737,53 +1738,6 @@ void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_
 
 }
 
-void Craig::Renderer::createImage(uint32_t width, uint32_t height, uint32_t mipLevels, vk::SampleCountFlagBits numSamples, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::Image& image, VmaAllocation& allocation) {
-
-    vk::ImageCreateInfo imageInfo;
-    imageInfo.setImageType(vk::ImageType::e2D);
-    imageInfo.extent.setWidth(width);
-    imageInfo.extent.setHeight(height);
-    imageInfo.extent.setDepth(1);
-    imageInfo.setMipLevels(mipLevels);
-    imageInfo.setArrayLayers(1);
-    imageInfo.setFormat(format);
-    imageInfo.setTiling(tiling); /*
-        VK_IMAGE_TILING_LINEAR: Texels are laid out in row - major order like our pixels array
-        VK_IMAGE_TILING_OPTIMAL : Texels are laid out in an implementation defined order for optimal access */
-    imageInfo.setInitialLayout(vk::ImageLayout::eUndefined);
-    imageInfo.setUsage(usage);
-    imageInfo.setSamples(numSamples); //From Vulkan-Tutorial.com - The samples flag is related to multisampling. This is only relevant for images that will be used as attachments, so stick to one sample.
-
-    Device::QueueFamilyIndices q = Device::findQueueFamilies(m_VK_physicalDevice, m_VK_surface);
-    if (q.hasDedicatedTransfer()) {
-        uint32_t families[] = { q.graphicsFamily.value(), q.transferFamily.value() };
-
-        imageInfo.setSharingMode(vk::SharingMode::eConcurrent);
-        imageInfo.setQueueFamilyIndexCount(2);
-        imageInfo.setQueueFamilyIndices(families);
-    }
-    else {
-        imageInfo.setSharingMode(vk::SharingMode::eExclusive);
-    }
-
-    VmaAllocationCreateInfo aci{};
-    aci.usage = VMA_MEMORY_USAGE_AUTO;
-
-    if (properties & vk::MemoryPropertyFlagBits::eDeviceLocal)
-        aci.requiredFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-    if (properties & vk::MemoryPropertyFlagBits::eHostVisible)
-        aci.requiredFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-
-    VkResult result = vmaCreateImage(m_VMA_allocator, imageInfo, &aci, reinterpret_cast<VkImage*>(&image), &allocation, nullptr);
-
-    if (result != VK_SUCCESS)
-        throw std::runtime_error("vmaCreateImage failed");
-
-  
-
-}
-
 vk::Format Craig::Renderer::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features)
 {
     for (auto format : candidates) {
@@ -1821,7 +1775,7 @@ void Craig::Renderer::createDepthResources() {
 
     vk::Format depthFormat = findDepthFormat();
 
-    createImage(m_swapChain.getFullExtent().width, m_swapChain.getFullExtent().height, 1, m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VK_depthImage, m_VMA_depthImageAllocation);
+    m_VK_depthImage = Image::createImage(m_VK_physicalDevice, m_VK_surface, m_swapChain.getFullExtent().width, m_swapChain.getFullExtent().height, 1, m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VMA_allocator,m_VMA_depthImageAllocation);
 
     m_VK_depthImageView = Craig::Image::createImageView(m_VK_device,m_VK_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
 
@@ -1983,12 +1937,7 @@ CraigError Craig::Renderer::terminate() {
     m_VK_device.destroyShaderModule(m_VK_vertShaderModule);
     m_VK_device.destroyShaderModule(m_VK_fragShaderModule);
 
-    for (auto imageView : m_swapChain.getImageViews()) {
-        m_VK_device.destroyImageView(imageView);
-    }
-
-
-    m_VK_device.destroySwapchainKHR(m_swapChain.getSwapChain());
+    m_swapChain.terminate();
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
         vmaDestroyBuffer(m_VMA_allocator, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i]);

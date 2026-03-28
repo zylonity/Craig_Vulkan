@@ -43,8 +43,8 @@ namespace Craig {
         const vk::SwapchainKHR&           getSwapChain() const { return m_VK_swapChain; };
         const std::vector<vk::Image>&     getImages() const { return mv_VK_swapChainImages; };
         const std::vector<vk::ImageView>& getImageViews() const { return mv_VK_swapChainImageViews; };
-        vk::Format&                 getImageFormat() { return m_VK_swapChainImageFormat; };
-        vk::Extent2D&               getFullExtent() { return m_VK_swapChainExtent; };
+        const vk::Format&                 getImageFormat() const { return m_VK_swapChainImageFormat; };
+        const vk::Extent2D&               getFullExtent() const { return m_VK_swapChainExtent; };
         vk::Extent2D&               getCurrentExtent() { return m_VK_currentExtent; };
 
     private:

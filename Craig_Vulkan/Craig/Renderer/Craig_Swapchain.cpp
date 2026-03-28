@@ -172,6 +172,13 @@ CraigError Craig::Swapchain::terminate() {
 
     CraigError ret = CRAIG_SUCCESS;
 
+    for (auto imageView : mv_VK_swapChainImageViews) {
+        mSC_device.destroyImageView(imageView);
+    }
+
+    mSC_device.destroySwapchainKHR(m_VK_swapChain);
+
+
     return ret;
 }
 
