@@ -235,7 +235,7 @@ void Craig::Renderer::InitVulkan() {
 
     m_renderingAttachments.init(renderingAttachmentsInitInfo);
     m_renderingAttachments.createColourResources();
-    createDepthResources();
+    m_renderingAttachments.createDepthResources();
     createDescriptorSetLayout();
     createGraphicsPipeline();
     createCommandPool();
@@ -535,7 +535,7 @@ void Craig::Renderer::createGraphicsPipeline() {
     }
 
     vk::Format colorFormat = m_swapChain.getImageFormat();
-    vk::Format depthFormat = findDepthFormat();
+    vk::Format depthFormat = m_renderingAttachments.findDepthFormat();
 
     vk::PipelineRenderingCreateInfo renderingInfo{};
     renderingInfo
@@ -600,8 +600,8 @@ void Craig::Renderer::cleanupSwapChain() {
     m_VK_device.destroyImageView(m_renderingAttachments.m_VK_colourImageView);
     vmaDestroyImage(m_VMA_allocator, m_renderingAttachments.m_VK_colourImage, m_renderingAttachments.m_VMA_colourImageAllocation);
 
-    m_VK_device.destroyImageView(m_VK_depthImageView);
-    vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
+    m_VK_device.destroyImageView(m_renderingAttachments.m_VK_depthImageView);
+    vmaDestroyImage(m_VMA_allocator, m_renderingAttachments.m_VK_depthImage, m_renderingAttachments.m_VMA_depthImageAllocation);
 
 
     for (auto imageView : m_swapChain.getImageViews()) {
@@ -628,7 +628,7 @@ void Craig::Renderer::recreateSwapChain() {
     createSwapChain2();
     m_swapChain.createImageViews();
     m_renderingAttachments.createColourResources();
-    createDepthResources();
+    m_renderingAttachments.createDepthResources();
     //createFrameBuffers();
 }
 
@@ -652,8 +652,8 @@ void Craig::Renderer::recreateSwapChainFull() {
     vmaDestroyImage(m_VMA_allocator, m_renderingAttachments.m_VK_colourImage, m_renderingAttachments.m_VMA_colourImageAllocation);
 
     //Clean up depth resources
-    m_VK_device.destroyImageView(m_VK_depthImageView);
-    vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
+    m_VK_device.destroyImageView(m_renderingAttachments.m_VK_depthImageView);
+    vmaDestroyImage(m_VMA_allocator, m_renderingAttachments.m_VK_depthImage, m_renderingAttachments.m_VMA_depthImageAllocation);
 
     //Clean up the swapchain
     for (auto imageView : m_swapChain.getImageViews()) {
@@ -666,7 +666,7 @@ void Craig::Renderer::recreateSwapChainFull() {
     createSwapChain2();
     m_swapChain.createImageViews();
     m_renderingAttachments.createColourResources();
-    createDepthResources();
+    m_renderingAttachments.createDepthResources();
     createGraphicsPipeline();
 }
 
@@ -726,7 +726,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     //We have to transition the swap image manually, render passes used to do this implicitly :(
     transitionSwapImage(commandBuffer, m_swapChain.getImages()[imageIndex], vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
     transitionSwapImage(commandBuffer, m_renderingAttachments.m_VK_colourImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal); //MSAA colour image too
-    transitionSwapImage(commandBuffer, m_VK_depthImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+    transitionSwapImage(commandBuffer, m_renderingAttachments.m_VK_depthImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
 
     vk::ClearValue clearColour;
@@ -744,7 +744,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     vk::RenderingAttachmentInfo depthAtt{};
     depthAtt
-        .setImageView(m_VK_depthImageView)
+        .setImageView(m_renderingAttachments.m_VK_depthImageView)
         .setImageLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal)
         .setLoadOp(vk::AttachmentLoadOp::eClear)
         .setStoreOp(vk::AttachmentStoreOp::eDontCare)
@@ -1748,48 +1748,48 @@ void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_
 
 }
 
-vk::Format Craig::Renderer::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features)
-{
-    for (auto format : candidates) {
-        auto props = m_VK_physicalDevice.getFormatProperties(format);
-
-        if (tiling == vk::ImageTiling::eLinear &&
-            (props.linearTilingFeatures & features) == features)
-            return format;
-
-        if (tiling == vk::ImageTiling::eOptimal &&
-            (props.optimalTilingFeatures & features) == features)
-            return format;
-    }
-
-    throw std::runtime_error("no supported depth format found");
-}
-
-vk::Format Craig::Renderer::findDepthFormat() {
-    return findSupportedFormat(
-        {
-            vk::Format::eD32SfloatS8Uint,
-            vk::Format::eD24UnormS8Uint,
-            vk::Format::eD32Sfloat
-        },
-        vk::ImageTiling::eOptimal,
-        vk::FormatFeatureFlagBits::eDepthStencilAttachment
-    );
-}
+// vk::Format Craig::Renderer::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features)
+// {
+//     for (auto format : candidates) {
+//         auto props = m_VK_physicalDevice.getFormatProperties(format);
+//
+//         if (tiling == vk::ImageTiling::eLinear &&
+//             (props.linearTilingFeatures & features) == features)
+//             return format;
+//
+//         if (tiling == vk::ImageTiling::eOptimal &&
+//             (props.optimalTilingFeatures & features) == features)
+//             return format;
+//     }
+//
+//     throw std::runtime_error("no supported depth format found");
+// }
+//
+// vk::Format Craig::Renderer::findDepthFormat() {
+//     return findSupportedFormat(
+//         {
+//             vk::Format::eD32SfloatS8Uint,
+//             vk::Format::eD24UnormS8Uint,
+//             vk::Format::eD32Sfloat
+//         },
+//         vk::ImageTiling::eOptimal,
+//         vk::FormatFeatureFlagBits::eDepthStencilAttachment
+//     );
+// }
 
 bool Craig::Renderer::hasStencilComponent(vk::Format format) {
     return format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint;
 }
 
-void Craig::Renderer::createDepthResources() {
-
-    vk::Format depthFormat = findDepthFormat();
-
-    m_VK_depthImage = Image::createImage(m_VK_physicalDevice, m_VK_surface, m_swapChain.getFullExtent().width, m_swapChain.getFullExtent().height, 1, m_renderingAttachments.m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VMA_allocator,m_VMA_depthImageAllocation);
-
-    m_VK_depthImageView = Craig::Image::createImageView(m_VK_device,m_VK_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
-
-}
+// void Craig::Renderer::createDepthResources() {
+//
+//     vk::Format depthFormat = findDepthFormat();
+//
+//     m_VK_depthImage = Image::createImage(m_VK_physicalDevice, m_VK_surface, m_swapChain.getFullExtent().width, m_swapChain.getFullExtent().height, 1, m_renderingAttachments.m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VMA_allocator,m_VMA_depthImageAllocation);
+//
+//     m_VK_depthImageView = Craig::Image::createImageView(m_VK_device,m_VK_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
+//
+// }
 
 void Craig::Renderer::drawFrame(const float& deltaTime) {
 
@@ -1934,8 +1934,8 @@ CraigError Craig::Renderer::terminate() {
     m_VK_device.destroyImageView(m_renderingAttachments.m_VK_colourImageView);
     vmaDestroyImage(m_VMA_allocator, m_renderingAttachments.m_VK_colourImage, m_renderingAttachments.m_VMA_colourImageAllocation);
 
-    m_VK_device.destroyImageView(m_VK_depthImageView);
-    vmaDestroyImage(m_VMA_allocator, m_VK_depthImage, m_VMA_depthImageAllocation);
+    m_VK_device.destroyImageView(m_renderingAttachments.m_VK_depthImageView);
+    vmaDestroyImage(m_VMA_allocator, m_renderingAttachments.m_VK_depthImage, m_renderingAttachments.m_VMA_depthImageAllocation);
 
     m_VK_device.destroySampler(m_VK_textureSampler);
 

@@ -27,16 +27,22 @@ namespace Craig {
 		// MSAA / colour / depth
 		vk::SampleCountFlagBits m_VK_msaaSamples = vk::SampleCountFlagBits::e1;
 
-		// vk::Image      m_VK_depthImage;
-		// vk::ImageView  m_VK_depthImageView;
-		// VmaAllocation  m_VMA_depthImageAllocation;
+		vk::Image      m_VK_depthImage;
+		vk::ImageView  m_VK_depthImageView;
+		VmaAllocation  m_VMA_depthImageAllocation;
 
 		CraigError init(const RenderingAttachmentsInitInfo& info);
 		CraigError update();
 		CraigError terminate();
 
 		void createColourResources();
+		void createDepthResources();
+
+		vk::Format findDepthFormat();
 	private:
+		vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
+
+
 		vk::SurfaceKHR       mRA_surface;
 		vk::PhysicalDevice   mRA_physicalDevice;
 		vk::Device           mRA_device;

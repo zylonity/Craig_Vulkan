@@ -68,7 +68,7 @@ namespace Craig {
 
 		// MSAA + depth attachments
 		//void createColourResources();
-		void createDepthResources();
+		//void createDepthResources();
 
 		
 		// Pipeline / descriptors
@@ -141,9 +141,9 @@ namespace Craig {
 
 		// MSAA + formats
 		vk::SampleCountFlagBits getMaxUsableSampleCount();
-		vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates,
-			vk::ImageTiling tiling, vk::FormatFeatureFlags features);
-		vk::Format findDepthFormat();
+		// vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates,
+		// 	vk::ImageTiling tiling, vk::FormatFeatureFlags features);
+		// vk::Format findDepthFormat();
 		bool hasStencilComponent(vk::Format format);
 
 		
@@ -246,9 +246,9 @@ namespace Craig {
 		//
 		RenderingAttachments m_renderingAttachments;
 
-		vk::Image      m_VK_depthImage;
-		vk::ImageView  m_VK_depthImageView;
-		VmaAllocation  m_VMA_depthImageAllocation;
+		// vk::Image      m_VK_depthImage;
+		// vk::ImageView  m_VK_depthImageView;
+		// VmaAllocation  m_VMA_depthImageAllocation;
 
 		
 		// Texture

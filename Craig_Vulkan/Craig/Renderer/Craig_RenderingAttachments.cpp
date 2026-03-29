@@ -35,6 +35,45 @@ void Craig::RenderingAttachments::createColourResources() {
 
 }
 
+vk::Format Craig::RenderingAttachments::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features)
+{
+	for (auto format : candidates) {
+		auto props = mRA_physicalDevice.getFormatProperties(format);
+
+		if (tiling == vk::ImageTiling::eLinear &&
+			(props.linearTilingFeatures & features) == features)
+			return format;
+
+		if (tiling == vk::ImageTiling::eOptimal &&
+			(props.optimalTilingFeatures & features) == features)
+			return format;
+	}
+
+	throw std::runtime_error("no supported depth format found");
+}
+
+vk::Format Craig::RenderingAttachments::findDepthFormat() {
+	return findSupportedFormat(
+		{
+			vk::Format::eD32SfloatS8Uint,
+			vk::Format::eD24UnormS8Uint,
+			vk::Format::eD32Sfloat
+		},
+		vk::ImageTiling::eOptimal,
+		vk::FormatFeatureFlagBits::eDepthStencilAttachment
+	);
+}
+
+void Craig::RenderingAttachments::createDepthResources() {
+
+	vk::Format depthFormat = findDepthFormat();
+
+	m_VK_depthImage = Image::createImage(mRA_physicalDevice, mRA_surface, mRA_swapchain.getFullExtent().width, mRA_swapchain.getFullExtent().height, 1, m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, mRA_memoryAllocator,m_VMA_depthImageAllocation);
+
+	m_VK_depthImageView = Craig::Image::createImageView(mRA_device,m_VK_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
+
+}
+
 CraigError Craig::RenderingAttachments::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
