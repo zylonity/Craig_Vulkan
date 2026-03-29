@@ -1,19 +1,47 @@
 #pragma once
 #include <vulkan/vulkan.hpp>
+#include "../../External/vk_mem_alloc.h"
 
 #include "Craig/Craig_Constants.hpp"
-
+#include "Craig_Swapchain.hpp"
 
 namespace Craig {
 
 	class RenderingAttachments {
-
 	public:
-		CraigError init();
+
+		//All the stuff we need to pass to the swapchain from the renderer
+		struct RenderingAttachmentsInitInfo
+		{
+			vk::SurfaceKHR       surface;
+			vk::PhysicalDevice   physicalDevice;
+			vk::Device           device;
+			Craig::Swapchain     swapchain;
+			VmaAllocator		 memoryAllocator;
+		};
+
+		vk::Image      m_VK_colourImage;
+		vk::ImageView  m_VK_colourImageView;
+		VmaAllocation  m_VMA_colourImageAllocation;
+
+		// MSAA / colour / depth
+		vk::SampleCountFlagBits m_VK_msaaSamples = vk::SampleCountFlagBits::e1;
+
+		// vk::Image      m_VK_depthImage;
+		// vk::ImageView  m_VK_depthImageView;
+		// VmaAllocation  m_VMA_depthImageAllocation;
+
+		CraigError init(const RenderingAttachmentsInitInfo& info);
 		CraigError update();
 		CraigError terminate();
-	private:
 
+		void createColourResources();
+	private:
+		vk::SurfaceKHR       mRA_surface;
+		vk::PhysicalDevice   mRA_physicalDevice;
+		vk::Device           mRA_device;
+		Craig::Swapchain     mRA_swapchain;
+		VmaAllocator		 mRA_memoryAllocator;
 
 	};
 

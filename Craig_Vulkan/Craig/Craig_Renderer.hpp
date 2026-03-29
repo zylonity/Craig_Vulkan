@@ -19,6 +19,7 @@
 #include "Craig_ResourceManager.hpp"
 #include "Renderer/Craig_Swapchain.hpp"
 #include "Renderer/Craig_Device.hpp"
+#include "Renderer/Craig_RenderingAttachments.hpp"
 
 namespace Craig {
 
@@ -62,12 +63,11 @@ namespace Craig {
 		// Swapchain + framebuffer resources
 		void recreateSwapChain();          // Swapchain-only recreation
 		void recreateSwapChainFull();      // Swapchain + pipeline + imgui recreation
-		//void createSwapChain();            // Create swapchain images
 		void createSwapChain2();            // Create swapchain images
 		void cleanupSwapChain();           // Destroy swapchain-related objects
 
 		// MSAA + depth attachments
-		void createColourResources();
+		//void createColourResources();
 		void createDepthResources();
 
 		
@@ -235,14 +235,16 @@ namespace Craig {
 
 		
 		// MSAA / colour / depth
-		vk::SampleCountFlagBits m_VK_msaaSamples = vk::SampleCountFlagBits::e1;
+		//vk::SampleCountFlagBits m_VK_msaaSamples = vk::SampleCountFlagBits::e1;
 
 		uint32_t m_MaxSamplingLevel = 0;   // Max sampling level
 		uint32_t m_minLODLevel = 0;        // User-selected min LOD clamp
 
-		vk::Image      m_VK_colourImage;
-		vk::ImageView  m_VK_colourImageView;
-		VmaAllocation  m_VMA_colourImageAllocation;
+		// vk::Image      m_VK_colourImage;
+		// vk::ImageView  m_VK_colourImageView;
+		// VmaAllocation  m_VMA_colourImageAllocation;
+		//
+		RenderingAttachments m_renderingAttachments;
 
 		vk::Image      m_VK_depthImage;
 		vk::ImageView  m_VK_depthImageView;
