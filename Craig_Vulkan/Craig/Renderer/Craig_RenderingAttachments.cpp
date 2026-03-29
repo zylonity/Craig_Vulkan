@@ -24,7 +24,7 @@ CraigError Craig::RenderingAttachments::update() {
 void Craig::RenderingAttachments::createColourResources() {
 	vk::Format colourFormat = mRA_swapchain->getImageFormat();
 
-	m_VK_colourImage = Image::createImage(mRA_physicalDevice, mRA_surface, mRA_swapchain->getFullExtent().width, mRA_swapchain->getFullExtent().height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
+	m_VK_colourImage = Image::createImage(mRA_physicalDevice, mRA_surface, mRA_swapchain->getExtent().width, mRA_swapchain->getExtent().height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		mRA_memoryAllocator,
@@ -74,7 +74,7 @@ void Craig::RenderingAttachments::createDepthResources() {
 
 	vk::Format depthFormat = findDepthFormat();
 
-	m_VK_depthImage = Image::createImage(mRA_physicalDevice, mRA_surface, mRA_swapchain->getFullExtent().width, mRA_swapchain->getFullExtent().height, 1, m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, mRA_memoryAllocator,m_VMA_depthImageAllocation);
+	m_VK_depthImage = Image::createImage(mRA_physicalDevice, mRA_surface, mRA_swapchain->getExtent().width, mRA_swapchain->getExtent().height, 1, m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, mRA_memoryAllocator,m_VMA_depthImageAllocation);
 
 	m_VK_depthImageView = Craig::Image::createImageView(mRA_device,m_VK_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
 

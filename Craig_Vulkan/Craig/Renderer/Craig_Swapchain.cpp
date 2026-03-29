@@ -26,7 +26,7 @@ void Craig::Swapchain::createSwapChain() {
 
     vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
     vk::PresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-    m_VK_currentExtent = chooseSwapExtent(swapChainSupport.capabilities);
+    m_VK_swapChainExtent = chooseSwapExtent(swapChainSupport.capabilities);
 
     if (swapChainSupport.capabilities.minImageCount > kMaxFramesInFlight) {
         assert("too many frames in flight for this system!");
@@ -39,7 +39,7 @@ void Craig::Swapchain::createSwapChain() {
     }
 
     printf("Creating draw buffer/swap chain with %i images\n", imageCount);
-    printf("Current extent size = %i x %i\n", m_VK_currentExtent.width, m_VK_currentExtent.height);
+    printf("Current extent size = %i x %i\n", m_VK_swapChainExtent.width, m_VK_swapChainExtent.height);
 
     vk::SwapchainCreateInfoKHR createInfo{};
     createInfo
@@ -47,7 +47,7 @@ void Craig::Swapchain::createSwapChain() {
         .setMinImageCount(imageCount)
         .setImageFormat(surfaceFormat.format)
         .setImageColorSpace(surfaceFormat.colorSpace)
-        .setImageExtent(m_VK_currentExtent)
+        .setImageExtent(m_VK_swapChainExtent)
         .setImageArrayLayers(1) //"always 1 unless you are developing a stereoscopic 3D application"
         .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment);
 
@@ -89,7 +89,7 @@ void Craig::Swapchain::createSwapChain() {
 
     mv_VK_swapChainImages = mSC_device.getSwapchainImagesKHR(m_VK_swapChain);
     m_VK_swapChainImageFormat = surfaceFormat.format;
-    m_VK_swapChainExtent = m_VK_currentExtent;
+    //m_VK_swapChainExtent = m_VK_swapChainExtent;
 
 }
 

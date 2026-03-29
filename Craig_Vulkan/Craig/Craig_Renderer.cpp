@@ -188,7 +188,7 @@ CraigError Craig::Renderer::update(const float& deltaTime) {
 	CraigError ret = CRAIG_SUCCESS;
 
 #if defined(IMGUI_ENABLED)
-    if (m_swapChain.getCurrentExtent().width > 0 && m_swapChain.getCurrentExtent().height > 0) {
+    if (m_swapChain.getExtent().width > 0 && m_swapChain.getExtent().height > 0) {
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
@@ -614,9 +614,9 @@ void Craig::Renderer::cleanupSwapChain() {
 void Craig::Renderer::recreateSwapChain() {
 
     Swapchain::SwapChainSupportDetails swapChainSupport = m_swapChain.querySwapChainSupport(m_VK_physicalDevice, m_VK_surface);
-    m_swapChain.getCurrentExtent() = m_swapChain.chooseSwapExtent(swapChainSupport.capabilities);
+    m_swapChain.getExtent() = m_swapChain.chooseSwapExtent(swapChainSupport.capabilities);
 
-    if (m_swapChain.getCurrentExtent().width <= 0 || m_swapChain.getCurrentExtent().height <= 0) {
+    if (m_swapChain.getExtent().width <= 0 || m_swapChain.getExtent().height <= 0) {
         return; // Skip this frame
     }
 
@@ -635,9 +635,9 @@ void Craig::Renderer::recreateSwapChain() {
 void Craig::Renderer::recreateSwapChainFull() {
 
     Swapchain::SwapChainSupportDetails swapChainSupport = m_swapChain.querySwapChainSupport(m_VK_physicalDevice, m_VK_surface);
-    m_swapChain.getCurrentExtent() = m_swapChain.chooseSwapExtent(swapChainSupport.capabilities);
+    m_swapChain.getExtent() = m_swapChain.chooseSwapExtent(swapChainSupport.capabilities);
 
-    if (m_swapChain.getCurrentExtent().width <= 0 || m_swapChain.getCurrentExtent().height <= 0) {
+    if (m_swapChain.getExtent().width <= 0 || m_swapChain.getExtent().height <= 0) {
         return; // Skip this frame
     }
 
@@ -769,7 +769,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     // vk::RenderingInfo begins a dynamic rendering instance.
     vk::RenderingInfo ri{};
     ri
-        .setRenderArea({ {0,0}, m_swapChain.getFullExtent() })
+        .setRenderArea({ {0,0}, m_swapChain.getExtent() })
         .setLayerCount(1)
         .setColorAttachmentCount(1)
         .setPColorAttachments(&colourAtt)
@@ -788,8 +788,8 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     vk::Viewport viewport;
     viewport.setX(0.0f)
         .setY(0.0f)
-        .setWidth(static_cast<float>(m_swapChain.getFullExtent().width))
-        .setHeight(static_cast<float>(m_swapChain.getFullExtent().height))
+        .setWidth(static_cast<float>(m_swapChain.getExtent().width))
+        .setHeight(static_cast<float>(m_swapChain.getExtent().height))
         .setMinDepth(0.0f)
         .setMaxDepth(1.0f);
 
@@ -798,7 +798,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     // Set the dynamic scissor (no cropping � covers entire area)
     vk::Rect2D scissor;
     scissor.setOffset({ 0, 0 })
-        .setExtent(m_swapChain.getFullExtent());
+        .setExtent(m_swapChain.getExtent());
 
     commandBuffer.setScissor(0, scissor);
 
@@ -843,7 +843,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     vk::RenderingInfo uiRi{};
     uiRi
-        .setRenderArea({ {0,0}, m_swapChain.getFullExtent() })
+        .setRenderArea({ {0,0}, m_swapChain.getExtent() })
         .setLayerCount(1)
         .setColorAttachmentCount(1)
         .setPColorAttachments(&uiColourAtt)
@@ -1469,7 +1469,7 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
 
     UniformBufferObject ubo;
 
-    m_camera.m_aspect = m_swapChain.getFullExtent().width / (float)m_swapChain.getFullExtent().height;
+    m_camera.m_aspect = m_swapChain.getExtent().width / (float)m_swapChain.getExtent().height;
     
     
     std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
@@ -1769,7 +1769,7 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         m_VK_device.waitSemaphores(waitInfo, UINT64_MAX);
     }
 
-    if (m_swapChain.getCurrentExtent().width <= 0 || m_swapChain.getCurrentExtent().height <= 0) {
+    if (m_swapChain.getExtent().width <= 0 || m_swapChain.getExtent().height <= 0) {
         return; // Skip this frame
     }
 
