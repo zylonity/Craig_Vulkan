@@ -41,8 +41,10 @@ namespace Craig {
 		const uint32_t& getMaxLOD() const { return 1; };
 		void updateMinLOD(int minLOD);
 
-		const uint32_t& getMaxSamplingLevel() const { return m_MaxSamplingLevel; };
+		//const uint32_t& getMaxSamplingLevel() const { return m_MaxSamplingLevel; };
 		void updateSamplingLevel(int levelToSet);
+
+		RenderingAttachments getRenderingAttachments() {return m_renderingAttachments; };
 
 	private:
 		
@@ -65,11 +67,6 @@ namespace Craig {
 		void recreateSwapChainFull();      // Swapchain + pipeline + imgui recreation
 		void createSwapChain2();            // Create swapchain images
 		void cleanupSwapChain();           // Destroy swapchain-related objects
-
-		// MSAA + depth attachments
-		//void createColourResources();
-		//void createDepthResources();
-
 		
 		// Pipeline / descriptors
 		void createDescriptorSetLayout();
@@ -140,7 +137,7 @@ namespace Craig {
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
 		// MSAA + formats
-		vk::SampleCountFlagBits getMaxUsableSampleCount();
+		//vk::SampleCountFlagBits getMaxUsableSampleCount();
 		// vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates,
 		// 	vk::ImageTiling tiling, vk::FormatFeatureFlags features);
 		// vk::Format findDepthFormat();
@@ -237,19 +234,10 @@ namespace Craig {
 		// MSAA / colour / depth
 		//vk::SampleCountFlagBits m_VK_msaaSamples = vk::SampleCountFlagBits::e1;
 
-		uint32_t m_MaxSamplingLevel = 0;   // Max sampling level
+		//uint32_t m_MaxSamplingLevel = 0;   // Max sampling level
 		uint32_t m_minLODLevel = 0;        // User-selected min LOD clamp
 
-		// vk::Image      m_VK_colourImage;
-		// vk::ImageView  m_VK_colourImageView;
-		// VmaAllocation  m_VMA_colourImageAllocation;
-		//
 		RenderingAttachments m_renderingAttachments;
-
-		// vk::Image      m_VK_depthImage;
-		// vk::ImageView  m_VK_depthImageView;
-		// VmaAllocation  m_VMA_depthImageAllocation;
-
 		
 		// Texture
 		vk::Sampler   m_VK_textureSampler;

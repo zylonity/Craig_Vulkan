@@ -231,7 +231,7 @@ void Craig::Renderer::InitVulkan() {
     renderingAttachmentsInitInfo.device = m_VK_device;
     renderingAttachmentsInitInfo.physicalDevice = m_VK_physicalDevice;
     renderingAttachmentsInitInfo.memoryAllocator = m_VMA_allocator;
-    renderingAttachmentsInitInfo.swapchain = m_swapChain;
+    renderingAttachmentsInitInfo.swapchain = &m_swapChain;
 
     m_renderingAttachments.init(renderingAttachmentsInitInfo);
     m_renderingAttachments.createColourResources();
@@ -306,7 +306,7 @@ void Craig::Renderer::pickPhysicalDevice() {
     for (const auto& device : devices) {
         if (isDeviceSuitable(device)) {
             m_VK_physicalDevice = device;
-            m_renderingAttachments.m_VK_msaaSamples = getMaxUsableSampleCount();
+            m_renderingAttachments.findAndSetMaxSampleCount(m_VK_physicalDevice);
             break;
         }
     }
@@ -1309,41 +1309,6 @@ void Craig::Renderer::createDescriptorSetLayout() {
 
     m_VK_descriptorSetLayout = m_VK_device.createDescriptorSetLayout(layoutInfo);
 
-
-}
-
-vk::SampleCountFlagBits Craig::Renderer::getMaxUsableSampleCount() {
-    vk::PhysicalDeviceProperties physicalDeviceProperties = m_VK_physicalDevice.getProperties();
-
-    vk::SampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
-    
-    if (counts & vk::SampleCountFlagBits::e64) { 
-        m_MaxSamplingLevel = 64;
-        return vk::SampleCountFlagBits::e64;
-    }
-    if (counts & vk::SampleCountFlagBits::e32) {
-        m_MaxSamplingLevel = 32;
-        return vk::SampleCountFlagBits::e32;
-    }
-    if (counts & vk::SampleCountFlagBits::e16) {
-        m_MaxSamplingLevel = 16;
-        return vk::SampleCountFlagBits::e16;
-    }
-    if (counts & vk::SampleCountFlagBits::e8) {
-        m_MaxSamplingLevel = 8;
-        return vk::SampleCountFlagBits::e8;
-    }
-    if (counts & vk::SampleCountFlagBits::e4) {
-        m_MaxSamplingLevel = 4;
-        return vk::SampleCountFlagBits::e4;
-    }
-    if (counts & vk::SampleCountFlagBits::e2) {
-        m_MaxSamplingLevel = 2;
-        return vk::SampleCountFlagBits::e2;
-    }
-
-    m_MaxSamplingLevel = 1;
-    return vk::SampleCountFlagBits::e1;
 
 }
 

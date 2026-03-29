@@ -37,8 +37,8 @@ CraigError Craig::ImguiEditor::editorInit() {
 
 		//When we initialise the renderer we have the max sampling level set, so for now this is good enough since we change it in both places at once
 		//TODO: Keep track of the current level in the renderer, not both there and here
-		m_currentMSAALevel = (int)mp_renderer->getMaxSamplingLevel();
-		mv_MSAADropdownOptions.resize(m_MSAAIndexes[mp_renderer->getMaxSamplingLevel()] + 1);
+		m_currentMSAALevel = (int)mp_renderer->getRenderingAttachments().getMaxSamplingLevel();
+		mv_MSAADropdownOptions.resize(m_MSAAIndexes[mp_renderer->getRenderingAttachments().getMaxSamplingLevel()] + 1);
 		m_MSAADropdownIndex = m_MSAAIndexes[m_currentMSAALevel];
 
 		m_initialised = true;

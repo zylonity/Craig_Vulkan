@@ -22,9 +22,9 @@ CraigError Craig::RenderingAttachments::update() {
 }
 
 void Craig::RenderingAttachments::createColourResources() {
-	vk::Format colourFormat = mRA_swapchain.getImageFormat();
+	vk::Format colourFormat = mRA_swapchain->getImageFormat();
 
-	m_VK_colourImage = Image::createImage(mRA_physicalDevice, mRA_surface, mRA_swapchain.getFullExtent().width, mRA_swapchain.getFullExtent().height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
+	m_VK_colourImage = Image::createImage(mRA_physicalDevice, mRA_surface, mRA_swapchain->getFullExtent().width, mRA_swapchain->getFullExtent().height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		mRA_memoryAllocator,
@@ -64,13 +64,47 @@ vk::Format Craig::RenderingAttachments::findDepthFormat() {
 	);
 }
 
+void Craig::RenderingAttachments::findAndSetMaxSampleCount(vk::PhysicalDevice physicalDevice)
+{
+	m_VK_msaaSamples = getMaxUsableSampleCount(physicalDevice);
+
+}
+
 void Craig::RenderingAttachments::createDepthResources() {
 
 	vk::Format depthFormat = findDepthFormat();
 
-	m_VK_depthImage = Image::createImage(mRA_physicalDevice, mRA_surface, mRA_swapchain.getFullExtent().width, mRA_swapchain.getFullExtent().height, 1, m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, mRA_memoryAllocator,m_VMA_depthImageAllocation);
+	m_VK_depthImage = Image::createImage(mRA_physicalDevice, mRA_surface, mRA_swapchain->getFullExtent().width, mRA_swapchain->getFullExtent().height, 1, m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, mRA_memoryAllocator,m_VMA_depthImageAllocation);
 
 	m_VK_depthImageView = Craig::Image::createImageView(mRA_device,m_VK_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
+
+}
+
+vk::SampleCountFlagBits Craig::RenderingAttachments::getMaxUsableSampleCount(vk::PhysicalDevice physicalDevice) {
+	vk::PhysicalDeviceProperties physicalDeviceProperties = physicalDevice.getProperties();
+
+	vk::SampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+
+	if (counts & vk::SampleCountFlagBits::e64) {
+		return vk::SampleCountFlagBits::e64;
+	}
+	if (counts & vk::SampleCountFlagBits::e32) {
+		return vk::SampleCountFlagBits::e32;
+	}
+	if (counts & vk::SampleCountFlagBits::e16) {
+		return vk::SampleCountFlagBits::e16;
+	}
+	if (counts & vk::SampleCountFlagBits::e8) {
+		return vk::SampleCountFlagBits::e8;
+	}
+	if (counts & vk::SampleCountFlagBits::e4) {
+		return vk::SampleCountFlagBits::e4;
+	}
+	if (counts & vk::SampleCountFlagBits::e2) {
+		return vk::SampleCountFlagBits::e2;
+	}
+
+	return vk::SampleCountFlagBits::e1;
 
 }
 

@@ -16,7 +16,7 @@ namespace Craig {
 			vk::SurfaceKHR       surface;
 			vk::PhysicalDevice   physicalDevice;
 			vk::Device           device;
-			Craig::Swapchain     swapchain;
+			Swapchain*           swapchain;
 			VmaAllocator		 memoryAllocator;
 		};
 
@@ -39,14 +39,16 @@ namespace Craig {
 		void createDepthResources();
 
 		vk::Format findDepthFormat();
+		void findAndSetMaxSampleCount(vk::PhysicalDevice physicalDevice); //I have to pass the device as the rendering attachments object hasn't been initiated yet
+		uint32_t getMaxSamplingLevel() { return static_cast<uint32_t>(m_VK_msaaSamples); };
 	private:
 		vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
-
+		vk::SampleCountFlagBits getMaxUsableSampleCount(vk::PhysicalDevice physicalDevice);
 
 		vk::SurfaceKHR       mRA_surface;
 		vk::PhysicalDevice   mRA_physicalDevice;
 		vk::Device           mRA_device;
-		Craig::Swapchain     mRA_swapchain;
+		Craig::Swapchain*    mRA_swapchain;
 		VmaAllocator		 mRA_memoryAllocator;
 
 	};
