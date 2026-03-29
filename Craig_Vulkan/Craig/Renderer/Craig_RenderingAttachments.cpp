@@ -8,7 +8,6 @@ CraigError Craig::RenderingAttachments::init(const RenderingAttachmentsInitInfo&
 	mRA_surface = info.surface;
 	mRA_physicalDevice = info.physicalDevice;
 	mRA_device = info.device;
-	mRA_swapchain = info.swapchain;
 	mRA_memoryAllocator = info.memoryAllocator;
 
 	return ret;
@@ -21,10 +20,9 @@ CraigError Craig::RenderingAttachments::update() {
 	return ret;
 }
 
-void Craig::RenderingAttachments::createColourResources() {
-	vk::Format colourFormat = mRA_swapchain->getImageFormat();
+void Craig::RenderingAttachments::createColourResources(vk::Extent2D extent, vk::Format colourFormat) {
 
-	m_VK_colourImage = Image::createImage(mRA_physicalDevice, mRA_surface, mRA_swapchain->getExtent().width, mRA_swapchain->getExtent().height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
+	m_VK_colourImage = Image::createImage(mRA_physicalDevice, mRA_surface, extent.width, extent.height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
 		vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
 		vk::MemoryPropertyFlagBits::eDeviceLocal,
 		mRA_memoryAllocator,
@@ -70,11 +68,11 @@ void Craig::RenderingAttachments::findAndSetMaxSampleCount(vk::PhysicalDevice ph
 
 }
 
-void Craig::RenderingAttachments::createDepthResources() {
+void Craig::RenderingAttachments::createDepthResources(vk::Extent2D extent) {
 
 	vk::Format depthFormat = findDepthFormat();
 
-	m_VK_depthImage = Image::createImage(mRA_physicalDevice, mRA_surface, mRA_swapchain->getExtent().width, mRA_swapchain->getExtent().height, 1, m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, mRA_memoryAllocator,m_VMA_depthImageAllocation);
+	m_VK_depthImage = Image::createImage(mRA_physicalDevice, mRA_surface, extent.width, extent.height, 1, m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, mRA_memoryAllocator,m_VMA_depthImageAllocation);
 
 	m_VK_depthImageView = Craig::Image::createImageView(mRA_device,m_VK_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
 

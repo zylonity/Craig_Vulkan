@@ -10,13 +10,12 @@ namespace Craig {
 	class RenderingAttachments {
 	public:
 
-		//All the stuff we need to pass to the swapchain from the renderer
+		//All the stuff we need to pass to the RenderingAttachments from the renderer
 		struct RenderingAttachmentsInitInfo
 		{
 			vk::SurfaceKHR       surface;
 			vk::PhysicalDevice   physicalDevice;
 			vk::Device           device;
-			Swapchain*           swapchain;
 			VmaAllocator		 memoryAllocator;
 		};
 
@@ -35,8 +34,8 @@ namespace Craig {
 		CraigError update();
 		CraigError terminate();
 
-		void createColourResources();
-		void createDepthResources();
+		void createColourResources(vk::Extent2D extent, vk::Format colourFormat);
+		void createDepthResources(vk::Extent2D extent);
 
 		vk::Format findDepthFormat();
 		void findAndSetMaxSampleCount(vk::PhysicalDevice physicalDevice); //I have to pass the device as the rendering attachments object hasn't been initiated yet
@@ -48,7 +47,6 @@ namespace Craig {
 		vk::SurfaceKHR       mRA_surface;
 		vk::PhysicalDevice   mRA_physicalDevice;
 		vk::Device           mRA_device;
-		Craig::Swapchain*    mRA_swapchain;
 		VmaAllocator		 mRA_memoryAllocator;
 
 	};

@@ -231,11 +231,10 @@ void Craig::Renderer::InitVulkan() {
     renderingAttachmentsInitInfo.device = m_VK_device;
     renderingAttachmentsInitInfo.physicalDevice = m_VK_physicalDevice;
     renderingAttachmentsInitInfo.memoryAllocator = m_VMA_allocator;
-    renderingAttachmentsInitInfo.swapchain = &m_swapChain;
 
     m_renderingAttachments.init(renderingAttachmentsInitInfo);
-    m_renderingAttachments.createColourResources();
-    m_renderingAttachments.createDepthResources();
+    m_renderingAttachments.createColourResources(m_swapChain.getExtent(), m_swapChain.getImageFormat());
+    m_renderingAttachments.createDepthResources(m_swapChain.getExtent());
     createDescriptorSetLayout();
     createGraphicsPipeline();
     createCommandPool();
@@ -627,8 +626,8 @@ void Craig::Renderer::recreateSwapChain() {
 
     createSwapChain2();
     m_swapChain.createImageViews();
-    m_renderingAttachments.createColourResources();
-    m_renderingAttachments.createDepthResources();
+    m_renderingAttachments.createColourResources(m_swapChain.getExtent(), m_swapChain.getImageFormat());
+    m_renderingAttachments.createDepthResources(m_swapChain.getExtent());
     //createFrameBuffers();
 }
 
@@ -665,8 +664,8 @@ void Craig::Renderer::recreateSwapChainFull() {
     //recreate with the new sample number
     createSwapChain2();
     m_swapChain.createImageViews();
-    m_renderingAttachments.createColourResources();
-    m_renderingAttachments.createDepthResources();
+    m_renderingAttachments.createColourResources(m_swapChain.getExtent(), m_swapChain.getImageFormat());
+    m_renderingAttachments.createDepthResources(m_swapChain.getExtent());
     createGraphicsPipeline();
 }
 
