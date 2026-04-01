@@ -605,7 +605,6 @@ void Craig::Renderer::recreateSwapChain() {
     m_swapChain.createSwapImageViews();
     m_renderingAttachments.createColourResources(m_swapChain.getExtent(), m_swapChain.getImageFormat());
     m_renderingAttachments.createDepthResources(m_swapChain.getExtent());
-    //createFrameBuffers();
 }
 
 void Craig::Renderer::recreateSwapChainFull() {
@@ -1378,20 +1377,6 @@ void Craig::Renderer::createDescriptorSets() {
 
 }
 
-// void Craig::Renderer::createColourResources() {
-//     vk::Format colourFormat = m_swapChain.getImageFormat();
-//
-//     m_VK_colourImage = Image::createImage(m_VK_physicalDevice, m_VK_surface, m_swapChain.getFullExtent().width, m_swapChain.getFullExtent().height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
-//         vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
-//         vk::MemoryPropertyFlagBits::eDeviceLocal,
-//         m_VMA_allocator,
-//         m_VMA_colourImageAllocation);
-//
-//     m_VK_colourImageView = Craig::Image::createImageView(m_VK_device, m_VK_colourImage, colourFormat, vk::ImageAspectFlagBits::eColor, 1);
-//
-//
-// }
-
 void Craig::Renderer::updateDescriptorSets() {
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
@@ -1676,48 +1661,10 @@ void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_
 
 }
 
-// vk::Format Craig::Renderer::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features)
-// {
-//     for (auto format : candidates) {
-//         auto props = m_VK_physicalDevice.getFormatProperties(format);
-//
-//         if (tiling == vk::ImageTiling::eLinear &&
-//             (props.linearTilingFeatures & features) == features)
-//             return format;
-//
-//         if (tiling == vk::ImageTiling::eOptimal &&
-//             (props.optimalTilingFeatures & features) == features)
-//             return format;
-//     }
-//
-//     throw std::runtime_error("no supported depth format found");
-// }
-//
-// vk::Format Craig::Renderer::findDepthFormat() {
-//     return findSupportedFormat(
-//         {
-//             vk::Format::eD32SfloatS8Uint,
-//             vk::Format::eD24UnormS8Uint,
-//             vk::Format::eD32Sfloat
-//         },
-//         vk::ImageTiling::eOptimal,
-//         vk::FormatFeatureFlagBits::eDepthStencilAttachment
-//     );
-// }
-
 bool Craig::Renderer::hasStencilComponent(vk::Format format) {
     return format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint;
 }
 
-// void Craig::Renderer::createDepthResources() {
-//
-//     vk::Format depthFormat = findDepthFormat();
-//
-//     m_VK_depthImage = Image::createImage(m_VK_physicalDevice, m_VK_surface, m_swapChain.getFullExtent().width, m_swapChain.getFullExtent().height, 1, m_renderingAttachments.m_VK_msaaSamples, depthFormat, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VMA_allocator,m_VMA_depthImageAllocation);
-//
-//     m_VK_depthImageView = Craig::Image::createImageView(m_VK_device,m_VK_depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
-//
-// }
 
 void Craig::Renderer::drawFrame(const float& deltaTime) {
 
