@@ -222,8 +222,8 @@ void Craig::Renderer::InitVulkan() {
     swapInitInfo.pWindow = mp_CurrentWindow;
 
     m_swapChain.init(swapInitInfo);
-    createSwapChain2();
-    m_swapChain.createImageViews();
+    m_swapChain.createSwapChain();
+    m_swapChain.createSwapImageViews();
 
     RenderingAttachments::RenderingAttachmentsInitInfo renderingAttachmentsInitInfo;
 
@@ -412,13 +412,6 @@ void Craig::Renderer::createLogicalDevice() {
     }
 }
 
-void Craig::Renderer::createSwapChain2()
-{
-
-    m_swapChain.createSwapChain();
-
-}
-
 void Craig::Renderer::createGraphicsPipeline() {
 
     // Compile HLSL shaders to SPIR-V shader modules
@@ -594,22 +587,6 @@ void Craig::Renderer::cleanupGraphicsPipeline() {
 
 }
 
-void Craig::Renderer::cleanupSwapChain() {
-
-    m_VK_device.destroyImageView(m_renderingAttachments.m_VK_colourImageView);
-    vmaDestroyImage(m_VMA_allocator, m_renderingAttachments.m_VK_colourImage, m_renderingAttachments.m_VMA_colourImageAllocation);
-
-    m_VK_device.destroyImageView(m_renderingAttachments.m_VK_depthImageView);
-    vmaDestroyImage(m_VMA_allocator, m_renderingAttachments.m_VK_depthImage, m_renderingAttachments.m_VMA_depthImageAllocation);
-
-
-    for (auto imageView : m_swapChain.getImageViews()) {
-        m_VK_device.destroyImageView(imageView);
-    }
-
-    m_VK_device.destroySwapchainKHR(m_swapChain.getSwapChain());
-}
-
 void Craig::Renderer::recreateSwapChain() {
 
     Swapchain::SwapChainSupportDetails swapChainSupport = m_swapChain.querySwapChainSupport(m_VK_physicalDevice, m_VK_surface);
@@ -619,13 +596,13 @@ void Craig::Renderer::recreateSwapChain() {
         return; // Skip this frame
     }
 
-
     m_VK_device.waitIdle();
 
-    cleanupSwapChain();
+    m_renderingAttachments.cleanupColourAndDepthImageViews();
+    m_swapChain.cleanupSwapChain();
 
-    createSwapChain2();
-    m_swapChain.createImageViews();
+    m_swapChain.createSwapChain();
+    m_swapChain.createSwapImageViews();
     m_renderingAttachments.createColourResources(m_swapChain.getExtent(), m_swapChain.getImageFormat());
     m_renderingAttachments.createDepthResources(m_swapChain.getExtent());
     //createFrameBuffers();
@@ -645,25 +622,12 @@ void Craig::Renderer::recreateSwapChainFull() {
 
     cleanupGraphicsPipeline();
 
-
-    //Clean up colour resources
-    m_VK_device.destroyImageView(m_renderingAttachments.m_VK_colourImageView);
-    vmaDestroyImage(m_VMA_allocator, m_renderingAttachments.m_VK_colourImage, m_renderingAttachments.m_VMA_colourImageAllocation);
-
-    //Clean up depth resources
-    m_VK_device.destroyImageView(m_renderingAttachments.m_VK_depthImageView);
-    vmaDestroyImage(m_VMA_allocator, m_renderingAttachments.m_VK_depthImage, m_renderingAttachments.m_VMA_depthImageAllocation);
-
-    //Clean up the swapchain
-    for (auto imageView : m_swapChain.getImageViews()) {
-        m_VK_device.destroyImageView(imageView);
-    }
-
-    m_VK_device.destroySwapchainKHR(m_swapChain.getSwapChain());
+    m_renderingAttachments.cleanupColourAndDepthImageViews();
+    m_swapChain.cleanupSwapChain();
 
     //recreate with the new sample number
-    createSwapChain2();
-    m_swapChain.createImageViews();
+    m_swapChain.createSwapChain();
+    m_swapChain.createSwapImageViews();
     m_renderingAttachments.createColourResources(m_swapChain.getExtent(), m_swapChain.getImageFormat());
     m_renderingAttachments.createDepthResources(m_swapChain.getExtent());
     createGraphicsPipeline();

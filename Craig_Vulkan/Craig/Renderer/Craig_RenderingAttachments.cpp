@@ -106,6 +106,16 @@ vk::SampleCountFlagBits Craig::RenderingAttachments::getMaxUsableSampleCount(vk:
 
 }
 
+void Craig::RenderingAttachments::cleanupColourAndDepthImageViews() {
+
+	mRA_device.destroyImageView(m_VK_colourImageView);
+	vmaDestroyImage(mRA_memoryAllocator, m_VK_colourImage, m_VMA_colourImageAllocation);
+
+	mRA_device.destroyImageView(m_VK_depthImageView);
+	vmaDestroyImage(mRA_memoryAllocator, m_VK_depthImage, m_VMA_depthImageAllocation);
+
+}
+
 CraigError Craig::RenderingAttachments::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;

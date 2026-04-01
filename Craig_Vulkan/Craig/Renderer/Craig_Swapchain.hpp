@@ -37,7 +37,8 @@ namespace Craig {
         vk::Extent2D         chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 
         void createSwapChain();            // Create swapchain images
-        void createImageViews();           // Create swapchain image views
+        void createSwapImageViews();           // Create swapchain image views
+        void cleanupSwapChain();
 
         //Getters
         const vk::SwapchainKHR&           getSwapChain() const { return m_VK_swapChain; };

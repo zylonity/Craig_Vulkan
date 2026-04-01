@@ -65,8 +65,6 @@ namespace Craig {
 		// Swapchain + framebuffer resources
 		void recreateSwapChain();          // Swapchain-only recreation
 		void recreateSwapChainFull();      // Swapchain + pipeline + imgui recreation
-		void createSwapChain2();            // Create swapchain images
-		void cleanupSwapChain();           // Destroy swapchain-related objects
 		
 		// Pipeline / descriptors
 		void createDescriptorSetLayout();

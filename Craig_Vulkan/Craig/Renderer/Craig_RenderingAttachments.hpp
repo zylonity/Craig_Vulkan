@@ -37,6 +37,8 @@ namespace Craig {
 		void createColourResources(vk::Extent2D extent, vk::Format colourFormat);
 		void createDepthResources(vk::Extent2D extent);
 
+		void cleanupColourAndDepthImageViews();
+
 		vk::Format findDepthFormat();
 		void findAndSetMaxSampleCount(vk::PhysicalDevice physicalDevice); //I have to pass the device as the rendering attachments object hasn't been initiated yet
 		uint32_t getMaxSamplingLevel() { return static_cast<uint32_t>(m_VK_msaaSamples); };
