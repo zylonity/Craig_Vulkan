@@ -46,6 +46,8 @@ namespace Craig {
         const vk::Format&                 getImageFormat() const { return m_VK_swapChainImageFormat; };
         const vk::Extent2D&               getExtent() const { return m_VK_swapChainExtent; };
 
+        bool    m_vsyncEnabled = true;
+
     private:
 
         vk::SwapchainKHR           m_VK_swapChain;
@@ -59,10 +61,10 @@ namespace Craig {
         vk::Device                 mSC_device;
         Window*                    mp_Window;
 
-        bool    m_vsyncEnabled = true;
 
-        vk::Extent2D         chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
+
         static SwapChainSupportDetails querySwapChainSupport(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface);
+        vk::Extent2D         chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
         vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
         vk::PresentModeKHR   chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
 

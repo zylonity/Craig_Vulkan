@@ -34,7 +34,7 @@ namespace Craig {
 		CraigError update(const float& deltaTime);
 		CraigError terminate();
 
-		bool& getVSyncState() { return m_vsync; };
+		bool& getVSyncState() { return m_swapChain.m_vsyncEnabled; };
 		void refreshSwapChain() { recreateSwapChain(); };
 		void createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels, Texture* outTexture);
 
@@ -240,7 +240,7 @@ namespace Craig {
 
 		// Misc
 		//vk::Extent2D m_VK_currentExtent;
-		bool m_vsync = true;
+		//bool m_vsync = true;
 
 		
 		// ImGui

@@ -124,12 +124,12 @@ vk::PresentModeKHR Craig::Swapchain::chooseSwapPresentMode(const std::vector<vk:
     //VK_PRESENT_MODE_FIFO_RELAXED_KHR : This mode only differs from the previous one if the application is late and the queue was empty at the last vertical blank.Instead of waiting for the next vertical blank, the image is transferred right away when it finally arrives.This may result in visible tearing.
     //VK_PRESENT_MODE_MAILBOX_KHR : This is another variation of the second mode.Instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer ones.This mode can be used to render frames as fast as possible while still avoiding tearing, resulting in fewer latency issues than standard vertical sync.This is commonly known as "triple buffering", although the existence of three buffers alone does not necessarily mean that the framerate is unlocked.
 
-    // for (const auto& availablePresentMode : availablePresentModes) {
-    //     vk::PresentModeKHR modeToUse = m_vsync ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eImmediate;
-    //     if (availablePresentMode == modeToUse) {
-    //         return availablePresentMode;
-    //     }
-    // }
+    for (const auto& availablePresentMode : availablePresentModes) {
+        vk::PresentModeKHR modeToUse = m_vsyncEnabled ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eImmediate;
+        if (availablePresentMode == modeToUse) {
+            return availablePresentMode;
+        }
+    }
 
 
     return vk::PresentModeKHR::eFifo;
