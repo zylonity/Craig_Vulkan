@@ -687,8 +687,8 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     //We have to transition the swap image manually, render passes used to do this implicitly :(
     transitionSwapImage(commandBuffer, m_swapChain.getImages()[imageIndex], vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
-    transitionSwapImage(commandBuffer, m_renderingAttachments.m_VK_colourImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal); //MSAA colour image too
-    transitionSwapImage(commandBuffer, m_renderingAttachments.m_VK_depthImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+    transitionSwapImage(commandBuffer, m_renderingAttachments.getColourImage(), vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal); //MSAA colour image too
+    transitionSwapImage(commandBuffer, m_renderingAttachments.getDepthImage(), vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
 
     vk::ClearValue clearColour;
@@ -706,7 +706,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     vk::RenderingAttachmentInfo depthAtt{};
     depthAtt
-        .setImageView(m_renderingAttachments.m_VK_depthImageView)
+        .setImageView(m_renderingAttachments.getDepthImageView())
         .setImageLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal)
         .setLoadOp(vk::AttachmentLoadOp::eClear)
         .setStoreOp(vk::AttachmentStoreOp::eDontCare)
@@ -721,7 +721,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     }
     else {
         colourAtt
-            .setImageView(m_renderingAttachments.m_VK_colourImageView)
+            .setImageView(m_renderingAttachments.getColourImageView())
             .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
             .setResolveImageView(m_swapChain.getImageViews()[imageIndex])
             .setResolveImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
@@ -1661,11 +1661,6 @@ void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_
 
 }
 
-bool Craig::Renderer::hasStencilComponent(vk::Format format) {
-    return format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint;
-}
-
-
 void Craig::Renderer::drawFrame(const float& deltaTime) {
 
     if (m_sempahoreTimelineValue >= kMaxFramesInFlight) {
@@ -1806,11 +1801,7 @@ CraigError Craig::Renderer::terminate() {
        
     m_VK_device.destroyCommandPool(m_VK_commandPool);
 
-    m_VK_device.destroyImageView(m_renderingAttachments.m_VK_colourImageView);
-    vmaDestroyImage(m_VMA_allocator, m_renderingAttachments.m_VK_colourImage, m_renderingAttachments.m_VMA_colourImageAllocation);
-
-    m_VK_device.destroyImageView(m_renderingAttachments.m_VK_depthImageView);
-    vmaDestroyImage(m_VMA_allocator, m_renderingAttachments.m_VK_depthImage, m_renderingAttachments.m_VMA_depthImageAllocation);
+    m_renderingAttachments.cleanupColourAndDepthImageViews();
 
     m_VK_device.destroySampler(m_VK_textureSampler);
 

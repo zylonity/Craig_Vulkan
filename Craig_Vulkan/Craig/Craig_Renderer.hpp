@@ -134,13 +134,6 @@ namespace Craig {
 
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
-		// MSAA + formats
-		//vk::SampleCountFlagBits getMaxUsableSampleCount();
-		// vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates,
-		// 	vk::ImageTiling tiling, vk::FormatFeatureFlags features);
-		// vk::Format findDepthFormat();
-		bool hasStencilComponent(vk::Format format);
-
 		
 		// Debug / utilities
 		void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
