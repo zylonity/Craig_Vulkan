@@ -152,8 +152,20 @@ vk::Extent2D Craig::Swapchain::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR
         return actualExtent;
     }
 
-
 }
+
+void Craig::Swapchain::setSwapExtent() {
+
+    Swapchain::SwapChainSupportDetails swapChainSupport = querySwapChainSupport(mSC_physicalDevice, mSC_surface);
+    m_VK_swapChainExtent = chooseSwapExtent(swapChainSupport.capabilities);
+}
+
+const bool Craig::Swapchain::isSwapChainAdequate(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface) {
+
+    Swapchain::SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device, surface); //Check the swapchain extension has what we want for this
+    return !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+}
+
 
 void Craig::Swapchain::createSwapImageViews() {
 

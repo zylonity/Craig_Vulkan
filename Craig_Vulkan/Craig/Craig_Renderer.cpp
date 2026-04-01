@@ -328,8 +328,7 @@ bool Craig::Renderer::isDeviceSuitable(const vk::PhysicalDevice& device) {
 
     bool swapChainAdequate = false; 
     if (extensionsSupported) {
-        Swapchain::SwapChainSupportDetails swapChainSupport = m_swapChain.querySwapChainSupport(device, m_VK_surface); //Check the swapchaine extension it has is actually what we want for this
-        swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+        swapChainAdequate = Swapchain::isSwapChainAdequate(device, m_VK_surface);
     }
 
     printf("Found graphics and presentation indices: %s\n", indices.isComplete() ? "True" : "False");
@@ -589,8 +588,7 @@ void Craig::Renderer::cleanupGraphicsPipeline() {
 
 void Craig::Renderer::recreateSwapChain() {
 
-    Swapchain::SwapChainSupportDetails swapChainSupport = m_swapChain.querySwapChainSupport(m_VK_physicalDevice, m_VK_surface);
-    m_swapChain.getExtent() = m_swapChain.chooseSwapExtent(swapChainSupport.capabilities);
+    m_swapChain.setSwapExtent();
 
     if (m_swapChain.getExtent().width <= 0 || m_swapChain.getExtent().height <= 0) {
         return; // Skip this frame
@@ -609,8 +607,7 @@ void Craig::Renderer::recreateSwapChain() {
 
 void Craig::Renderer::recreateSwapChainFull() {
 
-    Swapchain::SwapChainSupportDetails swapChainSupport = m_swapChain.querySwapChainSupport(m_VK_physicalDevice, m_VK_surface);
-    m_swapChain.getExtent() = m_swapChain.chooseSwapExtent(swapChainSupport.capabilities);
+    m_swapChain.setSwapExtent();
 
     if (m_swapChain.getExtent().width <= 0 || m_swapChain.getExtent().height <= 0) {
         return; // Skip this frame
