@@ -14,6 +14,7 @@ CraigError Craig::Device::init(DeviceInitInfo& initInfo) {
 
     pickPhysicalDevice();
     createLogicalDevice();
+    initVMA();
 
 	return ret;
 }
@@ -194,9 +195,58 @@ void Craig::Device::createLogicalDevice() {
     }
 }
 
+void Craig::Device::initVMA() {
+
+    vk::PhysicalDeviceProperties props = m_VK_physicalDevice.getProperties();
+
+    VmaAllocatorCreateInfo vmaCreateInfo{};
+    vmaCreateInfo.instance = m_DVC_instance;
+    vmaCreateInfo.physicalDevice = m_VK_physicalDevice;
+    vmaCreateInfo.device = m_VK_logicalDevice;
+    vmaCreateInfo.vulkanApiVersion = VK_API_VERSION_1_4;
+
+    VmaVulkanFunctions vmaFunctions{};
+    vmaFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
+    vmaFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
+    vmaCreateInfo.pVulkanFunctions = &vmaFunctions;
+
+    VkResult r = vmaCreateAllocator(&vmaCreateInfo, &m_VMA_allocator);
+    if (r != VK_SUCCESS) throw std::runtime_error("vmaCreateAllocator failed");
+
+}
+
+void Craig::Device::createBufferVMA(
+    vk::DeviceSize size,
+    vk::BufferUsageFlags usage,
+    const VmaAllocationCreateInfo& aci,
+    vk::Buffer& buffer,
+    VmaAllocation& alloc,
+    VmaAllocationInfo* outInfo)
+{
+    VkBufferCreateInfo bi{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+    bi.size = size;
+    bi.usage = static_cast<VkBufferUsageFlags>(usage);
+    bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    // If you truly need concurrent:
+    if (auto idx = Device::findQueueFamilies(m_VK_physicalDevice, m_DVC_surface); idx.hasDedicatedTransfer()) {
+        uint32_t q[2] = { idx.graphicsFamily.value(), idx.transferFamily.value() };
+        bi.sharingMode = VK_SHARING_MODE_CONCURRENT;
+        bi.queueFamilyIndexCount = 2;
+        bi.pQueueFamilyIndices = q;
+    }
+
+    VkBuffer raw{};
+    vmaCreateBuffer(m_VMA_allocator, &bi, &aci, &raw, &alloc, outInfo);
+    buffer = vk::Buffer(raw);
+}
+
 CraigError Craig::Device::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
+
+    m_VK_logicalDevice.destroy();
+    vmaDestroyAllocator(m_VMA_allocator);
 
 	return ret;
 }

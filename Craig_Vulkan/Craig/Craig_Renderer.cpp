@@ -163,7 +163,7 @@ void Craig::Renderer::InitImgui() {
 
     Craig::Device::QueueFamilyIndices indices = Craig::Device::findQueueFamilies(m_Devices.getPhysicalDevice(), m_VK_surface);
     init_info.QueueFamily = indices.graphicsFamily.value();
-    init_info.Queue = m_Devices.m_VK_graphicsQueue;
+    init_info.Queue = m_Devices.getGraphicsQueue();
     init_info.DescriptorPool = m_VK_imguiDescriptorPool;
     init_info.Subpass = 0;
     init_info.MinImageCount = 2;
@@ -214,7 +214,7 @@ void Craig::Renderer::InitVulkan() {
 
     m_Devices.init(deviceInitInfo); //Picks physical device, creates logical device
 
-    initVMA();
+    //initVMA();
 
     Swapchain::SwapchainInitInfo swapInitInfo;
     swapInitInfo.surface = m_VK_surface;
@@ -231,7 +231,7 @@ void Craig::Renderer::InitVulkan() {
     renderingAttachmentsInitInfo.surface = m_VK_surface;
     renderingAttachmentsInitInfo.device = m_Devices.getLogicalDevice();
     renderingAttachmentsInitInfo.physicalDevice = m_Devices.getPhysicalDevice();
-    renderingAttachmentsInitInfo.memoryAllocator = m_VMA_allocator;
+    renderingAttachmentsInitInfo.memoryAllocator = m_Devices.getVmaAllocator();
 
     m_renderingAttachments.init(renderingAttachmentsInitInfo);
     m_renderingAttachments.createColourResources(m_swapChain.getExtent(), m_swapChain.getImageFormat());
@@ -257,26 +257,6 @@ void Craig::Renderer::InitVulkan() {
 
     mp_CurrentWindow->setCameraRef(&m_camera);
     Craig::ImguiEditor::getInstance().setCamera(&m_camera);
-}
-
-void Craig::Renderer::initVMA() {
-
-    vk::PhysicalDeviceProperties props = m_Devices.getPhysicalDevice().getProperties();
-
-    VmaAllocatorCreateInfo vmaCreateInfo{};
-    vmaCreateInfo.instance = m_VK_instance;
-    vmaCreateInfo.physicalDevice = m_Devices.getPhysicalDevice();
-    vmaCreateInfo.device = m_Devices.getLogicalDevice();
-    vmaCreateInfo.vulkanApiVersion = VK_API_VERSION_1_4;
-
-    VmaVulkanFunctions vmaFunctions{};
-    vmaFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
-    vmaFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
-    vmaCreateInfo.pVulkanFunctions = &vmaFunctions;
-
-    VkResult r = vmaCreateAllocator(&vmaCreateInfo, &m_VMA_allocator);
-    if (r != VK_SUCCESS) throw std::runtime_error("vmaCreateAllocator failed");
-
 }
 
 // Registers the debug messenger with Vulkan using the previously filled-in struct
@@ -739,32 +719,6 @@ void Craig::Renderer::createSyncObjects() {
 
 }
 
-void Craig::Renderer::createBufferVMA(
-    vk::DeviceSize size,
-    vk::BufferUsageFlags usage,
-    const VmaAllocationCreateInfo& aci,
-    vk::Buffer& buffer,
-    VmaAllocation& alloc,
-    VmaAllocationInfo* outInfo)
-{
-    VkBufferCreateInfo bi{ VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-    bi.size = size;
-    bi.usage = static_cast<VkBufferUsageFlags>(usage);
-    bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    // If you truly need concurrent:
-    if (auto idx = Device::findQueueFamilies(m_Devices.getPhysicalDevice(), m_VK_surface); idx.hasDedicatedTransfer()) {
-        uint32_t q[2] = { idx.graphicsFamily.value(), idx.transferFamily.value() };
-        bi.sharingMode = VK_SHARING_MODE_CONCURRENT;
-        bi.queueFamilyIndexCount = 2;
-        bi.pQueueFamilyIndices = q;
-    }
-
-    VkBuffer raw{};
-    vmaCreateBuffer(m_VMA_allocator, &bi, &aci, &raw, &alloc, outInfo);
-    buffer = vk::Buffer(raw);
-}
-
 vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommands() {
     //Allocate a temporary command buffer
     vk::CommandBufferAllocateInfo allocInfo{};
@@ -793,8 +747,8 @@ void Craig::Renderer::buffer_endSingleTimeCommands(vk::CommandBuffer commandBuff
     submitInfo.setCommandBufferCount(1)
         .setCommandBuffers(commandBuffer);
 
-    m_Devices.m_VK_transferQueue.submit(submitInfo);
-    m_Devices.m_VK_transferQueue.waitIdle();
+    m_Devices.getTransferQueue().submit(submitInfo);
+    m_Devices.getTransferQueue().waitIdle();
 
     m_Devices.getLogicalDevice().freeCommandBuffers(m_VK_transferCommandPool, commandBuffer);
 }
@@ -827,8 +781,8 @@ void Craig::Renderer::buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandB
     submitInfo.setCommandBufferCount(1)
         .setCommandBuffers(commandBuffer);
 
-    m_Devices.m_VK_graphicsQueue.submit(submitInfo);
-    m_Devices.m_VK_graphicsQueue.waitIdle();
+    m_Devices.getGraphicsQueue().submit(submitInfo);
+    m_Devices.getGraphicsQueue().waitIdle();
 
     m_Devices.getLogicalDevice().freeCommandBuffers(m_VK_commandPool, commandBuffer);
 }
@@ -1017,10 +971,10 @@ void Craig::Renderer::createVertexBuffer() {
         stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
         stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-        createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
+        m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
 
         void* data;
-        vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
+        vmaMapMemory(m_Devices.getVmaAllocator(), stagingAlloc, &data);
 
         Craig::Vertex* dst = static_cast<Vertex*>(data);
 
@@ -1036,17 +990,17 @@ void Craig::Renderer::createVertexBuffer() {
             cursor += static_cast<uint32_t>(verts.size());
         }
 
-        vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, bufferSize);
-        vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
+        vmaFlushAllocation(m_Devices.getVmaAllocator(), stagingAlloc, 0, bufferSize);
+        vmaUnmapMemory(m_Devices.getVmaAllocator(), stagingAlloc);
 
         VmaAllocationCreateInfo gpuAci{};
         gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
         gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-        createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, gpuAci, m_VK_vertexBuffer, m_VMA_vertexAllocation);
+        m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, gpuAci, m_VK_vertexBuffer, m_VMA_vertexAllocation);
 
         copyBuffer(stagingBuffer, m_VK_vertexBuffer, bufferSize);
-        vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
+        vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
     }
 
 
@@ -1080,10 +1034,10 @@ void Craig::Renderer::createIndexBuffer() {
         stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
         stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-        createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
+        m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
 
         void* data;
-        vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
+        vmaMapMemory(m_Devices.getVmaAllocator(), stagingAlloc, &data);
 
         uint32_t* dst = static_cast<uint32_t*>(data);
         uint32_t cursor = 0;
@@ -1105,17 +1059,17 @@ void Craig::Renderer::createIndexBuffer() {
             cursor += static_cast<uint32_t>(indices.size());
         }
 
-        vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, bufferSize);
-        vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
+        vmaFlushAllocation(m_Devices.getVmaAllocator(), stagingAlloc, 0, bufferSize);
+        vmaUnmapMemory(m_Devices.getVmaAllocator(), stagingAlloc);
 
         VmaAllocationCreateInfo gpuAci{};
         gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
         gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
-        createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, gpuAci, m_VK_indexBuffer, m_VMA_indexAllocation);
+        m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, gpuAci, m_VK_indexBuffer, m_VMA_indexAllocation);
 
         copyBuffer(stagingBuffer, m_VK_indexBuffer, bufferSize);
-        vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
+        vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
     }
 
 }
@@ -1175,7 +1129,7 @@ void Craig::Renderer::createUniformBuffers() {
     for (size_t i = 0; i < kMaxFramesInFlight; i++)
     {
         VmaAllocationInfo info{};
-        createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, stagingAci, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i], &info);
+        m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, stagingAci, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i], &info);
 
         mv_VK_uniformBuffersMapped[i] = info.pMappedData;
 
@@ -1333,24 +1287,24 @@ void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, i
     stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
     stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-    createBufferVMA(imageSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
+    m_Devices.createBufferVMA(imageSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
 
     void* data;
-    vmaMapMemory(m_VMA_allocator, stagingAlloc, &data);
+    vmaMapMemory(m_Devices.getVmaAllocator(), stagingAlloc, &data);
     memcpy(data, pixels, static_cast<size_t>(imageSize));
-    vmaFlushAllocation(m_VMA_allocator, stagingAlloc, 0, imageSize);
-    vmaUnmapMemory(m_VMA_allocator, stagingAlloc);
+    vmaFlushAllocation(m_Devices.getVmaAllocator(), stagingAlloc, 0, imageSize);
+    vmaUnmapMemory(m_Devices.getVmaAllocator(), stagingAlloc);
 
     //stbi_image_free(pixels);
 
-    outTexture->m_VK_textureImage = Image::createImage(m_Devices.getPhysicalDevice(), m_VK_surface, texWidth, texHeight, outTexture->m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VMA_allocator,outTexture->m_VMA_textureImageAllocation);
+    outTexture->m_VK_textureImage = Image::createImage(m_Devices.getPhysicalDevice(), m_VK_surface, texWidth, texHeight, outTexture->m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_Devices.getVmaAllocator(),outTexture->m_VMA_textureImageAllocation);
 
     transitionImageLayout(outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, true, outTexture->m_VK_mipLevels);
     copyBufferToImage(stagingBuffer, outTexture->m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
     //transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, false, m_VK_mipLevels); <- now done when generating mipMaps
 
-    vmaDestroyBuffer(m_VMA_allocator, stagingBuffer, stagingAlloc);
+    vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
 
     generateMipMaps(outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight, outTexture->m_VK_mipLevels, false);
 
@@ -1603,7 +1557,7 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         .setPCommandBuffers(&mv_VK_commandBuffers[m_currentFrame]);
 
 
-    m_Devices.m_VK_graphicsQueue.submit(submitInfo, VK_NULL_HANDLE);
+    m_Devices.getGraphicsQueue().submit(submitInfo, VK_NULL_HANDLE);
 
     // Present the rendered image to the screen
     vk::PresentInfoKHR presentInfo;
@@ -1616,7 +1570,7 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
 
 
     //We have to revert back to the original C code otherwise if it returns ERROR_OUT_OF_DATE, it throws an exception and messes up the code.
-    auto presentResult = vkQueuePresentKHR(m_Devices.m_VK_presentationQueue, presentInfo);
+    auto presentResult = vkQueuePresentKHR(m_Devices.getPresentationQueue(), presentInfo);
 
     if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR || mp_CurrentWindow->isResizeNeeded()) {
         recreateSwapChain();
@@ -1662,9 +1616,9 @@ CraigError Craig::Renderer::terminate() {
     ImGui::DestroyContext();
     m_Devices.getLogicalDevice().destroyDescriptorPool(m_VK_imguiDescriptorPool);
 #endif
-    vmaDestroyBuffer(m_VMA_allocator, m_VK_indexBuffer, m_VMA_indexAllocation);
+    vmaDestroyBuffer(m_Devices.getVmaAllocator(), m_VK_indexBuffer, m_VMA_indexAllocation);
 
-    vmaDestroyBuffer(m_VMA_allocator, m_VK_vertexBuffer, m_VMA_vertexAllocation);
+    vmaDestroyBuffer(m_Devices.getVmaAllocator(), m_VK_vertexBuffer, m_VMA_vertexAllocation);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
         m_Devices.getLogicalDevice().destroySemaphore(mv_VK_imageAvailableSemaphores[i]);
@@ -1686,7 +1640,7 @@ CraigError Craig::Renderer::terminate() {
 
     m_Devices.getLogicalDevice().destroySampler(m_VK_textureSampler);
 
-    Craig::ResourceManager::getInstance().terminateModels(m_Devices.getLogicalDevice(), m_VMA_allocator);
+    Craig::ResourceManager::getInstance().terminateModels(m_Devices.getLogicalDevice(), m_Devices.getVmaAllocator());
 
     m_Devices.getLogicalDevice().destroyPipeline(m_VK_graphicsPipeline);
     m_Devices.getLogicalDevice().destroyPipelineLayout(m_VK_pipelineLayout);
@@ -1697,15 +1651,15 @@ CraigError Craig::Renderer::terminate() {
     m_swapChain.terminate();
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
-        vmaDestroyBuffer(m_VMA_allocator, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i]);
+        vmaDestroyBuffer(m_Devices.getVmaAllocator(), mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i]);
     }
 
     m_Devices.getLogicalDevice().destroyDescriptorPool(m_VK_descriptorPool);
     m_Devices.getLogicalDevice().destroyDescriptorSetLayout(m_VK_descriptorSetLayout);
 
-    vmaDestroyAllocator(m_VMA_allocator);
 
-    m_Devices.getLogicalDevice().destroy();
+
+    m_Devices.terminate();
 
     m_VK_instance.destroySurfaceKHR(m_VK_surface);
 

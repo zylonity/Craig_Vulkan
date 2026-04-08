@@ -57,10 +57,6 @@ namespace Craig {
 		// Core init / teardown
 		void InitVulkan();                 // Full Vulkan bring-up
 		void setupDebugMessenger();        // Validation callback
-		//void pickPhysicalDevice();         // Choose GPU
-		//void createLogicalDevice();        // Create vk::Device + queues
-		void initVMA();                    // VMA allocator setup
-
 		
 		// Swapchain + framebuffer resources
 		void recreateSwapChain();          // Swapchain-only recreation
@@ -103,13 +99,6 @@ namespace Craig {
 		void createTextureSampler();
 		void terminateSampler();
 
-		void createBufferVMA(vk::DeviceSize size,
-			vk::BufferUsageFlags usage,
-			const VmaAllocationCreateInfo& aci,
-			vk::Buffer& buffer,
-			VmaAllocation& alloc,
-			VmaAllocationInfo* outInfo = nullptr);
-
 		void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
 
 		void transitionImageLayout(vk::Image image, vk::Format format,
@@ -125,12 +114,6 @@ namespace Craig {
 		void transitionSwapImage(vk::CommandBuffer cmd, vk::Image img,
 			vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
 
-		
-		// Device / swapchain queries
-		//bool isDeviceSuitable(const vk::PhysicalDevice& device);
-		//bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
-
-		//QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device); Moved to craig_device
 
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
@@ -168,15 +151,8 @@ namespace Craig {
 		vk::DebugUtilsMessengerEXT m_VK_debugMessenger;
 
 		vk::SurfaceKHR       m_VK_surface;
-		// vk::PhysicalDevice   m_VK_physicalDevice;
-		// vk::Device           m_VK_device;
+
 		Craig::Device m_Devices;
-
-		// vk::Queue m_VK_graphicsQueue;
-		// vk::Queue m_VK_presentationQueue;
-		// vk::Queue m_VK_transferQueue;
-
-		
 		// Swapchain
 		Craig::Swapchain m_swapChain;
 		
@@ -222,11 +198,7 @@ namespace Craig {
 		vk::DescriptorPool              m_VK_descriptorPool;
 		std::vector<vk::DescriptorSet>  mv_VK_descriptorSets;
 
-		
-		// MSAA / colour / depth
-		//vk::SampleCountFlagBits m_VK_msaaSamples = vk::SampleCountFlagBits::e1;
 
-		//uint32_t m_MaxSamplingLevel = 0;   // Max sampling level
 		uint32_t m_minLODLevel = 0;        // User-selected min LOD clamp
 
 		RenderingAttachments m_renderingAttachments;
@@ -236,12 +208,7 @@ namespace Craig {
 
 		
 		// VMA allocator / pools
-		VmaAllocator m_VMA_allocator = VK_NULL_HANDLE;
 		VmaPool      m_VMA_smallItemsPool = VK_NULL_HANDLE;
-
-		// Misc
-		//vk::Extent2D m_VK_currentExtent;
-		//bool m_vsync = true;
 
 		
 		// ImGui
