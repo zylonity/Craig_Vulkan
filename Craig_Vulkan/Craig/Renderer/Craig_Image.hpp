@@ -17,6 +17,13 @@ namespace Craig {
 		CraigError init();
 		CraigError update();
 		CraigError terminate();
+
+		vk::Instance               m_VK_instance;
+		vk::ApplicationInfo        m_VK_appInfo;
+		vk::InstanceCreateInfo     m_VK_instInfo;
+		vk::DebugUtilsMessengerEXT m_VK_debugMessenger;
+
+		vk::SurfaceKHR       m_VK_surface;
 	private:
 
 

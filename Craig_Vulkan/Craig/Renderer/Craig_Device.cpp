@@ -245,8 +245,8 @@ CraigError Craig::Device::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-    m_VK_logicalDevice.destroy();
     vmaDestroyAllocator(m_VMA_allocator);
+    m_VK_logicalDevice.destroy();
 
 	return ret;
 }
