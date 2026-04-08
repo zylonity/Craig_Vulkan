@@ -230,7 +230,7 @@ void Craig::ResourceManager::loadModel(std::string modelPath) {
     m_testModel.subMeshesCount = i;
 }
 
-void Craig::ResourceManager::terminateModels(vk::Device& device, VmaAllocator& memoryAllocator) {
+void Craig::ResourceManager::terminateModels(const vk::Device& device, VmaAllocator& memoryAllocator) {
 
     for (size_t i = 0; i < m_testModel.subMeshes.size(); i++)
     {

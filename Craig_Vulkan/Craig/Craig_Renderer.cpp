@@ -158,10 +158,10 @@ void Craig::Renderer::InitImgui() {
     ImGui_ImplSDL2_InitForVulkan(mp_CurrentWindow->getSDLWindow());
     ImGui_ImplVulkan_InitInfo init_info = {};
     init_info.Instance = m_VK_instance;
-    init_info.PhysicalDevice = m_Devices.m_VK_physicalDevice;
-    init_info.Device = m_Devices.m_VK_logicalDevice;
+    init_info.PhysicalDevice = m_Devices.getPhysicalDevice();
+    init_info.Device = m_Devices.getLogicalDevice();
 
-    Craig::Device::QueueFamilyIndices indices = Craig::Device::findQueueFamilies(m_Devices.m_VK_physicalDevice, m_VK_surface);
+    Craig::Device::QueueFamilyIndices indices = Craig::Device::findQueueFamilies(m_Devices.getPhysicalDevice(), m_VK_surface);
     init_info.QueueFamily = indices.graphicsFamily.value();
     init_info.Queue = m_Devices.m_VK_graphicsQueue;
     init_info.DescriptorPool = m_VK_imguiDescriptorPool;
@@ -212,20 +212,14 @@ void Craig::Renderer::InitVulkan() {
     deviceInitInfo.instance = m_VK_instance;
     deviceInitInfo.deviceExtensionsVector = mv_VK_deviceExtensions;
 
-    m_Devices.init(deviceInitInfo); //Picks physical device, picks logical device
-    m_renderingAttachments.findAndSetMaxSampleCount(m_Devices.m_VK_physicalDevice);
-	//pickPhysicalDevice(); // Pick a suitable physical device for rendering
-
-
-
-	//createLogicalDevice(); // Create a logical device to interact with the physical device
+    m_Devices.init(deviceInitInfo); //Picks physical device, creates logical device
 
     initVMA();
 
     Swapchain::SwapchainInitInfo swapInitInfo;
     swapInitInfo.surface = m_VK_surface;
-    swapInitInfo.device = m_Devices.m_VK_logicalDevice;
-    swapInitInfo.physicalDevice = m_Devices.m_VK_physicalDevice;
+    swapInitInfo.device = m_Devices.getLogicalDevice();
+    swapInitInfo.physicalDevice = m_Devices.getPhysicalDevice();
     swapInitInfo.pWindow = mp_CurrentWindow;
 
     m_swapChain.init(swapInitInfo);
@@ -235,8 +229,8 @@ void Craig::Renderer::InitVulkan() {
     RenderingAttachments::RenderingAttachmentsInitInfo renderingAttachmentsInitInfo;
 
     renderingAttachmentsInitInfo.surface = m_VK_surface;
-    renderingAttachmentsInitInfo.device = m_Devices.m_VK_logicalDevice;
-    renderingAttachmentsInitInfo.physicalDevice = m_Devices.m_VK_physicalDevice;
+    renderingAttachmentsInitInfo.device = m_Devices.getLogicalDevice();
+    renderingAttachmentsInitInfo.physicalDevice = m_Devices.getPhysicalDevice();
     renderingAttachmentsInitInfo.memoryAllocator = m_VMA_allocator;
 
     m_renderingAttachments.init(renderingAttachmentsInitInfo);
@@ -267,12 +261,12 @@ void Craig::Renderer::InitVulkan() {
 
 void Craig::Renderer::initVMA() {
 
-    vk::PhysicalDeviceProperties props = m_Devices.m_VK_physicalDevice.getProperties();
+    vk::PhysicalDeviceProperties props = m_Devices.getPhysicalDevice().getProperties();
 
     VmaAllocatorCreateInfo vmaCreateInfo{};
     vmaCreateInfo.instance = m_VK_instance;
-    vmaCreateInfo.physicalDevice = m_Devices.m_VK_physicalDevice;
-    vmaCreateInfo.device = m_Devices.m_VK_logicalDevice;
+    vmaCreateInfo.physicalDevice = m_Devices.getPhysicalDevice();
+    vmaCreateInfo.device = m_Devices.getLogicalDevice();
     vmaCreateInfo.vulkanApiVersion = VK_API_VERSION_1_4;
 
     VmaVulkanFunctions vmaFunctions{};
@@ -305,12 +299,12 @@ void Craig::Renderer::createGraphicsPipeline() {
 
     // Compile HLSL shaders to SPIR-V shader modules
 #if defined(_WIN32)
-    m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_Devices.m_VK_logicalDevice, L"data/shaders/VertexShader.vert");
-    m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_Devices.m_VK_logicalDevice, L"data/shaders/FragmentShader.frag");
+    m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_Devices.getLogicalDevice(), L"data/shaders/VertexShader.vert");
+    m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_Devices.getLogicalDevice(), L"data/shaders/FragmentShader.frag");
 #elif defined(__APPLE__) || defined(__linux__)
 
-    m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_Devices.m_VK_logicalDevice, L"data/shaders/vert.spv");
-    m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_Devices.m_VK_logicalDevice, L"data/shaders/frag.spv");
+    m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_Devices.getLogicalDevice(), L"data/shaders/vert.spv");
+    m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_Devices.getLogicalDevice(), L"data/shaders/frag.spv");
 #endif
 
 
@@ -409,7 +403,7 @@ void Craig::Renderer::createGraphicsPipeline() {
         .setSetLayouts(m_VK_descriptorSetLayout);
 
     try {
-        m_VK_pipelineLayout = m_Devices.m_VK_logicalDevice.createPipelineLayout(pipelineLayoutInfo);
+        m_VK_pipelineLayout = m_Devices.getLogicalDevice().createPipelineLayout(pipelineLayoutInfo);
     }
     catch (const vk::SystemError& err) {
         throw std::runtime_error("failed to createPipelineLayout!");
@@ -442,7 +436,7 @@ void Craig::Renderer::createGraphicsPipeline() {
         .setRenderPass(VK_NULL_HANDLE); //Needs to be null as we're using a dynamic renderer
 
 
-    auto result = m_Devices.m_VK_logicalDevice.createGraphicsPipeline(VK_NULL_HANDLE, pipelineInfo);
+    auto result = m_Devices.getLogicalDevice().createGraphicsPipeline(VK_NULL_HANDLE, pipelineInfo);
 
     if (result.result != vk::Result::eSuccess) {
         throw std::runtime_error("Failed to create graphics pipeline!");
@@ -455,22 +449,22 @@ void Craig::Renderer::createGraphicsPipeline() {
 void Craig::Renderer::cleanupGraphicsPipeline() {
 
     if (m_VK_graphicsPipeline) {
-        m_Devices.m_VK_logicalDevice.destroyPipeline(m_VK_graphicsPipeline);
+        m_Devices.getLogicalDevice().destroyPipeline(m_VK_graphicsPipeline);
         m_VK_graphicsPipeline = nullptr;
     }
 
     if (m_VK_pipelineLayout) {
-        m_Devices.m_VK_logicalDevice.destroyPipelineLayout(m_VK_pipelineLayout);
+        m_Devices.getLogicalDevice().destroyPipelineLayout(m_VK_pipelineLayout);
         m_VK_pipelineLayout = nullptr;
     }
 
     if (m_VK_vertShaderModule) {
-        m_Devices.m_VK_logicalDevice.destroyShaderModule(m_VK_vertShaderModule);
+        m_Devices.getLogicalDevice().destroyShaderModule(m_VK_vertShaderModule);
         m_VK_vertShaderModule = nullptr;
     }
 
     if (m_VK_fragShaderModule) {
-        m_Devices.m_VK_logicalDevice.destroyShaderModule(m_VK_fragShaderModule);
+        m_Devices.getLogicalDevice().destroyShaderModule(m_VK_fragShaderModule);
         m_VK_fragShaderModule = nullptr;
     }
 
@@ -484,7 +478,7 @@ void Craig::Renderer::recreateSwapChain() {
         return; // Skip this frame
     }
 
-    m_Devices.m_VK_logicalDevice.waitIdle();
+    m_Devices.getLogicalDevice().waitIdle();
 
     m_renderingAttachments.cleanupColourAndDepthImageViews();
     m_swapChain.cleanupSwapChain();
@@ -504,7 +498,7 @@ void Craig::Renderer::recreateSwapChainFull() {
     }
 
 
-    m_Devices.m_VK_logicalDevice.waitIdle();
+    m_Devices.getLogicalDevice().waitIdle();
 
     cleanupGraphicsPipeline();
 
@@ -521,14 +515,14 @@ void Craig::Renderer::recreateSwapChainFull() {
 
 void Craig::Renderer::createCommandPool() {
 
-    Device::QueueFamilyIndices queueFamilyIndices = Device::findQueueFamilies(m_Devices.m_VK_physicalDevice, m_VK_surface);
+    Device::QueueFamilyIndices queueFamilyIndices = Device::findQueueFamilies(m_Devices.getPhysicalDevice(), m_VK_surface);
 
     vk::CommandPoolCreateInfo poolInfo{};
     poolInfo
         .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer)
         .setQueueFamilyIndex(queueFamilyIndices.graphicsFamily.value());
 
-    m_VK_commandPool = m_Devices.m_VK_logicalDevice.createCommandPool(poolInfo);
+    m_VK_commandPool = m_Devices.getLogicalDevice().createCommandPool(poolInfo);
 
     if (queueFamilyIndices.hasDedicatedTransfer()) {
         vk::CommandPoolCreateInfo info{};
@@ -536,7 +530,7 @@ void Craig::Renderer::createCommandPool() {
             .setQueueFamilyIndex(queueFamilyIndices.transferFamily.value())
             .setFlags(vk::CommandPoolCreateFlagBits::eTransient); // copies are short-lived
 
-        m_VK_transferCommandPool = m_Devices.m_VK_logicalDevice.createCommandPool(info);
+        m_VK_transferCommandPool = m_Devices.getLogicalDevice().createCommandPool(info);
     }
     else {
         // No dedicated transfer family � reuse graphics pool
@@ -555,7 +549,7 @@ void Craig::Renderer::createCommandBuffers() {
         .setCommandBufferCount((uint32_t)mv_VK_commandBuffers.size());
 
     try {
-        mv_VK_commandBuffers = m_Devices.m_VK_logicalDevice.allocateCommandBuffers(allocInfo);
+        mv_VK_commandBuffers = m_Devices.getLogicalDevice().allocateCommandBuffers(allocInfo);
     }
     catch (const vk::SystemError& err) {
         throw std::runtime_error("failed to allocate command buffers!");
@@ -727,7 +721,7 @@ void Craig::Renderer::createSyncObjects() {
     vk::SemaphoreCreateInfo timelineInfo{};
     timelineInfo.setPNext(&typeInfo);
 
-    m_VK_timelineSemaphore = m_Devices.m_VK_logicalDevice.createSemaphore(timelineInfo);
+    m_VK_timelineSemaphore = m_Devices.getLogicalDevice().createSemaphore(timelineInfo);
     m_sempahoreTimelineValue = 0;
 
     mv_VK_imageAvailableSemaphores.resize(kMaxFramesInFlight);
@@ -736,11 +730,11 @@ void Craig::Renderer::createSyncObjects() {
     vk::SemaphoreCreateInfo semaphoreInfo{};
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
-        mv_VK_imageAvailableSemaphores[i] = m_Devices.m_VK_logicalDevice.createSemaphore(semaphoreInfo);
+        mv_VK_imageAvailableSemaphores[i] = m_Devices.getLogicalDevice().createSemaphore(semaphoreInfo);
     }
 
     for (size_t i = 0; i < m_swapChain.getImages().size(); i++) {
-        mv_VK_renderFinishedSemaphores[i] = m_Devices.m_VK_logicalDevice.createSemaphore(semaphoreInfo);
+        mv_VK_renderFinishedSemaphores[i] = m_Devices.getLogicalDevice().createSemaphore(semaphoreInfo);
     }
 
 }
@@ -759,7 +753,7 @@ void Craig::Renderer::createBufferVMA(
     bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     // If you truly need concurrent:
-    if (auto idx = Device::findQueueFamilies(m_Devices.m_VK_physicalDevice, m_VK_surface); idx.hasDedicatedTransfer()) {
+    if (auto idx = Device::findQueueFamilies(m_Devices.getPhysicalDevice(), m_VK_surface); idx.hasDedicatedTransfer()) {
         uint32_t q[2] = { idx.graphicsFamily.value(), idx.transferFamily.value() };
         bi.sharingMode = VK_SHARING_MODE_CONCURRENT;
         bi.queueFamilyIndexCount = 2;
@@ -779,7 +773,7 @@ vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommands() {
         .setCommandBufferCount(1);
 
 
-    vk::CommandBuffer commandBuffer = m_Devices.m_VK_logicalDevice.allocateCommandBuffers(allocInfo)[0];
+    vk::CommandBuffer commandBuffer = m_Devices.getLogicalDevice().allocateCommandBuffers(allocInfo)[0];
 
     //Start recording the command buffer
     vk::CommandBufferBeginInfo beginInfo{};
@@ -802,7 +796,7 @@ void Craig::Renderer::buffer_endSingleTimeCommands(vk::CommandBuffer commandBuff
     m_Devices.m_VK_transferQueue.submit(submitInfo);
     m_Devices.m_VK_transferQueue.waitIdle();
 
-    m_Devices.m_VK_logicalDevice.freeCommandBuffers(m_VK_transferCommandPool, commandBuffer);
+    m_Devices.getLogicalDevice().freeCommandBuffers(m_VK_transferCommandPool, commandBuffer);
 }
 
 vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommandsGFX() {
@@ -813,7 +807,7 @@ vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommandsGFX() {
         .setCommandBufferCount(1);
 
 
-    vk::CommandBuffer commandBuffer = m_Devices.m_VK_logicalDevice.allocateCommandBuffers(allocInfo)[0];
+    vk::CommandBuffer commandBuffer = m_Devices.getLogicalDevice().allocateCommandBuffers(allocInfo)[0];
 
     //Start recording the command buffer
     vk::CommandBufferBeginInfo beginInfo{};
@@ -836,7 +830,7 @@ void Craig::Renderer::buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandB
     m_Devices.m_VK_graphicsQueue.submit(submitInfo);
     m_Devices.m_VK_graphicsQueue.waitIdle();
 
-    m_Devices.m_VK_logicalDevice.freeCommandBuffers(m_VK_commandPool, commandBuffer);
+    m_Devices.getLogicalDevice().freeCommandBuffers(m_VK_commandPool, commandBuffer);
 }
 
 void Craig::Renderer::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size) {
@@ -1156,7 +1150,7 @@ void Craig::Renderer::createDescriptorSetLayout() {
         .setBindingCount(static_cast<uint32_t>(bindings.size()))
         .setBindings(bindings);
 
-    m_VK_descriptorSetLayout = m_Devices.m_VK_logicalDevice.createDescriptorSetLayout(layoutInfo);
+    m_VK_descriptorSetLayout = m_Devices.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
 
 
 }
@@ -1206,7 +1200,7 @@ void Craig::Renderer::createDescriptorPool() {
         .setPoolSizes(poolSizes)
         .setMaxSets(static_cast<uint32_t>(kMaxFramesInFlight));
 
-    m_VK_descriptorPool = m_Devices.m_VK_logicalDevice.createDescriptorPool(poolInfo);
+    m_VK_descriptorPool = m_Devices.getLogicalDevice().createDescriptorPool(poolInfo);
 
 }
 
@@ -1219,7 +1213,7 @@ void Craig::Renderer::createDescriptorSets() {
         .setSetLayouts(layouts);
 
     mv_VK_descriptorSets.resize(kMaxFramesInFlight);
-    mv_VK_descriptorSets = m_Devices.m_VK_logicalDevice.allocateDescriptorSets(allocInfo);
+    mv_VK_descriptorSets = m_Devices.getLogicalDevice().allocateDescriptorSets(allocInfo);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
 
@@ -1258,7 +1252,7 @@ void Craig::Renderer::createDescriptorSets() {
             .setDescriptorCount(1)
             .setImageInfo(imageInfo);
 
-        m_Devices.m_VK_logicalDevice.updateDescriptorSets(descriptorWrites, nullptr);
+        m_Devices.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
 
     }
 
@@ -1289,7 +1283,7 @@ void Craig::Renderer::updateDescriptorSets() {
             .setDescriptorCount(1)
             .setImageInfo(imageInfo);
 
-        m_Devices.m_VK_logicalDevice.updateDescriptorSets(descriptorWrite, nullptr);
+        m_Devices.getLogicalDevice().updateDescriptorSets(descriptorWrite, nullptr);
     }
 
 }
@@ -1349,7 +1343,7 @@ void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, i
 
     //stbi_image_free(pixels);
 
-    outTexture->m_VK_textureImage = Image::createImage(m_Devices.m_VK_physicalDevice, m_VK_surface, texWidth, texHeight, outTexture->m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VMA_allocator,outTexture->m_VMA_textureImageAllocation);
+    outTexture->m_VK_textureImage = Image::createImage(m_Devices.getPhysicalDevice(), m_VK_surface, texWidth, texHeight, outTexture->m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_VMA_allocator,outTexture->m_VMA_textureImageAllocation);
 
     transitionImageLayout(outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, true, outTexture->m_VK_mipLevels);
     copyBufferToImage(stagingBuffer, outTexture->m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
@@ -1360,14 +1354,14 @@ void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, i
 
     generateMipMaps(outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight, outTexture->m_VK_mipLevels, false);
 
-    outTexture->m_VK_textureImageView = Craig::Image::createImageView(m_Devices.m_VK_logicalDevice, outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor, outTexture->m_VK_mipLevels);
+    outTexture->m_VK_textureImageView = Craig::Image::createImageView(m_Devices.getLogicalDevice(), outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor, outTexture->m_VK_mipLevels);
 
 }
 
 void Craig::Renderer::createTextureSampler() {
 
     vk::PhysicalDeviceProperties physicalDeviceProperties{};
-    physicalDeviceProperties = m_Devices.m_VK_physicalDevice.getProperties();
+    physicalDeviceProperties = m_Devices.getPhysicalDevice().getProperties();
 
     vk::SamplerCreateInfo samplerInfo;
 
@@ -1395,7 +1389,7 @@ void Craig::Renderer::createTextureSampler() {
         .setMaxLod(vk::LodClampNone)
         .setMipLodBias(0.0f);
 
-    m_VK_textureSampler = m_Devices.m_VK_logicalDevice.createSampler(samplerInfo);
+    m_VK_textureSampler = m_Devices.getLogicalDevice().createSampler(samplerInfo);
 
 
 
@@ -1447,7 +1441,7 @@ void Craig::Renderer::updateMinLOD(int minLOD) {
 
 void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels, bool useTransferQueue) {
 
-    vk::FormatProperties formatProperties = m_Devices.m_VK_physicalDevice.getFormatProperties(format);
+    vk::FormatProperties formatProperties = m_Devices.getPhysicalDevice().getFormatProperties(format);
 
     if (!(formatProperties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImageFilterLinear)) {
        assert("texture image format does not support linear blitting!");
@@ -1558,7 +1552,7 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         waitInfo.setValues(waitValue);
 
         // This only blocks if the GPU is really lagging
-        m_Devices.m_VK_logicalDevice.waitSemaphores(waitInfo, UINT64_MAX);
+        m_Devices.getLogicalDevice().waitSemaphores(waitInfo, UINT64_MAX);
     }
 
     if (m_swapChain.getExtent().width <= 0 || m_swapChain.getExtent().height <= 0) {
@@ -1566,7 +1560,7 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
     }
 
     uint32_t imageIndex = 0;
-    VkResult nextImageResult = vkAcquireNextImageKHR(m_Devices.m_VK_logicalDevice, m_swapChain.getSwapChain(), UINT64_MAX, mv_VK_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult nextImageResult = vkAcquireNextImageKHR(m_Devices.getLogicalDevice(), m_swapChain.getSwapChain(), UINT64_MAX, mv_VK_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (nextImageResult == VK_ERROR_OUT_OF_DATE_KHR) {
         recreateSwapChain();
@@ -1651,7 +1645,7 @@ void Craig::Renderer::createImguiDescriptorPool() {
         .setPoolSizeCount(1)
         .setPoolSizes(poolSize);
 
-    vk::Result result = m_Devices.m_VK_logicalDevice.createDescriptorPool(&poolInfo, nullptr, &m_VK_imguiDescriptorPool);
+    vk::Result result = m_Devices.getLogicalDevice().createDescriptorPool(&poolInfo, nullptr, &m_VK_imguiDescriptorPool);
     check_vk_result(static_cast<VkResult>(result));
 }
 #endif
@@ -1660,45 +1654,45 @@ CraigError Craig::Renderer::terminate() {
 
     CraigError ret = CRAIG_SUCCESS;
 
-    m_Devices.m_VK_logicalDevice.waitIdle();
+    m_Devices.getLogicalDevice().waitIdle();
 
 #if defined(IMGUI_ENABLED)
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImGui::DestroyContext();
-    m_Devices.m_VK_logicalDevice.destroyDescriptorPool(m_VK_imguiDescriptorPool);
+    m_Devices.getLogicalDevice().destroyDescriptorPool(m_VK_imguiDescriptorPool);
 #endif
     vmaDestroyBuffer(m_VMA_allocator, m_VK_indexBuffer, m_VMA_indexAllocation);
 
     vmaDestroyBuffer(m_VMA_allocator, m_VK_vertexBuffer, m_VMA_vertexAllocation);
 
     for (size_t i = 0; i < kMaxFramesInFlight; i++) {
-        m_Devices.m_VK_logicalDevice.destroySemaphore(mv_VK_imageAvailableSemaphores[i]);
+        m_Devices.getLogicalDevice().destroySemaphore(mv_VK_imageAvailableSemaphores[i]);
     }
 
     for (size_t i = 0; i < m_swapChain.getImages().size(); i++) {
-        m_Devices.m_VK_logicalDevice.destroySemaphore(mv_VK_renderFinishedSemaphores[i]);
+        m_Devices.getLogicalDevice().destroySemaphore(mv_VK_renderFinishedSemaphores[i]);
     }
 
-    m_Devices.m_VK_logicalDevice.destroySemaphore(m_VK_timelineSemaphore);
+    m_Devices.getLogicalDevice().destroySemaphore(m_VK_timelineSemaphore);
 
     if (m_VK_transferCommandPool && m_VK_transferCommandPool != m_VK_commandPool) {
-        m_Devices.m_VK_logicalDevice.destroyCommandPool(m_VK_transferCommandPool);
+        m_Devices.getLogicalDevice().destroyCommandPool(m_VK_transferCommandPool);
     }
 
-    m_Devices.m_VK_logicalDevice.destroyCommandPool(m_VK_commandPool);
+    m_Devices.getLogicalDevice().destroyCommandPool(m_VK_commandPool);
 
     m_renderingAttachments.cleanupColourAndDepthImageViews();
 
-    m_Devices.m_VK_logicalDevice.destroySampler(m_VK_textureSampler);
+    m_Devices.getLogicalDevice().destroySampler(m_VK_textureSampler);
 
-    Craig::ResourceManager::getInstance().terminateModels(m_Devices.m_VK_logicalDevice, m_VMA_allocator);
+    Craig::ResourceManager::getInstance().terminateModels(m_Devices.getLogicalDevice(), m_VMA_allocator);
 
-    m_Devices.m_VK_logicalDevice.destroyPipeline(m_VK_graphicsPipeline);
-    m_Devices.m_VK_logicalDevice.destroyPipelineLayout(m_VK_pipelineLayout);
+    m_Devices.getLogicalDevice().destroyPipeline(m_VK_graphicsPipeline);
+    m_Devices.getLogicalDevice().destroyPipelineLayout(m_VK_pipelineLayout);
 
-    m_Devices.m_VK_logicalDevice.destroyShaderModule(m_VK_vertShaderModule);
-    m_Devices.m_VK_logicalDevice.destroyShaderModule(m_VK_fragShaderModule);
+    m_Devices.getLogicalDevice().destroyShaderModule(m_VK_vertShaderModule);
+    m_Devices.getLogicalDevice().destroyShaderModule(m_VK_fragShaderModule);
 
     m_swapChain.terminate();
 
@@ -1706,12 +1700,12 @@ CraigError Craig::Renderer::terminate() {
         vmaDestroyBuffer(m_VMA_allocator, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i]);
     }
 
-    m_Devices.m_VK_logicalDevice.destroyDescriptorPool(m_VK_descriptorPool);
-    m_Devices.m_VK_logicalDevice.destroyDescriptorSetLayout(m_VK_descriptorSetLayout);
+    m_Devices.getLogicalDevice().destroyDescriptorPool(m_VK_descriptorPool);
+    m_Devices.getLogicalDevice().destroyDescriptorSetLayout(m_VK_descriptorSetLayout);
 
     vmaDestroyAllocator(m_VMA_allocator);
 
-    m_Devices.m_VK_logicalDevice.destroy();
+    m_Devices.getLogicalDevice().destroy();
 
     m_VK_instance.destroySurfaceKHR(m_VK_surface);
 
@@ -1735,14 +1729,14 @@ CraigError Craig::Renderer::terminate() {
 }
 
 void Craig::Renderer::terminateSampler() {
-    m_Devices.m_VK_logicalDevice.waitIdle();
-    m_Devices.m_VK_logicalDevice.destroySampler(m_VK_textureSampler);
+    m_Devices.getLogicalDevice().waitIdle();
+    m_Devices.getLogicalDevice().destroySampler(m_VK_textureSampler);
 }
 
 uint32_t Craig::Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
     vk::PhysicalDeviceMemoryProperties memProperties;
 
-    memProperties = m_Devices.m_VK_physicalDevice.getMemoryProperties();
+    memProperties = m_Devices.getPhysicalDevice().getMemoryProperties();
 
     for (size_t i = 0; i < memProperties.memoryTypeCount; i++)
     {

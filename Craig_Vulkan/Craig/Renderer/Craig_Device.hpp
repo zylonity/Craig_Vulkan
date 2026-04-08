@@ -35,17 +35,20 @@ namespace Craig {
 		CraigError update();
 		CraigError terminate();
 
-		vk::PhysicalDevice   m_VK_physicalDevice;
-		vk::Device           m_VK_logicalDevice;
-
 		vk::Queue m_VK_graphicsQueue;
 		vk::Queue m_VK_presentationQueue;
 		vk::Queue m_VK_transferQueue;
+
+		const vk::PhysicalDevice getPhysicalDevice() const { return m_VK_physicalDevice; }
+		const vk::Device getLogicalDevice() const { return m_VK_logicalDevice; }
 
 	private:
 		vk::SurfaceKHR m_DVC_surface;
 		vk::Instance   m_DVC_instance;
 		std::vector<const char*> mv_DVC_deviceExtensions;
+
+		vk::PhysicalDevice   m_VK_physicalDevice;
+		vk::Device           m_VK_logicalDevice;
 
 		void pickPhysicalDevice();
 		bool isDeviceSuitable(const vk::PhysicalDevice& device);

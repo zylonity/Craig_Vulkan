@@ -10,6 +10,8 @@ CraigError Craig::RenderingAttachments::init(const RenderingAttachmentsInitInfo&
 	mRA_device = info.device;
 	mRA_memoryAllocator = info.memoryAllocator;
 
+	m_VK_msaaSamples = getMaxUsableSampleCount();
+
 	return ret;
 }
 
@@ -62,12 +64,6 @@ vk::Format Craig::RenderingAttachments::findDepthFormat() {
 	);
 }
 
-void Craig::RenderingAttachments::findAndSetMaxSampleCount(vk::PhysicalDevice physicalDevice)
-{
-	m_VK_msaaSamples = getMaxUsableSampleCount(physicalDevice);
-
-}
-
 void Craig::RenderingAttachments::createDepthResources(vk::Extent2D extent) {
 
 	vk::Format depthFormat = findDepthFormat();
@@ -78,8 +74,8 @@ void Craig::RenderingAttachments::createDepthResources(vk::Extent2D extent) {
 
 }
 
-vk::SampleCountFlagBits Craig::RenderingAttachments::getMaxUsableSampleCount(vk::PhysicalDevice physicalDevice) {
-	vk::PhysicalDeviceProperties physicalDeviceProperties = physicalDevice.getProperties();
+vk::SampleCountFlagBits Craig::RenderingAttachments::getMaxUsableSampleCount() {
+	vk::PhysicalDeviceProperties physicalDeviceProperties = mRA_physicalDevice.getProperties();
 
 	vk::SampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
 

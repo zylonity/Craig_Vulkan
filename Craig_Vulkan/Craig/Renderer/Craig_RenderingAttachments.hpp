@@ -34,7 +34,7 @@ namespace Craig {
 
 		//Utility functions
 		vk::Format findDepthFormat();
-		void findAndSetMaxSampleCount(vk::PhysicalDevice physicalDevice); //I have to pass the device as the rendering attachments object hasn't been initiated yet
+		//void findAndSetMaxSampleCount(vk::PhysicalDevice physicalDevice); //I have to pass the device as the rendering attachments object hasn't been initiated yet
 		uint32_t getMaxSamplingLevel() { return static_cast<uint32_t>(m_VK_msaaSamples); };
 
 		//Getters
@@ -53,7 +53,7 @@ namespace Craig {
 		VmaAllocation  m_VMA_depthImageAllocation;
 
 		vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling, vk::FormatFeatureFlags features);
-		vk::SampleCountFlagBits getMaxUsableSampleCount(vk::PhysicalDevice physicalDevice);
+		vk::SampleCountFlagBits getMaxUsableSampleCount();
 
 		vk::SurfaceKHR       mRA_surface;
 		vk::PhysicalDevice   mRA_physicalDevice;

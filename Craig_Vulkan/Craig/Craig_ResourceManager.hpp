@@ -69,7 +69,7 @@ namespace Craig {
 		CraigError terminate();
 
 		void loadModel(std::string modelPath);
-		void terminateModels(vk::Device& device, VmaAllocator& memoryAllocator);
+		void terminateModels(const vk::Device& device, VmaAllocator& memoryAllocator);
 
 		Craig::Model& getModel(std::string modelPath) { return m_testModel; };
 
