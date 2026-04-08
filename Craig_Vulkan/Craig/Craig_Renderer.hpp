@@ -57,8 +57,8 @@ namespace Craig {
 		// Core init / teardown
 		void InitVulkan();                 // Full Vulkan bring-up
 		void setupDebugMessenger();        // Validation callback
-		void pickPhysicalDevice();         // Choose GPU
-		void createLogicalDevice();        // Create vk::Device + queues
+		//void pickPhysicalDevice();         // Choose GPU
+		//void createLogicalDevice();        // Create vk::Device + queues
 		void initVMA();                    // VMA allocator setup
 
 		
@@ -127,8 +127,8 @@ namespace Craig {
 
 		
 		// Device / swapchain queries
-		bool isDeviceSuitable(const vk::PhysicalDevice& device);
-		bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
+		//bool isDeviceSuitable(const vk::PhysicalDevice& device);
+		//bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
 
 		//QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device); Moved to craig_device
 
@@ -168,12 +168,13 @@ namespace Craig {
 		vk::DebugUtilsMessengerEXT m_VK_debugMessenger;
 
 		vk::SurfaceKHR       m_VK_surface;
-		vk::PhysicalDevice   m_VK_physicalDevice;
-		vk::Device           m_VK_device;
+		// vk::PhysicalDevice   m_VK_physicalDevice;
+		// vk::Device           m_VK_device;
+		Craig::Device m_Devices;
 
-		vk::Queue m_VK_graphicsQueue;
-		vk::Queue m_VK_presentationQueue;
-		vk::Queue m_VK_transferQueue;
+		// vk::Queue m_VK_graphicsQueue;
+		// vk::Queue m_VK_presentationQueue;
+		// vk::Queue m_VK_transferQueue;
 
 		
 		// Swapchain
