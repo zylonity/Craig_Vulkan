@@ -19,6 +19,7 @@
 #include "Craig_ResourceManager.hpp"
 #include "Renderer/Craig_Swapchain.hpp"
 #include "Renderer/Craig_Device.hpp"
+#include "Renderer/Craig_Instance.hpp"
 #include "Renderer/Craig_RenderingAttachments.hpp"
 
 namespace Craig {
@@ -56,7 +57,6 @@ namespace Craig {
 		
 		// Core init / teardown
 		void InitVulkan();                 // Full Vulkan bring-up
-		void setupDebugMessenger();        // Validation callback
 		
 		// Swapchain + framebuffer resources
 		void recreateSwapChain();          // Swapchain-only recreation
@@ -118,15 +118,6 @@ namespace Craig {
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
 		
-		// Debug / utilities
-		void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
-		static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-			VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-			VkDebugUtilsMessageTypeFlagsEXT type,
-			const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
-			void* userData);
-
-		
 		// Extensions / layers
 		const std::vector<const char*> mv_VK_deviceExtensions = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME
@@ -142,17 +133,10 @@ namespace Craig {
 		SceneManager* mp_SceneManager = nullptr;
 		Window* mp_CurrentWindow = nullptr;
 
-		Craig::Camera m_camera = Craig::Camera();
+		Craig::Camera m_camera = Craig::Camera(); //Virtual camera for the scene
+		Craig::Instance m_instance; //Contains vulkan instance and debugging stuff
+		Craig::Device m_Devices; //Contains physical and logical device
 
-		// Vulkan instance / device
-		vk::Instance               m_VK_instance;
-		vk::ApplicationInfo        m_VK_appInfo;
-		vk::InstanceCreateInfo     m_VK_instInfo;
-		vk::DebugUtilsMessengerEXT m_VK_debugMessenger;
-
-		vk::SurfaceKHR       m_VK_surface;
-
-		Craig::Device m_Devices;
 		// Swapchain
 		Craig::Swapchain m_swapChain;
 		
@@ -201,7 +185,7 @@ namespace Craig {
 
 		uint32_t m_minLODLevel = 0;        // User-selected min LOD clamp
 
-		RenderingAttachments m_renderingAttachments;
+		RenderingAttachments m_renderingAttachments; //Contains stuff for MSAA, vsync and mipmap levels
 		
 		// Texture
 		vk::Sampler   m_VK_textureSampler;

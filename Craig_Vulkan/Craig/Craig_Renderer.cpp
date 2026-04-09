@@ -23,6 +23,7 @@
 #include "Renderer/Craig_Swapchain.hpp"
 #include "Renderer/Craig_Device.hpp"
 #include "Renderer/Craig_Image.hpp"
+#include "Renderer/Craig_Instance.hpp"
 
 #if defined(IMGUI_ENABLED)
 static void check_vk_result(VkResult err)
@@ -34,41 +35,6 @@ static void check_vk_result(VkResult err)
         abort();
 }
 #endif
-
-
-// This function is called by Vulkan to report debug messages.
-// TODO: Maybe switch this to a logger later on, avoiding std::cerr
-VKAPI_ATTR VkBool32 VKAPI_CALL Craig::Renderer::debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-    VkDebugUtilsMessageTypeFlagsEXT type,
-    const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
-    void* userData) {
-    std::cerr << "Validation layer: " << callbackData->pMessage << std::endl;
-    return VK_FALSE;
-}
-
-// Fills out the configuration for the Vulkan debug messenger.
-void Craig::Renderer::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
-    createInfo = {}; // Zero out the struct to avoid uninitialized garbage
-
-    // Tell Vulkan this is a debug messenger creation struct
-    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-
-    // Choose the severity levels of messages you want to receive
-    createInfo.messageSeverity =
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | // Informational messages (can be spammy)
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | // Potential issues, not always fatal
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;    // Serious problems that likely break things
-
-    // Specify which types of messages you care about
-    createInfo.messageType =
-        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |     // Miscellaneous messages
-        VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |  // Validation layer warnings/errors
-        VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;  // Performance issues (e.g. suboptimal usage)
-
-    // Provide the callback function to handle these messages
-    createInfo.pfnUserCallback = debugCallback;
-}
 
 CraigError Craig::Renderer::init(Window* CurrentWindowPtr, SceneManager* sceneManagerPtr) {
 
@@ -93,43 +59,12 @@ CraigError Craig::Renderer::init(Window* CurrentWindowPtr, SceneManager* sceneMa
     mp_CurrentWindow->getExtensionsVector().push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 
-    // vk::ApplicationInfo allows the programmer to specifiy some basic information about the
-    // program, which can be useful for layers and tools to provide more debug information.
-    m_VK_appInfo = vk::ApplicationInfo()
-        .setPApplicationName(kVK_AppName)
-        .setApplicationVersion(kVK_AppVersion)
-        .setPEngineName(kVK_EngineName)
-        .setEngineVersion(kVK_EngineVersion)
-        .setApiVersion(VK_API_VERSION_1_4);
 
-    // vk::InstanceCreateInfo is where the programmer specifies the layers and/or extensions that
-    // are needed.
-    m_VK_instInfo = vk::InstanceCreateInfo()
-#if defined(_WIN32) || defined(__linux__)
-        .setFlags(vk::InstanceCreateFlags())
-#elif defined(__APPLE__)
-        .setFlags(vk::InstanceCreateFlagBits::eEnumeratePortabilityKHR)
-#endif
-        .setPApplicationInfo(&m_VK_appInfo)
-        .setEnabledExtensionCount(static_cast<uint32_t>(mp_CurrentWindow->getExtensionsVector().size()))
-        .setPpEnabledExtensionNames(mp_CurrentWindow->getExtensionsVector().data())
-        .setEnabledLayerCount(static_cast<uint32_t>(mv_VK_Layers.size()))
-        .setPpEnabledLayerNames(mv_VK_Layers.data());
+    Instance::InstanceInitInfo instanceInitInfo;
+    instanceInitInfo.validationLayerVector = mv_VK_Layers;
+    instanceInitInfo.p_Window = mp_CurrentWindow;
 
-    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo;
-    populateDebugMessengerCreateInfo(debugCreateInfo);
-
-    //featuresInfo.pNext = &debugCreateInfo;
-    m_VK_instInfo.setPNext(&debugCreateInfo);
-
-    m_VK_instance = vk::createInstance(m_VK_instInfo); //Now that we have the instance created, we can initialize Vulkan
-
-    // Create a Vulkan surface for rendering
-    VkSurfaceKHR cSurface; // Vulkan surface for rendering
-    bool sdlRetBool = SDL_Vulkan_CreateSurface(mp_CurrentWindow->getSDLWindow(), static_cast<VkInstance>(m_VK_instance), &cSurface);
-    assert(sdlRetBool && "Could not create a Vulkan surface.");
-
-    m_VK_surface = vk::SurfaceKHR(cSurface);
+    m_instance.init(instanceInitInfo);
 
     InitVulkan();
 
@@ -157,11 +92,11 @@ void Craig::Renderer::InitImgui() {
     // Setup Platform/Renderer backends
     ImGui_ImplSDL2_InitForVulkan(mp_CurrentWindow->getSDLWindow());
     ImGui_ImplVulkan_InitInfo init_info = {};
-    init_info.Instance = m_VK_instance;
+    init_info.Instance = m_instance.getVkInstance();
     init_info.PhysicalDevice = m_Devices.getPhysicalDevice();
     init_info.Device = m_Devices.getLogicalDevice();
 
-    Craig::Device::QueueFamilyIndices indices = Craig::Device::findQueueFamilies(m_Devices.getPhysicalDevice(), m_VK_surface);
+    Craig::Device::QueueFamilyIndices indices = Craig::Device::findQueueFamilies(m_Devices.getPhysicalDevice(), m_instance.getVkSurface());
     init_info.QueueFamily = indices.graphicsFamily.value();
     init_info.Queue = m_Devices.getGraphicsQueue();
     init_info.DescriptorPool = m_VK_imguiDescriptorPool;
@@ -205,11 +140,11 @@ CraigError Craig::Renderer::update(const float& deltaTime) {
 
 void Craig::Renderer::InitVulkan() {
 
-    setupDebugMessenger(); // Actually enable the messenger
+    //setupDebugMessenger(); // Actually enable the messenger
 
     Device::DeviceInitInfo deviceInitInfo;
-    deviceInitInfo.surface = m_VK_surface;
-    deviceInitInfo.instance = m_VK_instance;
+    deviceInitInfo.surface = m_instance.getVkSurface();
+    deviceInitInfo.instance = m_instance.getVkInstance();
     deviceInitInfo.deviceExtensionsVector = mv_VK_deviceExtensions;
 
     m_Devices.init(deviceInitInfo); //Picks physical device, creates logical device
@@ -217,7 +152,7 @@ void Craig::Renderer::InitVulkan() {
     //initVMA();
 
     Swapchain::SwapchainInitInfo swapInitInfo;
-    swapInitInfo.surface = m_VK_surface;
+    swapInitInfo.surface = m_instance.getVkSurface();
     swapInitInfo.device = m_Devices.getLogicalDevice();
     swapInitInfo.physicalDevice = m_Devices.getPhysicalDevice();
     swapInitInfo.pWindow = mp_CurrentWindow;
@@ -228,7 +163,7 @@ void Craig::Renderer::InitVulkan() {
 
     RenderingAttachments::RenderingAttachmentsInitInfo renderingAttachmentsInitInfo;
 
-    renderingAttachmentsInitInfo.surface = m_VK_surface;
+    renderingAttachmentsInitInfo.surface = m_instance.getVkSurface();
     renderingAttachmentsInitInfo.device = m_Devices.getLogicalDevice();
     renderingAttachmentsInitInfo.physicalDevice = m_Devices.getPhysicalDevice();
     renderingAttachmentsInitInfo.memoryAllocator = m_Devices.getVmaAllocator();
@@ -257,22 +192,6 @@ void Craig::Renderer::InitVulkan() {
 
     mp_CurrentWindow->setCameraRef(&m_camera);
     Craig::ImguiEditor::getInstance().setCamera(&m_camera);
-}
-
-// Registers the debug messenger with Vulkan using the previously filled-in struct
-void Craig::Renderer::setupDebugMessenger() {
-    VkDebugUtilsMessengerCreateInfoEXT createInfo{};
-    populateDebugMessengerCreateInfo(createInfo); // Fill with default settings
-
-    // Look up the address of vkCreateDebugUtilsMessengerEXT at runtime
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT)
-        m_VK_instance.getProcAddr("vkCreateDebugUtilsMessengerEXT");
-
-    // If the function was loaded successfully, call it to create the messenger
-    if (func && func(static_cast<VkInstance>(m_VK_instance), &createInfo, nullptr,
-        reinterpret_cast<VkDebugUtilsMessengerEXT*>(&m_VK_debugMessenger)) != VK_SUCCESS) {
-        throw std::runtime_error("failed to set up debug messenger!");
-    }
 }
 
 void Craig::Renderer::createGraphicsPipeline() {
@@ -495,7 +414,7 @@ void Craig::Renderer::recreateSwapChainFull() {
 
 void Craig::Renderer::createCommandPool() {
 
-    Device::QueueFamilyIndices queueFamilyIndices = Device::findQueueFamilies(m_Devices.getPhysicalDevice(), m_VK_surface);
+    Device::QueueFamilyIndices queueFamilyIndices = Device::findQueueFamilies(m_Devices.getPhysicalDevice(), m_instance.getVkSurface());
 
     vk::CommandPoolCreateInfo poolInfo{};
     poolInfo
@@ -1297,7 +1216,7 @@ void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, i
 
     //stbi_image_free(pixels);
 
-    outTexture->m_VK_textureImage = Image::createImage(m_Devices.getPhysicalDevice(), m_VK_surface, texWidth, texHeight, outTexture->m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_Devices.getVmaAllocator(),outTexture->m_VMA_textureImageAllocation);
+    outTexture->m_VK_textureImage = Image::createImage(m_Devices.getPhysicalDevice(), m_instance.getVkSurface(), texWidth, texHeight, outTexture->m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_Devices.getVmaAllocator(),outTexture->m_VMA_textureImageAllocation);
 
     transitionImageLayout(outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, true, outTexture->m_VK_mipLevels);
     copyBufferToImage(stagingBuffer, outTexture->m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
@@ -1661,23 +1580,7 @@ CraigError Craig::Renderer::terminate() {
 
     m_Devices.terminate();
 
-    m_VK_instance.destroySurfaceKHR(m_VK_surface);
-
-    //Destroy the messenger/debugger
-    //Needs to be done before destroying the instance
-#if defined(_DEBUG)
-    if (m_VK_debugMessenger) {
-        auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)
-            m_VK_instance.getProcAddr("vkDestroyDebugUtilsMessengerEXT");
-
-        if (func) {
-            func(static_cast<VkInstance>(m_VK_instance),
-                static_cast<VkDebugUtilsMessengerEXT>(m_VK_debugMessenger), nullptr);
-        }
-    }
-#endif
-
-    m_VK_instance.destroy();
+    m_instance.terminate();
 
     return ret;
 }
