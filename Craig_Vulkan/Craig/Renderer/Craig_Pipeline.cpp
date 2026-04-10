@@ -236,9 +236,16 @@ CraigError Craig::Pipeline::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-    //cleanupGraphicsPipeline();
+    cleanupGraphicsPipeline();
+    mPipe_device.destroyDescriptorSetLayout(m_VK_descriptorSetLayout);
 
 	return ret;
+}
+
+void Craig::Pipeline::recreate()
+{
+    cleanupGraphicsPipeline();
+    createGraphicsPipeline();
 }
 
 

@@ -141,16 +141,12 @@ CraigError Craig::Renderer::update(const float& deltaTime) {
 
 void Craig::Renderer::InitVulkan() {
 
-    //setupDebugMessenger(); // Actually enable the messenger
-
     Device::DeviceInitInfo deviceInitInfo;
     deviceInitInfo.surface = m_instance.getVkSurface();
     deviceInitInfo.instance = m_instance.getVkInstance();
     deviceInitInfo.deviceExtensionsVector = mv_VK_deviceExtensions;
 
     m_Devices.init(deviceInitInfo); //Picks physical device, creates logical device
-
-    //initVMA();
 
     Swapchain::SwapchainInitInfo swapInitInfo;
     swapInitInfo.surface = m_instance.getVkSurface();
@@ -183,7 +179,6 @@ void Craig::Renderer::InitVulkan() {
     createCommandPool();
 
     mp_SceneManager->init();
-    //assert(ret == CRAIG_SUCCESS);
 
     createTextureSampler();
     createVertexBuffer();
@@ -231,7 +226,7 @@ void Craig::Renderer::recreateSwapChainFull() {
 
     m_Devices.getLogicalDevice().waitIdle();
 
-    m_pipeline.cleanupGraphicsPipeline();
+    m_pipeline.recreate();
 
     m_renderingAttachments.cleanupColourAndDepthImageViews();
     m_swapChain.cleanupSwapChain();
@@ -241,7 +236,6 @@ void Craig::Renderer::recreateSwapChainFull() {
     m_swapChain.createSwapImageViews();
     m_renderingAttachments.createColourResources(m_swapChain.getExtent(), m_swapChain.getImageFormat());
     m_renderingAttachments.createDepthResources(m_swapChain.getExtent());
-    m_pipeline.createGraphicsPipeline();
 }
 
 void Craig::Renderer::createCommandPool() {
@@ -1357,7 +1351,7 @@ CraigError Craig::Renderer::terminate() {
 
     Craig::ResourceManager::getInstance().terminateModels(m_Devices.getLogicalDevice(), m_Devices.getVmaAllocator());
 
-    m_pipeline.cleanupGraphicsPipeline();
+
 
     m_swapChain.terminate();
 
@@ -1366,8 +1360,8 @@ CraigError Craig::Renderer::terminate() {
     }
 
     m_Devices.getLogicalDevice().destroyDescriptorPool(m_VK_descriptorPool);
-    m_Devices.getLogicalDevice().destroyDescriptorSetLayout(m_pipeline.getDescriptorSetLayout());
 
+    m_pipeline.terminate();
 
 
     m_Devices.terminate();

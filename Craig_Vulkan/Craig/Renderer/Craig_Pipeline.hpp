@@ -21,16 +21,14 @@ namespace Craig {
 
 		};
 
-		void createGraphicsPipeline();
-		void cleanupGraphicsPipeline();
-		void createDescriptorSetLayout();
+
 
 		CraigError init(const PipelineInitInfo& info);
 		CraigError update();
 		CraigError terminate();
 
-		// const vk::ShaderModule getVertShaderModule() const { return m_VK_vertShaderModule; }
-		// const vk::ShaderModule getFragShaderModule() const { return m_VK_fragShaderModule; }
+		void recreate();
+
 		const vk::Pipeline getGraphicsPipeline() const { return m_VK_graphicsPipeline; }
 		const vk::DescriptorSetLayout getDescriptorSetLayout() const { return m_VK_descriptorSetLayout; }
 		const vk::PipelineLayout getPipelineLayout() const { return m_VK_pipelineLayout; }
@@ -48,6 +46,10 @@ namespace Craig {
 		vk::Format		mPipe_colorFormat;
 		vk::Format		mPipe_depthFormat;
 		vk::SampleCountFlagBits mPipe_msaaSamples;
+
+		void createGraphicsPipeline();
+		void cleanupGraphicsPipeline();
+		void createDescriptorSetLayout();
 
 	};
 
