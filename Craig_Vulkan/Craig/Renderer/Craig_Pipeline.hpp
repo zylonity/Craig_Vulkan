@@ -29,6 +29,13 @@ namespace Craig {
 		CraigError update();
 		CraigError terminate();
 
+		// const vk::ShaderModule getVertShaderModule() const { return m_VK_vertShaderModule; }
+		// const vk::ShaderModule getFragShaderModule() const { return m_VK_fragShaderModule; }
+		const vk::Pipeline getGraphicsPipeline() const { return m_VK_graphicsPipeline; }
+		const vk::DescriptorSetLayout getDescriptorSetLayout() const { return m_VK_descriptorSetLayout; }
+		const vk::PipelineLayout getPipelineLayout() const { return m_VK_pipelineLayout; }
+
+	private:
 		// Shaders / pipeline
 		vk::ShaderModule       m_VK_vertShaderModule;
 		vk::ShaderModule       m_VK_fragShaderModule;
@@ -37,7 +44,6 @@ namespace Craig {
 		vk::PipelineLayout      m_VK_pipelineLayout;
 		vk::Pipeline            m_VK_graphicsPipeline;
 
-	private:
 		vk::Device		mPipe_device;
 		vk::Format		mPipe_colorFormat;
 		vk::Format		mPipe_depthFormat;

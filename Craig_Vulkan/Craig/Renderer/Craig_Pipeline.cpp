@@ -236,6 +236,8 @@ CraigError Craig::Pipeline::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+    //cleanupGraphicsPipeline();
+
 	return ret;
 }
 

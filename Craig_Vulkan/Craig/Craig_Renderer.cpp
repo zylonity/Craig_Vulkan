@@ -352,7 +352,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     commandBuffer.beginRendering(ri);
 
     //Binding the vertex buffer
-    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_pipeline.m_VK_graphicsPipeline);
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_pipeline.getGraphicsPipeline());
     vk::Buffer vertexBuffers[] = { m_VK_vertexBuffer };
     vk::DeviceSize offsets[] = { 0 };
     commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
@@ -376,7 +376,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     commandBuffer.setScissor(0, scissor);
 
-    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_pipeline.m_VK_pipelineLayout, 0, mv_VK_descriptorSets[m_currentFrame], nullptr);
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_pipeline.getPipelineLayout(), 0, mv_VK_descriptorSets[m_currentFrame], nullptr);
 
     /*
     indexCount: Even though we don't have a vertex buffer, we technically still have 3 vertices to draw.
@@ -875,7 +875,7 @@ void Craig::Renderer::createDescriptorPool() {
 
 void Craig::Renderer::createDescriptorSets() {
 
-    std::vector<vk::DescriptorSetLayout> layouts(kMaxFramesInFlight, m_pipeline.m_VK_descriptorSetLayout);
+    std::vector<vk::DescriptorSetLayout> layouts(kMaxFramesInFlight, m_pipeline.getDescriptorSetLayout());
     vk::DescriptorSetAllocateInfo allocInfo{};
     allocInfo.setDescriptorPool(m_VK_descriptorPool)
         .setDescriptorSetCount(static_cast<uint32_t>(kMaxFramesInFlight))
@@ -1357,11 +1357,7 @@ CraigError Craig::Renderer::terminate() {
 
     Craig::ResourceManager::getInstance().terminateModels(m_Devices.getLogicalDevice(), m_Devices.getVmaAllocator());
 
-    m_Devices.getLogicalDevice().destroyPipeline(m_pipeline.m_VK_graphicsPipeline);
-    m_Devices.getLogicalDevice().destroyPipelineLayout(m_pipeline.m_VK_pipelineLayout);
-
-    m_Devices.getLogicalDevice().destroyShaderModule(m_pipeline.m_VK_vertShaderModule);
-    m_Devices.getLogicalDevice().destroyShaderModule(m_pipeline.m_VK_fragShaderModule);
+    m_pipeline.cleanupGraphicsPipeline();
 
     m_swapChain.terminate();
 
@@ -1370,7 +1366,7 @@ CraigError Craig::Renderer::terminate() {
     }
 
     m_Devices.getLogicalDevice().destroyDescriptorPool(m_VK_descriptorPool);
-    m_Devices.getLogicalDevice().destroyDescriptorSetLayout(m_pipeline.m_VK_descriptorSetLayout);
+    m_Devices.getLogicalDevice().destroyDescriptorSetLayout(m_pipeline.getDescriptorSetLayout());
 
 
 
