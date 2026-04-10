@@ -20,9 +20,6 @@ namespace Craig {
 		CraigError update();
 		CraigError terminate();
 
-		void createCommandPool();
-		void createCommandBuffers();
-
 		// One-off command helpers (transfer/GFX)
 		vk::CommandBuffer buffer_beginSingleTimeCommands();
 		void buffer_endSingleTimeCommands(vk::CommandBuffer commandBuffer);
@@ -34,6 +31,10 @@ namespace Craig {
 		const std::vector<vk::CommandBuffer>& getCommandBuffers() { return mv_VK_commandBuffers; }
 
 	private:
+
+		void createCommandPool();
+		void createCommandBuffers();
+
 		// Commands
 		vk::CommandPool                m_VK_commandPool;
 		vk::CommandPool                m_VK_transferCommandPool;

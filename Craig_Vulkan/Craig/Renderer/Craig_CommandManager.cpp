@@ -9,6 +9,10 @@ CraigError Craig::CommandManager::init(const CommandManagerInitInfo& info) {
 	mp_Device = info.p_Device;
 	m_CM_surface = info.surface;
 
+	createCommandPool();
+	createCommandBuffers();
+
+
 
 	return ret;
 }

@@ -181,7 +181,6 @@ void Craig::Renderer::InitVulkan() {
 
     m_commandManager.init(commandManagerInitInfo);
 
-    m_commandManager.createCommandPool();
 
     mp_SceneManager->init();
 
@@ -190,8 +189,6 @@ void Craig::Renderer::InitVulkan() {
     createIndexBuffer();
     createUniformBuffers();
     createDescriptorPool();
-    createDescriptorSets();
-    m_commandManager.createCommandBuffers();
     createSyncObjects();
 #if defined(IMGUI_ENABLED)
     createImguiDescriptorPool();
