@@ -10,6 +10,9 @@ CraigError Craig::Swapchain::init(const SwapchainInitInfo& info) {
     mSC_device = info.device;
     mp_Window = info.pWindow;
 
+    createSwapChain();
+    createSwapImageViews();
+
     return ret;
 }
 

@@ -20,6 +20,7 @@
 #include "Renderer/Craig_Swapchain.hpp"
 #include "Renderer/Craig_Device.hpp"
 #include "Renderer/Craig_Instance.hpp"
+#include "Renderer/Craig_Pipeline.hpp"
 #include "Renderer/Craig_RenderingAttachments.hpp"
 
 namespace Craig {
@@ -63,9 +64,9 @@ namespace Craig {
 		void recreateSwapChainFull();      // Swapchain + pipeline + imgui recreation
 		
 		// Pipeline / descriptors
-		void createDescriptorSetLayout();
-		void createGraphicsPipeline();
-		void cleanupGraphicsPipeline();
+		//void createDescriptorSetLayout();
+		// void createGraphicsPipeline();
+		// void cleanupGraphicsPipeline();
 
 		void createDescriptorPool();
 		void createDescriptorSets();
@@ -140,13 +141,14 @@ namespace Craig {
 		// Swapchain
 		Craig::Swapchain m_swapChain;
 		
-		// Shaders / pipeline
-		vk::ShaderModule       m_VK_vertShaderModule;
-		vk::ShaderModule       m_VK_fragShaderModule;
-
-		vk::DescriptorSetLayout m_VK_descriptorSetLayout;
-		vk::PipelineLayout      m_VK_pipelineLayout;
-		vk::Pipeline            m_VK_graphicsPipeline;
+		// // Shaders / pipeline
+		Craig::Pipeline m_pipeline;
+		// vk::ShaderModule       m_VK_vertShaderModule;
+		// vk::ShaderModule       m_VK_fragShaderModule;
+		//
+		// vk::DescriptorSetLayout m_VK_descriptorSetLayout;
+		// vk::PipelineLayout      m_VK_pipelineLayout;
+		// vk::Pipeline            m_VK_graphicsPipeline;
 
 		
 		// Commands

@@ -24,6 +24,7 @@
 #include "Renderer/Craig_Device.hpp"
 #include "Renderer/Craig_Image.hpp"
 #include "Renderer/Craig_Instance.hpp"
+#include "Renderer/Craig_Pipeline.hpp"
 
 #if defined(IMGUI_ENABLED)
 static void check_vk_result(VkResult err)
@@ -158,8 +159,6 @@ void Craig::Renderer::InitVulkan() {
     swapInitInfo.pWindow = mp_CurrentWindow;
 
     m_swapChain.init(swapInitInfo);
-    m_swapChain.createSwapChain();
-    m_swapChain.createSwapImageViews();
 
     RenderingAttachments::RenderingAttachmentsInitInfo renderingAttachmentsInitInfo;
 
@@ -171,8 +170,16 @@ void Craig::Renderer::InitVulkan() {
     m_renderingAttachments.init(renderingAttachmentsInitInfo);
     m_renderingAttachments.createColourResources(m_swapChain.getExtent(), m_swapChain.getImageFormat());
     m_renderingAttachments.createDepthResources(m_swapChain.getExtent());
-    createDescriptorSetLayout();
-    createGraphicsPipeline();
+
+    Pipeline::PipelineInitInfo pipelineInitInfo;
+    pipelineInitInfo.device = m_Devices.getLogicalDevice();
+    pipelineInitInfo.colorFormat = m_swapChain.getImageFormat();
+    pipelineInitInfo.depthFormat = m_renderingAttachments.findDepthFormat();
+    pipelineInitInfo.msaaSamples = m_renderingAttachments.m_VK_msaaSamples;
+
+    m_pipeline.init(pipelineInitInfo);
+
+
     createCommandPool();
 
     mp_SceneManager->init();
@@ -192,181 +199,6 @@ void Craig::Renderer::InitVulkan() {
 
     mp_CurrentWindow->setCameraRef(&m_camera);
     Craig::ImguiEditor::getInstance().setCamera(&m_camera);
-}
-
-void Craig::Renderer::createGraphicsPipeline() {
-
-    // Compile HLSL shaders to SPIR-V shader modules
-#if defined(_WIN32)
-    m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_Devices.getLogicalDevice(), L"data/shaders/VertexShader.vert");
-    m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_Devices.getLogicalDevice(), L"data/shaders/FragmentShader.frag");
-#elif defined(__APPLE__) || defined(__linux__)
-
-    m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_Devices.getLogicalDevice(), L"data/shaders/vert.spv");
-    m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(m_Devices.getLogicalDevice(), L"data/shaders/frag.spv");
-#endif
-
-
-
-    // Set up shader stages for the pipeline
-    vk::PipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo
-        .setStage(vk::ShaderStageFlagBits::eVertex)
-        .setModule(m_VK_vertShaderModule)
-        .setPName("main");
-
-    vk::PipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo
-        .setStage(vk::ShaderStageFlagBits::eFragment)
-        .setModule(m_VK_fragShaderModule)
-        .setPName("main");
-
-    vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
-
-    vk::VertexInputBindingDescription                   bindingDescription = Vertex::getBindingDescription();
-    std::array<vk::VertexInputAttributeDescription, 3>  attributeDescriptions = Vertex::getAttributeDescriptions();
-
-    //No vertex data to load for now since its hardcoded into the shader.
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
-    vertexInputInfo
-        .setVertexBindingDescriptionCount(1)
-        .setPVertexBindingDescriptions(&bindingDescription) //These should point to an array of structs w vertex descriptions
-        .setVertexAttributeDescriptionCount(static_cast<uint32_t>(attributeDescriptions.size()))
-        .setPVertexAttributeDescriptions(attributeDescriptions.data());
-
-    vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
-    inputAssembly
-        .setTopology(vk::PrimitiveTopology::eTriangleList)
-        .setPrimitiveRestartEnable(vk::False);
-
-    // Viewport/scissor are dynamic (set later in the command buffer)
-    vk::PipelineViewportStateCreateInfo viewportState{};
-    viewportState
-        .setViewportCount(1)
-        .setScissorCount(1);
-
-    vk::PipelineRasterizationStateCreateInfo rasterizer{};
-    rasterizer
-        .setDepthClampEnable(vk::False)
-        .setPolygonMode(vk::PolygonMode::eFill)
-        .setLineWidth(1.0f)
-        .setCullMode(vk::CullModeFlagBits::eBack)
-        .setFrontFace(vk::FrontFace::eCounterClockwise)
-        .setDepthBiasEnable(false);
-
-    //Multisampling/Anti-Aliasing
-    //Keeping it disabled for now but will follow up later in the tutorial
-    vk::PipelineMultisampleStateCreateInfo multisampling{};
-    multisampling
-        .setSampleShadingEnable(vk::False)
-        .setRasterizationSamples(m_renderingAttachments.m_VK_msaaSamples);
-
-    vk::PipelineDepthStencilStateCreateInfo depthStencil{};
-    depthStencil
-        .setDepthTestEnable(true)
-        .setDepthWriteEnable(true)
-        .setDepthCompareOp(vk::CompareOp::eLess)
-        .setDepthBoundsTestEnable(false)
-        .setStencilTestEnable(false);
-
-    vk::PipelineColorBlendAttachmentState colourBlendAttachment{};
-    colourBlendAttachment
-        .setColorWriteMask(
-        vk::ColorComponentFlagBits::eR |
-        vk::ColorComponentFlagBits::eG |
-        vk::ColorComponentFlagBits::eB |
-        vk::ColorComponentFlagBits::eA)
-        .setBlendEnable(vk::False);
-
-    vk::PipelineColorBlendStateCreateInfo colourBlending{};
-    colourBlending
-        .setLogicOpEnable(vk::False)
-        .setLogicOp(vk::LogicOp::eCopy)
-        .setAttachmentCount(1)
-        .setPAttachments(&colourBlendAttachment);
-
-    //Some bits of the pipeline can be changed, like the viewport, without having to recreate the pipeline/bake them again
-    std::vector<vk::DynamicState> dynamicStates = {
-        vk::DynamicState::eViewport,
-        vk::DynamicState::eScissor
-    };
-
-    vk::PipelineDynamicStateCreateInfo dynamicState{};
-    dynamicState
-        .setDynamicStateCount(static_cast<uint32_t>(dynamicStates.size()))
-        .setPDynamicStates(dynamicStates.data());
-
-
-    vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.setSetLayoutCount(1)
-        .setSetLayouts(m_VK_descriptorSetLayout);
-
-    try {
-        m_VK_pipelineLayout = m_Devices.getLogicalDevice().createPipelineLayout(pipelineLayoutInfo);
-    }
-    catch (const vk::SystemError& err) {
-        throw std::runtime_error("failed to createPipelineLayout!");
-    }
-
-    vk::Format colorFormat = m_swapChain.getImageFormat();
-    vk::Format depthFormat = m_renderingAttachments.findDepthFormat();
-
-    vk::PipelineRenderingCreateInfo renderingInfo{};
-    renderingInfo
-        .setColorAttachmentCount(1)
-        .setPColorAttachmentFormats(&colorFormat)
-        .setDepthAttachmentFormat(depthFormat);
-
-
-    vk::GraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo
-        .setPNext(&renderingInfo)
-        .setStageCount(2)
-        .setPStages(shaderStages)
-        .setPVertexInputState(&vertexInputInfo)
-        .setPInputAssemblyState(&inputAssembly)
-        .setPViewportState(&viewportState)
-        .setPRasterizationState(&rasterizer)
-        .setPMultisampleState(&multisampling)
-        .setPDepthStencilState(&depthStencil)
-        .setPColorBlendState(&colourBlending)
-        .setPDynamicState(&dynamicState)
-        .setLayout(m_VK_pipelineLayout)
-        .setRenderPass(VK_NULL_HANDLE); //Needs to be null as we're using a dynamic renderer
-
-
-    auto result = m_Devices.getLogicalDevice().createGraphicsPipeline(VK_NULL_HANDLE, pipelineInfo);
-
-    if (result.result != vk::Result::eSuccess) {
-        throw std::runtime_error("Failed to create graphics pipeline!");
-    }
-    m_VK_graphicsPipeline = result.value;
-
-
-}
-
-void Craig::Renderer::cleanupGraphicsPipeline() {
-
-    if (m_VK_graphicsPipeline) {
-        m_Devices.getLogicalDevice().destroyPipeline(m_VK_graphicsPipeline);
-        m_VK_graphicsPipeline = nullptr;
-    }
-
-    if (m_VK_pipelineLayout) {
-        m_Devices.getLogicalDevice().destroyPipelineLayout(m_VK_pipelineLayout);
-        m_VK_pipelineLayout = nullptr;
-    }
-
-    if (m_VK_vertShaderModule) {
-        m_Devices.getLogicalDevice().destroyShaderModule(m_VK_vertShaderModule);
-        m_VK_vertShaderModule = nullptr;
-    }
-
-    if (m_VK_fragShaderModule) {
-        m_Devices.getLogicalDevice().destroyShaderModule(m_VK_fragShaderModule);
-        m_VK_fragShaderModule = nullptr;
-    }
-
 }
 
 void Craig::Renderer::recreateSwapChain() {
@@ -399,7 +231,7 @@ void Craig::Renderer::recreateSwapChainFull() {
 
     m_Devices.getLogicalDevice().waitIdle();
 
-    cleanupGraphicsPipeline();
+    m_pipeline.cleanupGraphicsPipeline();
 
     m_renderingAttachments.cleanupColourAndDepthImageViews();
     m_swapChain.cleanupSwapChain();
@@ -409,7 +241,7 @@ void Craig::Renderer::recreateSwapChainFull() {
     m_swapChain.createSwapImageViews();
     m_renderingAttachments.createColourResources(m_swapChain.getExtent(), m_swapChain.getImageFormat());
     m_renderingAttachments.createDepthResources(m_swapChain.getExtent());
-    createGraphicsPipeline();
+    m_pipeline.createGraphicsPipeline();
 }
 
 void Craig::Renderer::createCommandPool() {
@@ -477,7 +309,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     vk::ClearValue clearDepth;
     clearDepth.setDepthStencil({ 1.0f, 0 });
 
-    // Dynamic rendering attachments fdor colour and depth
+    // Dynamic rendering attachments for colour and depth
     vk::RenderingAttachmentInfo colourAtt{};
     colourAtt
         .setLoadOp(vk::AttachmentLoadOp::eClear)
@@ -520,7 +352,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     commandBuffer.beginRendering(ri);
 
     //Binding the vertex buffer
-    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_VK_graphicsPipeline);
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_pipeline.m_VK_graphicsPipeline);
     vk::Buffer vertexBuffers[] = { m_VK_vertexBuffer };
     vk::DeviceSize offsets[] = { 0 };
     commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
@@ -544,7 +376,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     commandBuffer.setScissor(0, scissor);
 
-    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_VK_pipelineLayout, 0, mv_VK_descriptorSets[m_currentFrame], nullptr);
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_pipeline.m_VK_pipelineLayout, 0, mv_VK_descriptorSets[m_currentFrame], nullptr);
 
     /*
     indexCount: Even though we don't have a vertex buffer, we technically still have 3 vertices to draw.
@@ -993,42 +825,6 @@ void Craig::Renderer::createIndexBuffer() {
 
 }
 
-
-
-//From vulkan-tutorial.com
-//The descriptor set layout specifies the types of resources that are going to be accessed by the pipeline, just like a render pass specifies the types of attachments that will be accessed.
-//
-//A descriptor set specifies the actual buffer or image resources that will be bound to the descriptors, just like a framebuffer specifies the actual image views to bind to render pass attachments.
-void Craig::Renderer::createDescriptorSetLayout() {
-
-    vk::DescriptorSetLayoutBinding uboLayoutBinding{};
-    uboLayoutBinding
-        .setBinding(0)
-        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-        .setDescriptorCount(1)
-        .setStageFlags(vk::ShaderStageFlagBits::eVertex);
-
-    vk::DescriptorSetLayoutBinding samplerLayourBinding{};
-    samplerLayourBinding
-        .setBinding(1)
-        .setDescriptorCount(1)
-        .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-        .setPImmutableSamplers(nullptr)
-        .setStageFlags(vk::ShaderStageFlagBits::eFragment);
-
-    std::array<vk::DescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayourBinding };
-
-    vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo
-        .setBindingCount(static_cast<uint32_t>(bindings.size()))
-        .setBindings(bindings);
-
-    m_VK_descriptorSetLayout = m_Devices.getLogicalDevice().createDescriptorSetLayout(layoutInfo);
-
-
-}
-
-
 void Craig::Renderer::createUniformBuffers() {
 
     vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
@@ -1079,7 +875,7 @@ void Craig::Renderer::createDescriptorPool() {
 
 void Craig::Renderer::createDescriptorSets() {
 
-    std::vector<vk::DescriptorSetLayout> layouts(kMaxFramesInFlight, m_VK_descriptorSetLayout);
+    std::vector<vk::DescriptorSetLayout> layouts(kMaxFramesInFlight, m_pipeline.m_VK_descriptorSetLayout);
     vk::DescriptorSetAllocateInfo allocInfo{};
     allocInfo.setDescriptorPool(m_VK_descriptorPool)
         .setDescriptorSetCount(static_cast<uint32_t>(kMaxFramesInFlight))
@@ -1561,11 +1357,11 @@ CraigError Craig::Renderer::terminate() {
 
     Craig::ResourceManager::getInstance().terminateModels(m_Devices.getLogicalDevice(), m_Devices.getVmaAllocator());
 
-    m_Devices.getLogicalDevice().destroyPipeline(m_VK_graphicsPipeline);
-    m_Devices.getLogicalDevice().destroyPipelineLayout(m_VK_pipelineLayout);
+    m_Devices.getLogicalDevice().destroyPipeline(m_pipeline.m_VK_graphicsPipeline);
+    m_Devices.getLogicalDevice().destroyPipelineLayout(m_pipeline.m_VK_pipelineLayout);
 
-    m_Devices.getLogicalDevice().destroyShaderModule(m_VK_vertShaderModule);
-    m_Devices.getLogicalDevice().destroyShaderModule(m_VK_fragShaderModule);
+    m_Devices.getLogicalDevice().destroyShaderModule(m_pipeline.m_VK_vertShaderModule);
+    m_Devices.getLogicalDevice().destroyShaderModule(m_pipeline.m_VK_fragShaderModule);
 
     m_swapChain.terminate();
 
@@ -1574,7 +1370,7 @@ CraigError Craig::Renderer::terminate() {
     }
 
     m_Devices.getLogicalDevice().destroyDescriptorPool(m_VK_descriptorPool);
-    m_Devices.getLogicalDevice().destroyDescriptorSetLayout(m_VK_descriptorSetLayout);
+    m_Devices.getLogicalDevice().destroyDescriptorSetLayout(m_pipeline.m_VK_descriptorSetLayout);
 
 
 
