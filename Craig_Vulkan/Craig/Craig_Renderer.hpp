@@ -17,6 +17,7 @@
 #include "Craig_Constants.hpp"
 #include "Craig_Camera.hpp"
 #include "Craig_ResourceManager.hpp"
+#include "Renderer/Craig_CommandManager.hpp"
 #include "Renderer/Craig_Swapchain.hpp"
 #include "Renderer/Craig_Device.hpp"
 #include "Renderer/Craig_Instance.hpp"
@@ -62,11 +63,6 @@ namespace Craig {
 		// Swapchain + framebuffer resources
 		void recreateSwapChain();          // Swapchain-only recreation
 		void recreateSwapChainFull();      // Swapchain + pipeline + imgui recreation
-		
-		// Pipeline / descriptors
-		//void createDescriptorSetLayout();
-		// void createGraphicsPipeline();
-		// void cleanupGraphicsPipeline();
 
 		void createDescriptorPool();
 		void createDescriptorSets();
@@ -81,18 +77,18 @@ namespace Craig {
 
 		
 		// Command submission + sync
-		void createCommandPool();
-		void createCommandBuffers();
+		// void createCommandPool();
+		// void createCommandBuffers();
 		void createSyncObjects();
 
 		void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 		void drawFrame(const float& deltaTime);
 
-		// One-off command helpers (transfer/GFX)
-		vk::CommandBuffer buffer_beginSingleTimeCommands();
-		void buffer_endSingleTimeCommands(vk::CommandBuffer commandBuffer);
-		vk::CommandBuffer buffer_beginSingleTimeCommandsGFX();     // Uses graphics queue
-		void buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandBuffer);
+		// // One-off command helpers (transfer/GFX)
+		// vk::CommandBuffer buffer_beginSingleTimeCommands();
+		// void buffer_endSingleTimeCommands(vk::CommandBuffer commandBuffer);
+		// vk::CommandBuffer buffer_beginSingleTimeCommandsGFX();     // Uses graphics queue
+		// void buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandBuffer);
 
 		
 		// Images / textures helpers
@@ -100,7 +96,7 @@ namespace Craig {
 		void createTextureSampler();
 		void terminateSampler();
 
-		void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
+		//void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
 
 		void transitionImageLayout(vk::Image image, vk::Format format,
 			vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
@@ -141,20 +137,15 @@ namespace Craig {
 		// Swapchain
 		Craig::Swapchain m_swapChain;
 		
-		// // Shaders / pipeline
+		// Shaders / pipeline
 		Craig::Pipeline m_pipeline;
-		// vk::ShaderModule       m_VK_vertShaderModule;
-		// vk::ShaderModule       m_VK_fragShaderModule;
-		//
-		// vk::DescriptorSetLayout m_VK_descriptorSetLayout;
-		// vk::PipelineLayout      m_VK_pipelineLayout;
-		// vk::Pipeline            m_VK_graphicsPipeline;
 
 		
-		// Commands
-		vk::CommandPool                m_VK_commandPool;
-		vk::CommandPool                m_VK_transferCommandPool;
-		std::vector<vk::CommandBuffer> mv_VK_commandBuffers;
+		// // Commands
+		// vk::CommandPool                m_VK_commandPool;
+		// vk::CommandPool                m_VK_transferCommandPool;
+		// std::vector<vk::CommandBuffer> mv_VK_commandBuffers;
+		Craig::CommandManager m_commandManager;
 
 		
 		// Sync

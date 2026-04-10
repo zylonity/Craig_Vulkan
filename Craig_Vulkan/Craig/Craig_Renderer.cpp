@@ -175,8 +175,13 @@ void Craig::Renderer::InitVulkan() {
 
     m_pipeline.init(pipelineInitInfo);
 
+    CommandManager::CommandManagerInitInfo commandManagerInitInfo;
+    commandManagerInitInfo.p_Device = &m_Devices;
+    commandManagerInitInfo.surface = m_instance.getVkSurface();
 
-    createCommandPool();
+    m_commandManager.init(commandManagerInitInfo);
+
+    m_commandManager.createCommandPool();
 
     mp_SceneManager->init();
 
@@ -186,7 +191,7 @@ void Craig::Renderer::InitVulkan() {
     createUniformBuffers();
     createDescriptorPool();
     createDescriptorSets();
-    createCommandBuffers();
+    m_commandManager.createCommandBuffers();
     createSyncObjects();
 #if defined(IMGUI_ENABLED)
     createImguiDescriptorPool();
@@ -238,50 +243,6 @@ void Craig::Renderer::recreateSwapChainFull() {
     m_renderingAttachments.createDepthResources(m_swapChain.getExtent());
 }
 
-void Craig::Renderer::createCommandPool() {
-
-    Device::QueueFamilyIndices queueFamilyIndices = Device::findQueueFamilies(m_Devices.getPhysicalDevice(), m_instance.getVkSurface());
-
-    vk::CommandPoolCreateInfo poolInfo{};
-    poolInfo
-        .setFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer)
-        .setQueueFamilyIndex(queueFamilyIndices.graphicsFamily.value());
-
-    m_VK_commandPool = m_Devices.getLogicalDevice().createCommandPool(poolInfo);
-
-    if (queueFamilyIndices.hasDedicatedTransfer()) {
-        vk::CommandPoolCreateInfo info{};
-        info
-            .setQueueFamilyIndex(queueFamilyIndices.transferFamily.value())
-            .setFlags(vk::CommandPoolCreateFlagBits::eTransient); // copies are short-lived
-
-        m_VK_transferCommandPool = m_Devices.getLogicalDevice().createCommandPool(info);
-    }
-    else {
-        // No dedicated transfer family � reuse graphics pool
-        m_VK_transferCommandPool = m_VK_commandPool;
-    }
-
-}
-
-void Craig::Renderer::createCommandBuffers() {
-    mv_VK_commandBuffers.resize(kMaxFramesInFlight);
-
-    vk::CommandBufferAllocateInfo allocInfo{};
-    allocInfo
-        .setCommandPool(m_VK_commandPool)
-        .setLevel(vk::CommandBufferLevel::ePrimary)
-        .setCommandBufferCount((uint32_t)mv_VK_commandBuffers.size());
-
-    try {
-        mv_VK_commandBuffers = m_Devices.getLogicalDevice().allocateCommandBuffers(allocInfo);
-    }
-    catch (const vk::SystemError& err) {
-        throw std::runtime_error("failed to allocate command buffers!");
-    }
-
-
-}
 
 void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex) {
 
@@ -464,90 +425,6 @@ void Craig::Renderer::createSyncObjects() {
 
 }
 
-vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommands() {
-    //Allocate a temporary command buffer
-    vk::CommandBufferAllocateInfo allocInfo{};
-    allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
-        .setCommandPool(m_VK_transferCommandPool)
-        .setCommandBufferCount(1);
-
-
-    vk::CommandBuffer commandBuffer = m_Devices.getLogicalDevice().allocateCommandBuffers(allocInfo)[0];
-
-    //Start recording the command buffer
-    vk::CommandBufferBeginInfo beginInfo{};
-    beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-
-    commandBuffer.begin(beginInfo);
-
-    return commandBuffer;
-}
-
-void Craig::Renderer::buffer_endSingleTimeCommands(vk::CommandBuffer commandBuffer) {
-
-    //Stop recording
-    commandBuffer.end();
-
-    vk::SubmitInfo submitInfo{};
-    submitInfo.setCommandBufferCount(1)
-        .setCommandBuffers(commandBuffer);
-
-    m_Devices.getTransferQueue().submit(submitInfo);
-    m_Devices.getTransferQueue().waitIdle();
-
-    m_Devices.getLogicalDevice().freeCommandBuffers(m_VK_transferCommandPool, commandBuffer);
-}
-
-vk::CommandBuffer Craig::Renderer::buffer_beginSingleTimeCommandsGFX() {
-    //Allocate a temporary command buffer
-    vk::CommandBufferAllocateInfo allocInfo{};
-    allocInfo.setLevel(vk::CommandBufferLevel::ePrimary)
-        .setCommandPool(m_VK_commandPool)
-        .setCommandBufferCount(1);
-
-
-    vk::CommandBuffer commandBuffer = m_Devices.getLogicalDevice().allocateCommandBuffers(allocInfo)[0];
-
-    //Start recording the command buffer
-    vk::CommandBufferBeginInfo beginInfo{};
-    beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit);
-
-    commandBuffer.begin(beginInfo);
-
-    return commandBuffer;
-}
-
-void Craig::Renderer::buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandBuffer) {
-
-    //Stop recording
-    commandBuffer.end();
-
-    vk::SubmitInfo submitInfo{};
-    submitInfo.setCommandBufferCount(1)
-        .setCommandBuffers(commandBuffer);
-
-    m_Devices.getGraphicsQueue().submit(submitInfo);
-    m_Devices.getGraphicsQueue().waitIdle();
-
-    m_Devices.getLogicalDevice().freeCommandBuffers(m_VK_commandPool, commandBuffer);
-}
-
-void Craig::Renderer::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size) {
-
-    //Begin recording to buffer
-    vk::CommandBuffer tempBuffer = buffer_beginSingleTimeCommands();
-
-    //Copy over the data
-    vk::BufferCopy copyRegion{};
-    copyRegion.setSize(size);
-    tempBuffer.copyBuffer(srcBuffer, dstBuffer, copyRegion);
-
-    //End recording and submit buffer
-    buffer_endSingleTimeCommands(tempBuffer);
-
-
-}
-
 void Craig::Renderer::transitionSwapImage(vk::CommandBuffer cmd, vk::Image img, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
     vk::ImageAspectFlags aspect = (newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal)
     ? (vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil)
@@ -604,7 +481,7 @@ void Craig::Renderer::transitionSwapImage(vk::CommandBuffer cmd, vk::Image img, 
 //For us to copy the buffer that contains the picture data to the vulkan image, we need to make sure it's the right layout first
 void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, bool useTransferQueue, uint32_t mipLevels) {
     //Begin recording to buffer
-    vk::CommandBuffer tempBuffer = useTransferQueue ? buffer_beginSingleTimeCommands() : buffer_beginSingleTimeCommandsGFX();
+    vk::CommandBuffer tempBuffer = useTransferQueue ? m_commandManager.buffer_beginSingleTimeCommands() : m_commandManager.buffer_beginSingleTimeCommandsGFX();
 
     vk::ImageMemoryBarrier2 barrier{};
     barrier
@@ -653,12 +530,12 @@ void Craig::Renderer::transitionImageLayout(vk::Image image, vk::Format format, 
     tempBuffer.pipelineBarrier2(dep);
 
 
-    useTransferQueue ? buffer_endSingleTimeCommands(tempBuffer) : buffer_endSingleTimeCommandsGFX(tempBuffer);
+    useTransferQueue ? m_commandManager.buffer_endSingleTimeCommands(tempBuffer) : m_commandManager.buffer_endSingleTimeCommandsGFX(tempBuffer);
 
 }
 
 void Craig::Renderer::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height) {
-    vk::CommandBuffer tempBuffer = buffer_beginSingleTimeCommands();
+    vk::CommandBuffer tempBuffer = m_commandManager.buffer_beginSingleTimeCommands();
 
     vk::BufferImageCopy region{};
     region.setBufferOffset(0)
@@ -680,7 +557,7 @@ void Craig::Renderer::copyBufferToImage(vk::Buffer buffer, vk::Image image, uint
     tempBuffer.copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, region);
 
 
-    buffer_endSingleTimeCommands(tempBuffer);
+    m_commandManager.buffer_endSingleTimeCommands(tempBuffer);
 }
 
 void Craig::Renderer::createVertexBuffer() {
@@ -744,7 +621,7 @@ void Craig::Renderer::createVertexBuffer() {
 
         m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, gpuAci, m_VK_vertexBuffer, m_VMA_vertexAllocation);
 
-        copyBuffer(stagingBuffer, m_VK_vertexBuffer, bufferSize);
+        m_commandManager.copyBuffer(stagingBuffer, m_VK_vertexBuffer, bufferSize);
         vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
     }
 
@@ -813,7 +690,7 @@ void Craig::Renderer::createIndexBuffer() {
 
         m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, gpuAci, m_VK_indexBuffer, m_VMA_indexAllocation);
 
-        copyBuffer(stagingBuffer, m_VK_indexBuffer, bufferSize);
+        m_commandManager.copyBuffer(stagingBuffer, m_VK_indexBuffer, bufferSize);
         vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
     }
 
@@ -1110,7 +987,7 @@ void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_
        assert("texture image format does not support linear blitting!");
     }
 
-    vk::CommandBuffer tempBuffer = useTransferQueue ? buffer_beginSingleTimeCommands() : buffer_beginSingleTimeCommandsGFX();
+    vk::CommandBuffer tempBuffer = useTransferQueue ?  m_commandManager.buffer_beginSingleTimeCommands() :  m_commandManager.buffer_beginSingleTimeCommandsGFX();
 
     //This means we're changing an image from x state to y state, and we gotta sync the access types
     vk::ImageMemoryBarrier2 barrier{};
@@ -1201,7 +1078,7 @@ void Craig::Renderer::generateMipMaps(vk::Image image, vk::Format format, int32_
 
     tempBuffer.pipelineBarrier2(dep);
 
-    useTransferQueue ? buffer_endSingleTimeCommands(tempBuffer) : buffer_endSingleTimeCommandsGFX(tempBuffer);
+    useTransferQueue ?  m_commandManager.buffer_endSingleTimeCommands(tempBuffer) :  m_commandManager.buffer_endSingleTimeCommandsGFX(tempBuffer);
 
 }
 
@@ -1234,8 +1111,8 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
     }
 
     // Record drawing commands into the command buffer
-    mv_VK_commandBuffers[m_currentFrame].reset();
-    recordCommandBuffer(mv_VK_commandBuffers[m_currentFrame], imageIndex);
+    m_commandManager.getCommandBuffers()[m_currentFrame].reset();
+    recordCommandBuffer(m_commandManager.getCommandBuffers()[m_currentFrame], imageIndex);
 
     updateUniformBuffer(m_currentFrame, deltaTime);
 
@@ -1263,7 +1140,7 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         .setSignalSemaphoreCount(2)
         .setPSignalSemaphores(signalSemaphores)
         .setCommandBufferCount(1)
-        .setPCommandBuffers(&mv_VK_commandBuffers[m_currentFrame]);
+        .setPCommandBuffers(&m_commandManager.getCommandBuffers()[m_currentFrame]);
 
 
     m_Devices.getGraphicsQueue().submit(submitInfo, VK_NULL_HANDLE);
@@ -1339,11 +1216,7 @@ CraigError Craig::Renderer::terminate() {
 
     m_Devices.getLogicalDevice().destroySemaphore(m_VK_timelineSemaphore);
 
-    if (m_VK_transferCommandPool && m_VK_transferCommandPool != m_VK_commandPool) {
-        m_Devices.getLogicalDevice().destroyCommandPool(m_VK_transferCommandPool);
-    }
-
-    m_Devices.getLogicalDevice().destroyCommandPool(m_VK_commandPool);
+    m_commandManager.terminate();
 
     m_renderingAttachments.cleanupColourAndDepthImageViews();
 
