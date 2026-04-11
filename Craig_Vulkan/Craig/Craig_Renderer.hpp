@@ -23,6 +23,7 @@
 #include "Renderer/Craig_Instance.hpp"
 #include "Renderer/Craig_Pipeline.hpp"
 #include "Renderer/Craig_RenderingAttachments.hpp"
+#include "Renderer/Craig_SyncManager.hpp"
 
 namespace Craig {
 
@@ -77,7 +78,7 @@ namespace Craig {
 
 		
 		// Command submission + sync
-		void createSyncObjects();
+		//void createSyncObjects();
 
 		void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 		void drawFrame(const float& deltaTime);
@@ -129,6 +130,7 @@ namespace Craig {
 		// // Timeline semaphore (optional sync style)
 		// vk::Semaphore m_VK_timelineSemaphore;
 		// uint64_t      m_sempahoreTimelineValue = 0;
+		Craig::SyncManager m_syncManager;
 
 		
 		// Geometry buffers

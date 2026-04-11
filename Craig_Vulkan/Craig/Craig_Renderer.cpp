@@ -25,6 +25,7 @@
 #include "Renderer/Craig_ImageHelpers.hpp"
 #include "Renderer/Craig_Instance.hpp"
 #include "Renderer/Craig_Pipeline.hpp"
+#include "Renderer/Craig_SyncManager.hpp"
 
 #if defined(IMGUI_ENABLED)
 static void check_vk_result(VkResult err)
@@ -191,7 +192,13 @@ void Craig::Renderer::InitVulkan() {
     createDescriptorPool();
     createDescriptorSets();
 
-    createSyncObjects();
+    Craig::SyncManager::SyncManagerInitInfo syncManagerInitInfo;
+    syncManagerInitInfo.logicalDevice = m_Devices.getLogicalDevice();
+    syncManagerInitInfo.swapChainImageCount = m_swapChain.getImages().size();
+
+    m_syncManager.init(syncManagerInitInfo);
+
+
 #if defined(IMGUI_ENABLED)
     createImguiDescriptorPool();
 #endif
@@ -330,7 +337,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     commandBuffer.setScissor(0, scissor);
 
-    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_pipeline.getPipelineLayout(), 0, mv_VK_descriptorSets[m_currentFrame], nullptr);
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_pipeline.getPipelineLayout(), 0, mv_VK_descriptorSets[m_syncManager.getCurrentFrame()], nullptr);
 
     /*
     indexCount: Even though we don't have a vertex buffer, we technically still have 3 vertices to draw.
@@ -393,34 +400,6 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
         throw std::runtime_error("failed to record command buffer!");
     }
 
-
-}
-
-void Craig::Renderer::createSyncObjects() {
-
-    vk::SemaphoreTypeCreateInfo typeInfo{};
-    typeInfo
-        .setSemaphoreType(vk::SemaphoreType::eTimeline)
-        .setInitialValue(0);
-
-    vk::SemaphoreCreateInfo timelineInfo{};
-    timelineInfo.setPNext(&typeInfo);
-
-    m_VK_timelineSemaphore = m_Devices.getLogicalDevice().createSemaphore(timelineInfo);
-    m_sempahoreTimelineValue = 0;
-
-    mv_VK_imageAvailableSemaphores.resize(kMaxFramesInFlight);
-    mv_VK_renderFinishedSemaphores.resize(m_swapChain.getImages().size());
-
-    vk::SemaphoreCreateInfo semaphoreInfo{};
-
-    for (size_t i = 0; i < kMaxFramesInFlight; i++) {
-        mv_VK_imageAvailableSemaphores[i] = m_Devices.getLogicalDevice().createSemaphore(semaphoreInfo);
-    }
-
-    for (size_t i = 0; i < m_swapChain.getImages().size(); i++) {
-        mv_VK_renderFinishedSemaphores[i] = m_Devices.getLogicalDevice().createSemaphore(semaphoreInfo);
-    }
 
 }
 
@@ -845,23 +824,15 @@ void Craig::Renderer::updateMinLOD(int minLOD) {
 
 void Craig::Renderer::drawFrame(const float& deltaTime) {
 
-    if (m_sempahoreTimelineValue >= kMaxFramesInFlight) {
-        uint64_t waitValue = m_sempahoreTimelineValue - (kMaxFramesInFlight - 1);
-
-        vk::SemaphoreWaitInfo waitInfo{};
-        waitInfo.setSemaphores(m_VK_timelineSemaphore);
-        waitInfo.setValues(waitValue);
-
-        // This only blocks if the GPU is really lagging
-        m_Devices.getLogicalDevice().waitSemaphores(waitInfo, UINT64_MAX);
-    }
+    m_syncManager.waitForGpu();
+    const uint32_t& currentFrame = m_syncManager.getCurrentFrame();
 
     if (m_swapChain.getExtent().width <= 0 || m_swapChain.getExtent().height <= 0) {
         return; // Skip this frame
     }
 
     uint32_t imageIndex = 0;
-    VkResult nextImageResult = vkAcquireNextImageKHR(m_Devices.getLogicalDevice(), m_swapChain.getSwapChain(), UINT64_MAX, mv_VK_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult nextImageResult = vkAcquireNextImageKHR(m_Devices.getLogicalDevice(), m_swapChain.getSwapChain(), UINT64_MAX, m_syncManager.getVK_imageAvailableSemaphores()[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (nextImageResult == VK_ERROR_OUT_OF_DATE_KHR) {
         recreateSwapChain();
@@ -872,45 +843,19 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
     }
 
     // Record drawing commands into the command buffer
-    m_commandManager.getCommandBuffers()[m_currentFrame].reset();
-    recordCommandBuffer(m_commandManager.getCommandBuffers()[m_currentFrame], imageIndex);
+    m_commandManager.getCommandBuffers()[currentFrame].reset();
+    recordCommandBuffer(m_commandManager.getCommandBuffers()[currentFrame], imageIndex);
 
-    updateUniformBuffer(m_currentFrame, deltaTime);
+    updateUniformBuffer(currentFrame, deltaTime);
 
-    // Submit the command buffer for execution
-
-    vk::Semaphore waitSemaphores[] = { mv_VK_imageAvailableSemaphores[m_currentFrame]};
-    vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
-
-    vk::Semaphore signalSemaphores[] = { m_VK_timelineSemaphore, mv_VK_renderFinishedSemaphores[imageIndex] };
-
-    uint64_t signalValue = ++m_sempahoreTimelineValue;
-    uint64_t signalValues[] = { signalValue, 0 };
-
-    vk::TimelineSemaphoreSubmitInfo timelineSubmit;
-    timelineSubmit
-        .setSignalSemaphoreValueCount(2)
-        .setSignalSemaphoreValues(signalValues);
-
-    vk::SubmitInfo submitInfo;
-    submitInfo
-        .setPNext(&timelineSubmit)
-        .setWaitSemaphoreCount(1)
-        .setPWaitSemaphores(waitSemaphores)
-        .setPWaitDstStageMask(waitStages)
-        .setSignalSemaphoreCount(2)
-        .setPSignalSemaphores(signalSemaphores)
-        .setCommandBufferCount(1)
-        .setPCommandBuffers(&m_commandManager.getCommandBuffers()[m_currentFrame]);
-
-
-    m_Devices.getGraphicsQueue().submit(submitInfo, VK_NULL_HANDLE);
+    //Creates the submit info and submits the command buffer to the gfx queue
+    m_syncManager.submitFrame(m_commandManager.getCommandBuffers(), imageIndex, m_Devices.getGraphicsQueue());
 
     // Present the rendered image to the screen
     vk::PresentInfoKHR presentInfo;
     presentInfo
         .setWaitSemaphoreCount(1)
-        .setPWaitSemaphores(&mv_VK_renderFinishedSemaphores[imageIndex])
+        .setPWaitSemaphores(&m_syncManager.getVK_renderFinishedSemaphores()[imageIndex])
         .setSwapchainCount(1)
         .setPSwapchains(&m_swapChain.getSwapChain())
         .setPImageIndices(&imageIndex);
@@ -927,7 +872,7 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         throw std::runtime_error("failed to present swap chain image!");
     }
 
-    m_currentFrame = (m_currentFrame + 1) % kMaxFramesInFlight;
+    m_syncManager.nextFrame();
 
 }
 
@@ -967,19 +912,11 @@ CraigError Craig::Renderer::terminate() {
 
     vmaDestroyBuffer(m_Devices.getVmaAllocator(), m_VK_vertexBuffer, m_VMA_vertexAllocation);
 
-    for (size_t i = 0; i < kMaxFramesInFlight; i++) {
-        m_Devices.getLogicalDevice().destroySemaphore(mv_VK_imageAvailableSemaphores[i]);
-    }
-
-    for (size_t i = 0; i < m_swapChain.getImages().size(); i++) {
-        m_Devices.getLogicalDevice().destroySemaphore(mv_VK_renderFinishedSemaphores[i]);
-    }
-
-    m_Devices.getLogicalDevice().destroySemaphore(m_VK_timelineSemaphore);
+    m_syncManager.terminate();
 
     m_commandManager.terminate();
 
-    m_renderingAttachments.cleanupColourAndDepthImageViews();
+    m_renderingAttachments.terminate();
 
     m_Devices.getLogicalDevice().destroySampler(m_VK_textureSampler);
 

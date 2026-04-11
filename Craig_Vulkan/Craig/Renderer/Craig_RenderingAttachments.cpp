@@ -116,6 +116,8 @@ CraigError Craig::RenderingAttachments::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+	cleanupColourAndDepthImageViews();
+
 	return ret;
 }
 
