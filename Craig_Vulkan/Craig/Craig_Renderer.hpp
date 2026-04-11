@@ -98,18 +98,18 @@ namespace Craig {
 
 		//void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
 
-		void transitionImageLayout(vk::Image image, vk::Format format,
-			vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
-			bool useTransferQueue = true, uint32_t mipLevels = 1);
+		// void transitionImageLayout(vk::Image image, vk::Format format,
+		// 	vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
+		// 	bool useTransferQueue = true, uint32_t mipLevels = 1);
 
-		void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
+		// void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
 
-		void generateMipMaps(vk::Image image, vk::Format format,
-			int32_t texWidth, int32_t texHeight,
-			uint32_t mipLevels, bool useTransferQueue);
+		// void generateMipMaps(vk::Image image, vk::Format format,
+		// 	int32_t texWidth, int32_t texHeight,
+		// 	uint32_t mipLevels, bool useTransferQueue);
 
-		void transitionSwapImage(vk::CommandBuffer cmd, vk::Image img,
-			vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
+		// void transitionSwapImage(vk::CommandBuffer cmd, vk::Image img,
+		// 	vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
 
 
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
