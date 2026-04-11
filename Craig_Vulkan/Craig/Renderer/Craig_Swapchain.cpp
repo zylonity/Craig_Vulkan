@@ -177,7 +177,7 @@ void Craig::Swapchain::createSwapImageViews() {
 
     for (size_t i = 0; i < mv_VK_swapChainImages.size(); i++)
     {
-        mv_VK_swapChainImageViews[i] = Craig::Image::createImageView(mSC_device, mv_VK_swapChainImages[i], m_VK_swapChainImageFormat, vk::ImageAspectFlagBits::eColor, 1);
+        mv_VK_swapChainImageViews[i] = Craig::ImageHelpers::createImageView(mSC_device, mv_VK_swapChainImages[i], m_VK_swapChainImageFormat, vk::ImageAspectFlagBits::eColor, 1);
 
     }
 
