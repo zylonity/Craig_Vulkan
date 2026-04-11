@@ -84,32 +84,11 @@ namespace Craig {
 		void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
 		void drawFrame(const float& deltaTime);
 
-		// // One-off command helpers (transfer/GFX)
-		// vk::CommandBuffer buffer_beginSingleTimeCommands();
-		// void buffer_endSingleTimeCommands(vk::CommandBuffer commandBuffer);
-		// vk::CommandBuffer buffer_beginSingleTimeCommandsGFX();     // Uses graphics queue
-		// void buffer_endSingleTimeCommandsGFX(vk::CommandBuffer commandBuffer);
-
 		
 		// Images / textures helpers
 		//void createTextureImageView();
 		void createTextureSampler();
 		void terminateSampler();
-
-		//void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
-
-		// void transitionImageLayout(vk::Image image, vk::Format format,
-		// 	vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
-		// 	bool useTransferQueue = true, uint32_t mipLevels = 1);
-
-		// void copyBufferToImage(vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
-
-		// void generateMipMaps(vk::Image image, vk::Format format,
-		// 	int32_t texWidth, int32_t texHeight,
-		// 	uint32_t mipLevels, bool useTransferQueue);
-
-		// void transitionSwapImage(vk::CommandBuffer cmd, vk::Image img,
-		// 	vk::ImageLayout oldLayout, vk::ImageLayout newLayout);
 
 
 		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
@@ -141,10 +120,7 @@ namespace Craig {
 		Craig::Pipeline m_pipeline;
 
 		
-		// // Commands
-		// vk::CommandPool                m_VK_commandPool;
-		// vk::CommandPool                m_VK_transferCommandPool;
-		// std::vector<vk::CommandBuffer> mv_VK_commandBuffers;
+		// Commands
 		Craig::CommandManager m_commandManager;
 
 		

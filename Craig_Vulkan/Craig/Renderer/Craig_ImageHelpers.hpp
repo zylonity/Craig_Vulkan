@@ -8,16 +8,9 @@
 namespace Craig {
 	class CommandManager;
 
-	class Image {
+	class ImageHelpers {
 
 	public:
-
-		//All the stuff we need to pass to the RenderingAttachments from the renderer
-		struct ImagesInitInfo
-		{
-
-
-		};
 
 		static vk::ImageView createImageView(vk::Device device, vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags, uint32_t mipLevels);
 		static vk::Image createImage(vk::PhysicalDevice physicalDevice, vk::SurfaceKHR surface, uint32_t width, uint32_t height, uint32_t mipLevels, vk::SampleCountFlagBits numSamples, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, const VmaAllocator& allocator, VmaAllocation& allocation);

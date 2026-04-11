@@ -5,7 +5,7 @@
 #include "Craig_Window.hpp"
 #include "Craig/Craig_Constants.hpp"
 #include "Renderer/Craig_Device.hpp"
-#include "Renderer/Craig_Image.hpp"
+#include "Renderer/Craig_ImageHelpers.hpp"
 
 namespace Craig {
 

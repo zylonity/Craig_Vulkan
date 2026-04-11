@@ -1,22 +1,22 @@
-#include "Craig_Image.hpp"
+#include "Craig_ImageHelpers.hpp"
 #include "Craig_Device.hpp"
 #include "Craig_CommandManager.hpp"
 
-CraigError Craig::Image::init() {
+CraigError Craig::ImageHelpers::init() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
 	return ret;
 }
 
-CraigError Craig::Image::update() {
+CraigError Craig::ImageHelpers::update() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
 	return ret;
 }
 
-vk::ImageView Craig::Image::createImageView(vk::Device device, vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags, uint32_t mipLevels) {
+vk::ImageView Craig::ImageHelpers::createImageView(vk::Device device, vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags, uint32_t mipLevels) {
 	vk::ImageViewCreateInfo createInfo{};
 	createInfo
 		.setImage(image)
@@ -47,7 +47,7 @@ vk::ImageView Craig::Image::createImageView(vk::Device device, vk::Image image, 
 	return imageView;
 }
 
-vk::Image Craig::Image::createImage(vk::PhysicalDevice physicalDevice, vk::SurfaceKHR surface, uint32_t width, uint32_t height, uint32_t mipLevels, vk::SampleCountFlagBits numSamples, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, const VmaAllocator& allocator, VmaAllocation& allocation) {
+vk::Image Craig::ImageHelpers::createImage(vk::PhysicalDevice physicalDevice, vk::SurfaceKHR surface, uint32_t width, uint32_t height, uint32_t mipLevels, vk::SampleCountFlagBits numSamples, vk::Format format, vk::ImageTiling tiling, vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, const VmaAllocator& allocator, VmaAllocation& allocation) {
 
     vk::ImageCreateInfo imageInfo;
     imageInfo.setImageType(vk::ImageType::e2D);
@@ -96,7 +96,7 @@ vk::Image Craig::Image::createImage(vk::PhysicalDevice physicalDevice, vk::Surfa
 }
 
 //For us to copy the buffer that contains the picture data to the vulkan image, we need to make sure it's the right layout first
-void Craig::Image::transitionImageLayout(Craig::CommandManager& commandManager, vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, bool useTransferQueue, uint32_t mipLevels) {
+void Craig::ImageHelpers::transitionImageLayout(Craig::CommandManager& commandManager, vk::Image image, vk::Format format, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, bool useTransferQueue, uint32_t mipLevels) {
     //Begin recording to buffer
     vk::CommandBuffer tempBuffer = useTransferQueue ? commandManager.buffer_beginSingleTimeCommands() : commandManager.buffer_beginSingleTimeCommandsGFX();
 
@@ -151,7 +151,7 @@ void Craig::Image::transitionImageLayout(Craig::CommandManager& commandManager, 
 
 }
 
-void Craig::Image::transitionSwapImage(vk::CommandBuffer cmd, vk::Image img, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
+void Craig::ImageHelpers::transitionSwapImage(vk::CommandBuffer cmd, vk::Image img, vk::ImageLayout oldLayout, vk::ImageLayout newLayout) {
     vk::ImageAspectFlags aspect = (newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal)
     ? (vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil)
     : vk::ImageAspectFlagBits::eColor;
@@ -204,7 +204,7 @@ void Craig::Image::transitionSwapImage(vk::CommandBuffer cmd, vk::Image img, vk:
     cmd.pipelineBarrier2(dep);
 }
 
-void Craig::Image::copyBufferToImage(Craig::CommandManager& commandManager, vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height) {
+void Craig::ImageHelpers::copyBufferToImage(Craig::CommandManager& commandManager, vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height) {
     vk::CommandBuffer tempBuffer = commandManager.buffer_beginSingleTimeCommands();
 
     vk::BufferImageCopy region{};
@@ -230,7 +230,7 @@ void Craig::Image::copyBufferToImage(Craig::CommandManager& commandManager, vk::
     commandManager.buffer_endSingleTimeCommands(tempBuffer);
 }
 
-void Craig::Image::generateMipMaps(Craig::CommandManager& commandManager, vk::FormatProperties formatProperties, vk::Image image, int32_t texWidth, int32_t texHeight, uint32_t mipLevels, bool useTransferQueue) {
+void Craig::ImageHelpers::generateMipMaps(Craig::CommandManager& commandManager, vk::FormatProperties formatProperties, vk::Image image, int32_t texWidth, int32_t texHeight, uint32_t mipLevels, bool useTransferQueue) {
 
 
     if (!(formatProperties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImageFilterLinear)) {
@@ -332,7 +332,7 @@ void Craig::Image::generateMipMaps(Craig::CommandManager& commandManager, vk::Fo
 
 }
 
-CraigError Craig::Image::terminate() {
+CraigError Craig::ImageHelpers::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 

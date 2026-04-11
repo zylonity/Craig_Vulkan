@@ -22,7 +22,7 @@
 
 #include "Renderer/Craig_Swapchain.hpp"
 #include "Renderer/Craig_Device.hpp"
-#include "Renderer/Craig_Image.hpp"
+#include "Renderer/Craig_ImageHelpers.hpp"
 #include "Renderer/Craig_Instance.hpp"
 #include "Renderer/Craig_Pipeline.hpp"
 
@@ -252,9 +252,9 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     }
 
     //We have to transition the swap image manually, render passes used to do this implicitly :(
-    Craig::Image::transitionSwapImage(commandBuffer, m_swapChain.getImages()[imageIndex], vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
-    Craig::Image::transitionSwapImage(commandBuffer, m_renderingAttachments.getColourImage(), vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal); //MSAA colour image too
-    Craig::Image::transitionSwapImage(commandBuffer, m_renderingAttachments.getDepthImage(), vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+    Craig::ImageHelpers::transitionSwapImage(commandBuffer, m_swapChain.getImages()[imageIndex], vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal);
+    Craig::ImageHelpers::transitionSwapImage(commandBuffer, m_renderingAttachments.getColourImage(), vk::ImageLayout::eUndefined, vk::ImageLayout::eColorAttachmentOptimal); //MSAA colour image too
+    Craig::ImageHelpers::transitionSwapImage(commandBuffer, m_renderingAttachments.getDepthImage(), vk::ImageLayout::eUndefined, vk::ImageLayout::eDepthStencilAttachmentOptimal);
 
 
     vk::ClearValue clearColour;
@@ -384,7 +384,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     commandBuffer.endRendering();
 #endif
 
-    Craig::Image::transitionSwapImage(commandBuffer, m_swapChain.getImages()[imageIndex], vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR);
+    Craig::ImageHelpers::transitionSwapImage(commandBuffer, m_swapChain.getImages()[imageIndex], vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR);
 
     try {
         commandBuffer.end();
@@ -747,18 +747,18 @@ void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, i
 
     //stbi_image_free(pixels);
 
-    outTexture->m_VK_textureImage = Image::createImage(m_Devices.getPhysicalDevice(), m_instance.getVkSurface(), texWidth, texHeight, outTexture->m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_Devices.getVmaAllocator(),outTexture->m_VMA_textureImageAllocation);
+    outTexture->m_VK_textureImage = ImageHelpers::createImage(m_Devices.getPhysicalDevice(), m_instance.getVkSurface(), texWidth, texHeight, outTexture->m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_Devices.getVmaAllocator(),outTexture->m_VMA_textureImageAllocation);
 
-    Craig::Image::transitionImageLayout(m_commandManager ,outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, true, outTexture->m_VK_mipLevels);
-    Craig::Image::copyBufferToImage(m_commandManager, stagingBuffer, outTexture->m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+    Craig::ImageHelpers::transitionImageLayout(m_commandManager ,outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, true, outTexture->m_VK_mipLevels);
+    Craig::ImageHelpers::copyBufferToImage(m_commandManager, stagingBuffer, outTexture->m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
     //transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, false, m_VK_mipLevels); <- now done when generating mipMaps
 
     vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
 
-    Craig::Image::generateMipMaps(m_commandManager, m_Devices.getPhysicalDevice().getFormatProperties(vk::Format::eR8G8B8A8Srgb), outTexture->m_VK_textureImage, texWidth, texHeight, outTexture->m_VK_mipLevels, false);
+    Craig::ImageHelpers::generateMipMaps(m_commandManager, m_Devices.getPhysicalDevice().getFormatProperties(vk::Format::eR8G8B8A8Srgb), outTexture->m_VK_textureImage, texWidth, texHeight, outTexture->m_VK_mipLevels, false);
 
-    outTexture->m_VK_textureImageView = Craig::Image::createImageView(m_Devices.getLogicalDevice(), outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor, outTexture->m_VK_mipLevels);
+    outTexture->m_VK_textureImageView = Craig::ImageHelpers::createImageView(m_Devices.getLogicalDevice(), outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor, outTexture->m_VK_mipLevels);
 
 }
 
