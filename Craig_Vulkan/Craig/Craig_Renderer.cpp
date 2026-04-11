@@ -189,6 +189,8 @@ void Craig::Renderer::InitVulkan() {
     createIndexBuffer();
     createUniformBuffers();
     createDescriptorPool();
+    createDescriptorSets();
+
     createSyncObjects();
 #if defined(IMGUI_ENABLED)
     createImguiDescriptorPool();
