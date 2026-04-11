@@ -23,7 +23,6 @@ namespace Craig {
 		vk::SampleCountFlagBits m_VK_msaaSamples = vk::SampleCountFlagBits::e1;
 
 		CraigError init(const RenderingAttachmentsInitInfo& info);
-		CraigError update();
 		CraigError terminate();
 
 		void createColourResources(vk::Extent2D extent, vk::Format colourFormat);

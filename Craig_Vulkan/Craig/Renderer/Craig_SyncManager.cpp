@@ -94,12 +94,6 @@ void Craig::SyncManager::submitFrame(const std::vector<vk::CommandBuffer>& cmdBu
 		VK_NULL_HANDLE);
 }
 
-CraigError Craig::SyncManager::update() {
-
-	CraigError ret = CRAIG_SUCCESS;
-
-	return ret;
-}
 
 CraigError Craig::SyncManager::terminate() {
 

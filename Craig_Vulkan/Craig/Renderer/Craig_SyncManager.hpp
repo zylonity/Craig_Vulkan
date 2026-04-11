@@ -16,7 +16,6 @@ namespace Craig {
 		};
 
 		CraigError init(const SyncManagerInitInfo& info);
-		CraigError update();
 		CraigError terminate();
 
 		void waitForGpu();

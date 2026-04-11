@@ -16,14 +16,6 @@ CraigError Craig::Swapchain::init(const SwapchainInitInfo& info) {
     return ret;
 }
 
-CraigError Craig::Swapchain::update() {
-
-    CraigError ret = CRAIG_SUCCESS;
-
-    return ret;
-}
-
-
 void Craig::Swapchain::createSwapChain() {
     SwapChainSupportDetails swapChainSupport = querySwapChainSupport(mSC_physicalDevice, mSC_surface);
 

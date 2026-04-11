@@ -33,7 +33,6 @@ namespace Craig {
 		static QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface);
 
 		CraigError init(DeviceInitInfo& initInfo);
-		CraigError update();
 		CraigError terminate();
 
 		const vk::PhysicalDevice getPhysicalDevice() const { return m_VK_physicalDevice; }

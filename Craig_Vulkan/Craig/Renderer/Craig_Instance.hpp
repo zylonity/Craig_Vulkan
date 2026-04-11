@@ -18,7 +18,6 @@ namespace Craig {
 		};
 
 		CraigError init(const InstanceInitInfo& info);
-		CraigError update();
 		CraigError terminate();
 
 		const vk::Instance getVkInstance() const { return m_VK_instance; }

@@ -19,13 +19,6 @@ CraigError Craig::Device::init(DeviceInitInfo& initInfo) {
 	return ret;
 }
 
-CraigError Craig::Device::update() {
-
-	CraigError ret = CRAIG_SUCCESS;
-
-	return ret;
-}
-
 //From the tutorial:
 /* It has been briefly touched upon before that almost every operation in Vulkan, anything from drawing to uploading textures,
 requires commands to be submitted to a queue. There are different types of queues that originate from different queue families

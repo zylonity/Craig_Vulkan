@@ -28,7 +28,6 @@ namespace Craig {
         };
 
         CraigError init(const SwapchainInitInfo& info);
-        CraigError update();
         CraigError terminate();
 
         void setSwapExtent();

@@ -17,7 +17,6 @@ namespace Craig {
 		};
 
 		CraigError init(const CommandManagerInitInfo& info);
-		CraigError update();
 		CraigError terminate();
 
 		// One-off command helpers (transfer/GFX)

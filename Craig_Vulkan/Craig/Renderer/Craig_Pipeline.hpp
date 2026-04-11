@@ -21,10 +21,7 @@ namespace Craig {
 
 		};
 
-
-
 		CraigError init(const PipelineInitInfo& info);
-		CraigError update();
 		CraigError terminate();
 
 		void recreate();

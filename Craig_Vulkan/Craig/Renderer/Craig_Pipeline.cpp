@@ -224,14 +224,6 @@ void Craig::Pipeline::createDescriptorSetLayout() {
 
 }
 
-
-CraigError Craig::Pipeline::update() {
-
-	CraigError ret = CRAIG_SUCCESS;
-
-	return ret;
-}
-
 CraigError Craig::Pipeline::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;

@@ -146,13 +146,6 @@ void Craig::CommandManager::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffe
 
 }
 
-CraigError Craig::CommandManager::update() {
-
-	CraigError ret = CRAIG_SUCCESS;
-
-	return ret;
-}
-
 CraigError Craig::CommandManager::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;

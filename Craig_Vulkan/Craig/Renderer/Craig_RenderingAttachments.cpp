@@ -15,13 +15,6 @@ CraigError Craig::RenderingAttachments::init(const RenderingAttachmentsInitInfo&
 	return ret;
 }
 
-CraigError Craig::RenderingAttachments::update() {
-
-	CraigError ret = CRAIG_SUCCESS;
-
-	return ret;
-}
-
 void Craig::RenderingAttachments::createColourResources(vk::Extent2D extent, vk::Format colourFormat) {
 
 	m_VK_colourImage = ImageHelpers::createImage(mRA_physicalDevice, mRA_surface, extent.width, extent.height, 1, m_VK_msaaSamples, colourFormat, vk::ImageTiling::eOptimal,
