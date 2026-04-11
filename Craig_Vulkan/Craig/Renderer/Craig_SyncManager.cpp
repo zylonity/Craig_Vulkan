@@ -25,7 +25,7 @@ void Craig::SyncManager::createSyncObjects() {
 	timelineInfo.setPNext(&typeInfo);
 
 	m_VK_timelineSemaphore = m_SM_logicalDevice.createSemaphore(timelineInfo);
-	m_sempahoreTimelineValue = 0;
+	m_sempaphoreTimelineValue = 0;
 
 	mv_VK_imageAvailableSemaphores.resize(kMaxFramesInFlight);
 	mv_VK_renderFinishedSemaphores.resize(m_SM_swapChainImageCount);
@@ -44,8 +44,8 @@ void Craig::SyncManager::createSyncObjects() {
 
 void Craig::SyncManager::waitForGpu()
 {
-	if (m_sempahoreTimelineValue >= kMaxFramesInFlight) {
-		uint64_t waitValue = m_sempahoreTimelineValue - (kMaxFramesInFlight - 1);
+	if (m_sempaphoreTimelineValue >= kMaxFramesInFlight) {
+		uint64_t waitValue = m_sempaphoreTimelineValue - (kMaxFramesInFlight - 1);
 
 		vk::SemaphoreWaitInfo waitInfo{};
 		waitInfo.setSemaphores(m_VK_timelineSemaphore);
@@ -69,7 +69,7 @@ void Craig::SyncManager::submitFrame(const std::vector<vk::CommandBuffer>& cmdBu
 
 	vk::Semaphore signalSemaphores[] = { m_VK_timelineSemaphore, mv_VK_renderFinishedSemaphores[imageIndex] };
 
-	uint64_t signalValue = ++m_sempahoreTimelineValue;
+	uint64_t signalValue = ++m_sempaphoreTimelineValue;
 	uint64_t signalValues[] = { signalValue, 0 };
 
 	vk::TimelineSemaphoreSubmitInfo timelineSubmit;

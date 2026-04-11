@@ -65,6 +65,7 @@ namespace Craig {
 
 		VmaAllocator m_VMA_allocator = VK_NULL_HANDLE;
 
+
 		void pickPhysicalDevice(); // Choose GPU
 		bool isDeviceSuitable(const vk::PhysicalDevice& device);
 		bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);

@@ -8,7 +8,14 @@ CraigError Craig::Swapchain::init(const SwapchainInitInfo& info) {
     mSC_surface = info.surface;
     mSC_physicalDevice = info.physicalDevice;
     mSC_device = info.device;
-    mp_Window = info.pWindow;
+    if (info.pWindow != nullptr)
+    {
+        mp_Window = info.pWindow;
+    }
+    else
+    {
+        throw std::runtime_error("pWindow in swapchain is nullptr");
+    }
 
     createSwapChain();
     createSwapImageViews();

@@ -38,7 +38,7 @@ namespace Craig {
 
 		// Timeline semaphore (optional sync style)
 		vk::Semaphore m_VK_timelineSemaphore;
-		uint64_t      m_sempahoreTimelineValue = 0;
+		uint64_t      m_sempaphoreTimelineValue = 0;
 
 		vk::Device m_SM_logicalDevice;
 		uint32_t m_SM_swapChainImageCount;
