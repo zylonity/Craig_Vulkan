@@ -1009,25 +1009,3 @@ void Craig::Renderer::terminateSampler() {
     m_Devices.getLogicalDevice().waitIdle();
     m_Devices.getLogicalDevice().destroySampler(m_VK_textureSampler);
 }
-
-uint32_t Craig::Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) {
-    vk::PhysicalDeviceMemoryProperties memProperties;
-
-    memProperties = m_Devices.getPhysicalDevice().getMemoryProperties();
-
-    for (size_t i = 0; i < memProperties.memoryTypeCount; i++)
-    {
-
-        //VkMemoryRequirements::memoryTypeBits is a bitfield that sets a bit for every memoryType that is
-        //supported for the resource.Therefore we need to check if the bit at index i is set while also testing the
-        //required memory property flags while iterating over the memory types.
-
-        //i kinda get it (i lie)
-        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-            return i;
-        }
-    }
-
-    throw std::runtime_error("failed to find suitable memory type!");
-
-}

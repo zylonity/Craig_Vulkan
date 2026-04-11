@@ -2,20 +2,6 @@
 #include "Craig_Device.hpp"
 #include "Craig_CommandManager.hpp"
 
-CraigError Craig::ImageHelpers::init() {
-
-	CraigError ret = CRAIG_SUCCESS;
-
-	return ret;
-}
-
-CraigError Craig::ImageHelpers::update() {
-
-	CraigError ret = CRAIG_SUCCESS;
-
-	return ret;
-}
-
 vk::ImageView Craig::ImageHelpers::createImageView(vk::Device device, vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags, uint32_t mipLevels) {
 	vk::ImageViewCreateInfo createInfo{};
 	createInfo
@@ -330,13 +316,6 @@ void Craig::ImageHelpers::generateMipMaps(Craig::CommandManager& commandManager,
 
     useTransferQueue ?  commandManager.buffer_endSingleTimeCommands(tempBuffer) :  commandManager.buffer_endSingleTimeCommandsGFX(tempBuffer);
 
-}
-
-CraigError Craig::ImageHelpers::terminate() {
-
-	CraigError ret = CRAIG_SUCCESS;
-
-	return ret;
 }
 
 

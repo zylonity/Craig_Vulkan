@@ -2,7 +2,7 @@
 #include <vulkan/vulkan.hpp>
 #include "../../External/vk_mem_alloc.h"
 
-#include "Craig/Craig_Constants.hpp"
+#include "../Craig_Constants.hpp"
 
 
 namespace Craig {
@@ -25,9 +25,6 @@ namespace Craig {
 		static void copyBufferToImage(Craig::CommandManager& commandManager, vk::Buffer buffer, vk::Image image, uint32_t width, uint32_t height);
 
 		static void generateMipMaps(Craig::CommandManager& commandManager, vk::FormatProperties formatProperties, vk::Image image, int32_t texWidth, int32_t texHeight, uint32_t mipLevels, bool useTransferQueue);
-		CraigError init();
-		CraigError update();
-		CraigError terminate();
 
 	private:
 

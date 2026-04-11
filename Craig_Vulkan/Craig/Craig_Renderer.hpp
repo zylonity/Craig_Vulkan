@@ -77,8 +77,6 @@ namespace Craig {
 
 		
 		// Command submission + sync
-		// void createCommandPool();
-		// void createCommandBuffers();
 		void createSyncObjects();
 
 		void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
@@ -90,8 +88,6 @@ namespace Craig {
 		void createTextureSampler();
 		void terminateSampler();
 
-
-		uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
 		
 		// Extensions / layers
@@ -124,15 +120,15 @@ namespace Craig {
 		Craig::CommandManager m_commandManager;
 
 		
-		// Sync
-		uint32_t m_currentFrame = 0;
-
-		std::vector<vk::Semaphore> mv_VK_imageAvailableSemaphores;
-		std::vector<vk::Semaphore> mv_VK_renderFinishedSemaphores;
-
-		// Timeline semaphore (optional sync style)
-		vk::Semaphore m_VK_timelineSemaphore;
-		uint64_t      m_sempahoreTimelineValue = 0;
+		// // Sync
+		// uint32_t m_currentFrame = 0;
+		//
+		// std::vector<vk::Semaphore> mv_VK_imageAvailableSemaphores;
+		// std::vector<vk::Semaphore> mv_VK_renderFinishedSemaphores;
+		//
+		// // Timeline semaphore (optional sync style)
+		// vk::Semaphore m_VK_timelineSemaphore;
+		// uint64_t      m_sempahoreTimelineValue = 0;
 
 		
 		// Geometry buffers
