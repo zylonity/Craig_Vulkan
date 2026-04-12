@@ -7,10 +7,11 @@
 #include "Craig_GameObject.hpp"
 #include "Craig_ResourceManager.hpp"
 
-CraigError Craig::GameObject::init() {
+CraigError Craig::GameObject::init(std::string modelPath) {
 
 	CraigError ret = CRAIG_SUCCESS;
-	
+
+	m_modelPath = modelPath;
 	Craig::ResourceManager::getInstance().loadModel(m_modelPath);
 
 	mv3_position = { 0.0f, 0.0f, 0.0f };
@@ -63,6 +64,11 @@ void Craig::GameObject::setPosition(glm::vec3 position)
 {
 	mv3_position = position;
 
+}
+
+void Craig::GameObject::setScale(glm::vec3 scale)
+{
+	mv3_scale = scale;
 }
 
 

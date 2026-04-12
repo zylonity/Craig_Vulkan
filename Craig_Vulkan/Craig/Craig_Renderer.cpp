@@ -4,6 +4,7 @@
 #include <cassert>
 #include <iostream>
 #include <set>
+#include <unordered_set>
 #include <algorithm>
 #include <chrono>
 #include <glm/gtc/matrix_transform.hpp>
@@ -337,8 +338,6 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     commandBuffer.setScissor(0, scissor);
 
-    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_pipeline.getPipelineLayout(), 0, mv_VK_descriptorSets[m_syncManager.getCurrentFrame()], nullptr);
-
     /*
     indexCount: Even though we don't have a vertex buffer, we technically still have 3 vertices to draw.
     instanceCount: Used for instanced rendering, use 1 if you're not doing that.
@@ -352,12 +351,15 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     for (Craig::GameObject& gameObject : currentSceneObjects)
     {
-        for (size_t i = 0; i < resources.getModel(gameObject.getModelPath()).subMeshesCount; i++)
+        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_pipeline.getPipelineLayout(), 0, gameObject.getDescriptorSets()[m_syncManager.getCurrentFrame()], nullptr);
+
+        Craig::Model& model = resources.getModel(gameObject.getModelPath());
+        for (size_t i = 0; i < model.subMeshesCount; i++)
         {
-            Craig::SubMesh* submesh = resources.getModel(gameObject.getModelPath()).subMeshes[i];
+            Craig::SubMesh* submesh = model.subMeshes[i];
 
             commandBuffer.drawIndexed(
-                submesh->m_indices.size(),
+                submesh->indexCount,
                 1,
                 submesh->indexOffset,
                 submesh->vertexOffset,
@@ -408,67 +410,72 @@ void Craig::Renderer::createVertexBuffer() {
     std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
     Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
+    // Pass 1: assign a global vertexOffset to every submesh across every model,
+    // so the single shared vertex buffer holds all geometry in sequence.
+    uint32_t totalVertexCount = 0;
     for (Craig::GameObject& gameObject : currentSceneObjects)
     {
         Craig::Model& model = resources.getModel(gameObject.getModelPath());
-
-        uint32_t totalVertexCount = 0;
         for (size_t i = 0; i < model.subMeshesCount; i++)
         {
             Craig::SubMesh* submesh = model.subMeshes[i];
-            submesh->vertexOffset = totalVertexCount; // store where this submesh starts
+            submesh->vertexOffset = totalVertexCount;
             totalVertexCount += static_cast<uint32_t>(submesh->m_vertices.size());
-
         }
-
-        if (totalVertexCount == 0) {
-            // nothing to upload, bail early
-            return;
-        }
-
-
-        vk::DeviceSize bufferSize = sizeof(model.subMeshes[0]->m_vertices[0]) * totalVertexCount;
-
-        vk::Buffer stagingBuffer{};
-        VmaAllocation stagingAlloc{};
-
-        VmaAllocationCreateInfo stagingAci{};
-        stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
-        stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
-
-        m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
-
-        void* data;
-        vmaMapMemory(m_Devices.getVmaAllocator(), stagingAlloc, &data);
-
-        Craig::Vertex* dst = static_cast<Vertex*>(data);
-
-        uint32_t cursor = 0;
-        for (size_t i = 0; i < model.subMeshesCount; ++i) {
-            std::vector<Craig::Vertex>& verts = model.subMeshes[i]->m_vertices;
-
-            std::memcpy(dst + cursor,
-                verts.data(),
-                sizeof(Vertex) * verts.size());
-
-            model.subMeshes[i]->vertexOffset = cursor;
-            cursor += static_cast<uint32_t>(verts.size());
-        }
-
-        vmaFlushAllocation(m_Devices.getVmaAllocator(), stagingAlloc, 0, bufferSize);
-        vmaUnmapMemory(m_Devices.getVmaAllocator(), stagingAlloc);
-
-        VmaAllocationCreateInfo gpuAci{};
-        gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
-        gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-        m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, gpuAci, m_VK_vertexBuffer, m_VMA_vertexAllocation);
-
-        m_commandManager.copyBuffer(stagingBuffer, m_VK_vertexBuffer, bufferSize);
-        vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
     }
 
+    if (totalVertexCount == 0) {
+        return;
+    }
 
+    vk::DeviceSize bufferSize = sizeof(Craig::Vertex) * totalVertexCount;
+
+    vk::Buffer stagingBuffer{};
+    VmaAllocation stagingAlloc{};
+
+    VmaAllocationCreateInfo stagingAci{};
+    stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
+    stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+
+    m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
+
+    void* data;
+    vmaMapMemory(m_Devices.getVmaAllocator(), stagingAlloc, &data);
+
+    auto* dst = static_cast<Craig::Vertex*>(data);
+
+    // Pass 2: copy each submesh's vertices into the big staging buffer at the
+    // offset we assigned in pass 1. Track which models we've already copied so
+    // shared models don't get written twice.
+    std::unordered_set<std::string> copiedModels;
+    for (Craig::GameObject& gameObject : currentSceneObjects)
+    {
+        const std::string& path = gameObject.getModelPath();
+        if (!copiedModels.insert(path).second) continue;
+
+        Craig::Model& model = resources.getModel(path);
+        for (size_t i = 0; i < model.subMeshesCount; ++i) {
+            Craig::SubMesh* submesh = model.subMeshes[i];
+            std::vector<Craig::Vertex>& verts = submesh->m_vertices;
+            if (verts.empty()) continue;
+
+            std::memcpy(dst + submesh->vertexOffset,
+                verts.data(),
+                sizeof(Craig::Vertex) * verts.size());
+        }
+    }
+
+    vmaFlushAllocation(m_Devices.getVmaAllocator(), stagingAlloc, 0, bufferSize);
+    vmaUnmapMemory(m_Devices.getVmaAllocator(), stagingAlloc);
+
+    VmaAllocationCreateInfo gpuAci{};
+    gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
+    gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, gpuAci, m_VK_vertexBuffer, m_VMA_vertexAllocation);
+
+    m_commandManager.copyBuffer(stagingBuffer, m_VK_vertexBuffer, bufferSize);
+    vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
 }
 
 void Craig::Renderer::createIndexBuffer() {
@@ -476,70 +483,75 @@ void Craig::Renderer::createIndexBuffer() {
     std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
     Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
+    // Pass 1: assign a global indexOffset to every submesh across every model.
+    uint32_t totalIndexCount = 0;
     for (Craig::GameObject& gameObject : currentSceneObjects)
     {
         Craig::Model& model = resources.getModel(gameObject.getModelPath());
-
-        uint32_t totalIndexCount = 0;
         for (size_t i = 0; i < model.subMeshesCount; ++i) {
-            totalIndexCount += static_cast<uint32_t>(model.subMeshes[i]->m_indices.size());
+            Craig::SubMesh* submesh = model.subMeshes[i];
+            submesh->indexOffset = totalIndexCount;
+            totalIndexCount += static_cast<uint32_t>(submesh->m_indices.size());
         }
+    }
 
-        if (totalIndexCount == 0) {
-            // nothing to upload, bail early
-            return;
-        }
+    if (totalIndexCount == 0) {
+        return;
+    }
 
-        vk::DeviceSize bufferSize = sizeof(model.subMeshes[0]->m_indices[0]) * totalIndexCount;
+    vk::DeviceSize bufferSize = sizeof(uint32_t) * totalIndexCount;
 
-        vk::Buffer stagingBuffer{};
-        VmaAllocation stagingAlloc{};
+    vk::Buffer stagingBuffer{};
+    VmaAllocation stagingAlloc{};
 
-        VmaAllocationCreateInfo stagingAci{};
-        stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
-        stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    VmaAllocationCreateInfo stagingAci{};
+    stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
+    stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
-        m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
+    m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, stagingAci, stagingBuffer, stagingAlloc);
 
-        void* data;
-        vmaMapMemory(m_Devices.getVmaAllocator(), stagingAlloc, &data);
+    void* data;
+    vmaMapMemory(m_Devices.getVmaAllocator(), stagingAlloc, &data);
 
-        uint32_t* dst = static_cast<uint32_t*>(data);
-        uint32_t cursor = 0;
+    auto* dst = static_cast<uint32_t*>(data);
 
+    // Pass 2: copy each submesh's indices into the staging buffer. Indices are
+    // submesh-local; drawIndexed's vertexOffset parameter applies the global
+    // vertex offset at draw time.
+    std::unordered_set<std::string> copiedModels;
+    for (Craig::GameObject& gameObject : currentSceneObjects)
+    {
+        const std::string& path = gameObject.getModelPath();
+        if (!copiedModels.insert(path).second) continue;
+
+        Craig::Model& model = resources.getModel(path);
         for (size_t i = 0; i < model.subMeshesCount; ++i) {
             Craig::SubMesh* submesh = model.subMeshes[i];
             std::vector<uint32_t>& indices = submesh->m_indices;
+            if (indices.empty()) continue;
 
-            if (indices.empty()) {
-                submesh->indexOffset = cursor;
-                continue;
-            }
-
-            std::memcpy(dst + cursor,
+            std::memcpy(dst + submesh->indexOffset,
                 indices.data(),
                 sizeof(uint32_t) * indices.size());
-
-            submesh->indexOffset = cursor;
-            cursor += static_cast<uint32_t>(indices.size());
         }
-
-        vmaFlushAllocation(m_Devices.getVmaAllocator(), stagingAlloc, 0, bufferSize);
-        vmaUnmapMemory(m_Devices.getVmaAllocator(), stagingAlloc);
-
-        VmaAllocationCreateInfo gpuAci{};
-        gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
-        gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-        m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, gpuAci, m_VK_indexBuffer, m_VMA_indexAllocation);
-
-        m_commandManager.copyBuffer(stagingBuffer, m_VK_indexBuffer, bufferSize);
-        vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
     }
 
+    vmaFlushAllocation(m_Devices.getVmaAllocator(), stagingAlloc, 0, bufferSize);
+    vmaUnmapMemory(m_Devices.getVmaAllocator(), stagingAlloc);
+
+    VmaAllocationCreateInfo gpuAci{};
+    gpuAci.usage = VMA_MEMORY_USAGE_AUTO;
+    gpuAci.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+    m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, gpuAci, m_VK_indexBuffer, m_VMA_indexAllocation);
+
+    m_commandManager.copyBuffer(stagingBuffer, m_VK_indexBuffer, bufferSize);
+    vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
 }
 
 void Craig::Renderer::createUniformBuffers() {
+    std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
+    size_t numObjects = currentSceneObjects.size();
 
     vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
 
@@ -551,11 +563,11 @@ void Craig::Renderer::createUniformBuffers() {
     stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
     stagingAci.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
-    mv_VK_uniformBuffers.resize(kMaxFramesInFlight);
-    mv_VK_uniformBuffersAllocations.resize(kMaxFramesInFlight);
-    mv_VK_uniformBuffersMapped.resize(kMaxFramesInFlight);
+    mv_VK_uniformBuffers.resize(kMaxFramesInFlight * numObjects);
+    mv_VK_uniformBuffersAllocations.resize(kMaxFramesInFlight * numObjects);
+    mv_VK_uniformBuffersMapped.resize(kMaxFramesInFlight * numObjects);
 
-    for (size_t i = 0; i < kMaxFramesInFlight; i++)
+    for (size_t i = 0; i < kMaxFramesInFlight * numObjects; i++)
     {
         VmaAllocationInfo info{};
         m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, stagingAci, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i], &info);
@@ -568,75 +580,81 @@ void Craig::Renderer::createUniformBuffers() {
 }
 
 void Craig::Renderer::createDescriptorPool() {
+    std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
 
     std::array<vk::DescriptorPoolSize, 2> poolSizes;
     poolSizes[0]
         .setType(vk::DescriptorType::eUniformBuffer)
-        .setDescriptorCount(static_cast<uint32_t>(kMaxFramesInFlight));
+        .setDescriptorCount(static_cast<uint32_t>(kMaxFramesInFlight * currentSceneObjects.size()));
     poolSizes[1]
         .setType(vk::DescriptorType::eCombinedImageSampler)
-        .setDescriptorCount(static_cast<uint32_t>(kMaxFramesInFlight));
+        .setDescriptorCount(static_cast<uint32_t>(kMaxFramesInFlight * currentSceneObjects.size()));
 
     vk::DescriptorPoolCreateInfo poolInfo{};
     poolInfo
         .setPoolSizeCount(static_cast<uint32_t>(poolSizes.size()))
         .setPoolSizes(poolSizes)
-        .setMaxSets(static_cast<uint32_t>(kMaxFramesInFlight));
+        .setMaxSets(static_cast<uint32_t>(kMaxFramesInFlight * currentSceneObjects.size()));
 
     m_VK_descriptorPool = m_Devices.getLogicalDevice().createDescriptorPool(poolInfo);
 
 }
 
 void Craig::Renderer::createDescriptorSets() {
+    std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
+    Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
-    std::vector<vk::DescriptorSetLayout> layouts(kMaxFramesInFlight, m_pipeline.getDescriptorSetLayout());
+    size_t numObjects = currentSceneObjects.size();
+    size_t totalSets = kMaxFramesInFlight * numObjects;
+
+    std::vector<vk::DescriptorSetLayout> layouts(totalSets, m_pipeline.getDescriptorSetLayout());
     vk::DescriptorSetAllocateInfo allocInfo{};
     allocInfo.setDescriptorPool(m_VK_descriptorPool)
-        .setDescriptorSetCount(static_cast<uint32_t>(kMaxFramesInFlight))
+        .setDescriptorSetCount(static_cast<uint32_t>(totalSets))
         .setSetLayouts(layouts);
 
-    mv_VK_descriptorSets.resize(kMaxFramesInFlight);
-    mv_VK_descriptorSets = m_Devices.getLogicalDevice().allocateDescriptorSets(allocInfo);
+    std::vector<vk::DescriptorSet> allSets = m_Devices.getLogicalDevice().allocateDescriptorSets(allocInfo);
 
-    for (size_t i = 0; i < kMaxFramesInFlight; i++) {
-
-        vk::DescriptorBufferInfo bufferInfo{};
-        bufferInfo.setBuffer(mv_VK_uniformBuffers[i])
-            .setOffset(0)
-            .setRange(sizeof(UniformBufferObject));
-
-        std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
-        Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
-
-        vk::DescriptorImageInfo imageInfo{};
-
-        for (Craig::GameObject& gameObject : currentSceneObjects)
+    for (size_t frame = 0; frame < kMaxFramesInFlight; frame++)
+    {
+        for (size_t object = 0; object < numObjects; object++)
         {
+            size_t setIndex = frame * numObjects + object;
+
+            Craig::GameObject& gameObject = currentSceneObjects[object];
+            gameObject.getDescriptorSets()[frame] = allSets[setIndex];
+
+            vk::DescriptorBufferInfo bufferInfo{};
+            bufferInfo.setBuffer(mv_VK_uniformBuffers[setIndex])
+                .setOffset(0)
+                .setRange(sizeof(UniformBufferObject));
+
+            vk::DescriptorImageInfo imageInfo{};
             imageInfo
                 .setImageView(resources.getModel(gameObject.getModelPath()).m_texture.m_VK_textureImageView)
                 .setSampler(m_VK_textureSampler)
                 .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+            std::array<vk::WriteDescriptorSet, 2> descriptorWrites{};
+            descriptorWrites[0]
+                .setDstSet(allSets[setIndex])
+                .setDstBinding(0)
+                .setDstArrayElement(0)
+                .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+                .setDescriptorCount(1)
+                .setBufferInfo(bufferInfo);
+
+            descriptorWrites[1]
+                .setDstSet(allSets[setIndex])
+                .setDstBinding(1)
+                .setDstArrayElement(0)
+                .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                .setDescriptorCount(1)
+                .setImageInfo(imageInfo);
+
+            m_Devices.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
+
         }
-
-        std::array<vk::WriteDescriptorSet, 2> descriptorWrites{};
-        descriptorWrites[0]
-            .setDstSet(mv_VK_descriptorSets[i])
-            .setDstBinding(0)
-            .setDstArrayElement(0)
-            .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-            .setDescriptorCount(1)
-            .setBufferInfo(bufferInfo);
-
-        descriptorWrites[1]
-            .setDstSet(mv_VK_descriptorSets[i])
-            .setDstBinding(1)
-            .setDstArrayElement(0)
-            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-            .setDescriptorCount(1)
-            .setImageInfo(imageInfo);
-
-        m_Devices.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
-
     }
 
 }
@@ -656,17 +674,19 @@ void Craig::Renderer::updateDescriptorSets() {
                 .setImageView(resources.getModel(gameObject.getModelPath()).m_texture.m_VK_textureImageView)
                 .setSampler(m_VK_textureSampler)
                 .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
-        }
-        vk::WriteDescriptorSet descriptorWrite{};
-        descriptorWrite
-            .setDstSet(mv_VK_descriptorSets[i])
-            .setDstBinding(1)
-            .setDstArrayElement(0)
-            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-            .setDescriptorCount(1)
-            .setImageInfo(imageInfo);
 
-        m_Devices.getLogicalDevice().updateDescriptorSets(descriptorWrite, nullptr);
+            vk::WriteDescriptorSet descriptorWrite{};
+            descriptorWrite
+                .setDstSet(gameObject.getDescriptorSets()[i])
+                .setDstBinding(1)
+                .setDstArrayElement(0)
+                .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                .setDescriptorCount(1)
+                .setImageInfo(imageInfo);
+
+            m_Devices.getLogicalDevice().updateDescriptorSets(descriptorWrite, nullptr);
+        }
+
     }
 
 }
@@ -679,25 +699,35 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-    UniformBufferObject ubo;
-
     m_camera.m_aspect = m_swapChain.getExtent().width / (float)m_swapChain.getExtent().height;
 
 
     std::vector<Craig::GameObject>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
     Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
-    for (Craig::GameObject& gameObject : currentSceneObjects)
-    {
-        ubo.model = gameObject.GetModelMatrix();
+    size_t numObjects = currentSceneObjects.size();
 
-    }
-    ubo.view = m_camera.getView();
-    ubo.proj = m_camera.getProj();
     m_camera.update(deltaTime);
 
+    int i = 0;
+    for (Craig::GameObject& gameObject : currentSceneObjects)
+    {
+        UniformBufferObject ubo{};
+        ubo.model = gameObject.GetModelMatrix();
+        ubo.view = m_camera.getView();
+        ubo.proj = m_camera.getProj();
+        size_t bufferIndex = currentImage * numObjects + i;
 
-    memcpy(mv_VK_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+
+        memcpy(mv_VK_uniformBuffersMapped[bufferIndex], &ubo, sizeof(ubo));
+
+        i++;
+    }
+
+
+
+
+
 }
 
 void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels, Craig::Texture* outTexture) { // VmaAllocation* textureMemoryAlloc, vk::Image* outTextureImage, vk::ImageView* outTextureImageView) {
@@ -926,7 +956,7 @@ CraigError Craig::Renderer::terminate() {
 
     m_swapChain.terminate();
 
-    for (size_t i = 0; i < kMaxFramesInFlight; i++) {
+    for (size_t i = 0; i < mv_VK_uniformBuffers.size(); i++) {
         vmaDestroyBuffer(m_Devices.getVmaAllocator(), mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i]);
     }
 

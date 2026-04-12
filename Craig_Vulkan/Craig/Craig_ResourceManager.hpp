@@ -10,6 +10,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <vulkan/vulkan.hpp>
 #include "../External/vk_mem_alloc.h"
+#include <unordered_map>
 
 
 namespace Craig {
@@ -71,7 +72,7 @@ namespace Craig {
 		void loadModel(std::string modelPath);
 		void terminateModels(const vk::Device& device, const VmaAllocator& memoryAllocator);
 
-		Craig::Model& getModel(std::string modelPath) { return m_testModel; };
+		Craig::Model& getModel(std::string modelPath) { return m_loadedModels[modelPath]; };
 
 		//===============================================================================
 		// Singleton Implementations
@@ -92,7 +93,8 @@ namespace Craig {
 		//===============================================================================
 
 		Craig::Renderer* m_renderer;
-		Craig::Model m_testModel;
+		//Craig::Model m_testModel;
+		std::unordered_map<std::string, Craig::Model> m_loadedModels;
 	};
 
 

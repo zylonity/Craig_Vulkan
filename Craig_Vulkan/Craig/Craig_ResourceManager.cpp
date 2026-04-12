@@ -63,6 +63,13 @@ CraigError Craig::ResourceManager::terminate() {
 }
 
 void Craig::ResourceManager::loadModel(std::string modelPath) {
+    // If this model has already been loaded (e.g. a second GameObject using the
+    // same glb), don't re-upload it. Doing so leaks the GPU texture and SubMesh
+    // pointers because unordered_map::insert silently drops the duplicate key.
+    if (m_loadedModels.find(modelPath) != m_loadedModels.end()) {
+        return;
+    }
+
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
     std::string err, warn;
@@ -82,6 +89,8 @@ void Craig::ResourceManager::loadModel(std::string modelPath) {
     else {
         printf("model found \n");
     }
+
+    Craig::Model m_testModel;
 
     int i = 0;
     // iterate all meshes / primitives, no scene graph yet
@@ -217,7 +226,7 @@ void Craig::ResourceManager::loadModel(std::string modelPath) {
                         int comp = img.component; // usually 4 (RGBA)
 
                         // createVulkanTextureFromPixels(pixels, width, height, comp);
-                        m_renderer->createTextureImage2(pixels, width, height, comp, &getModel(modelPath).m_texture);
+                        m_renderer->createTextureImage2(pixels, width, height, comp, &m_testModel.m_texture);
                     }
                 }
             }
@@ -228,18 +237,26 @@ void Craig::ResourceManager::loadModel(std::string modelPath) {
     }
 
     m_testModel.subMeshesCount = i;
+
+    m_loadedModels.insert({modelPath, m_testModel});
 }
 
 void Craig::ResourceManager::terminateModels(const vk::Device& device, const VmaAllocator& memoryAllocator) {
 
-    for (size_t i = 0; i < m_testModel.subMeshes.size(); i++)
+    for (auto& modelPair : m_loadedModels)
     {
-        delete m_testModel.subMeshes[i];
-        m_testModel.subMeshes[i] = nullptr;
-    }
-    m_testModel.subMeshes.clear();
+        Craig::Model& model = modelPair.second;
+        for (size_t i = 0; i < model.subMeshes.size(); i++)
+        {
+            delete model.subMeshes[i];
+            model.subMeshes[i] = nullptr;
+        }
+        model.subMeshes.clear();
 
-    device.destroyImageView(m_testModel.m_texture.m_VK_textureImageView);
-    vmaDestroyImage(memoryAllocator, m_testModel.m_texture.m_VK_textureImage, m_testModel.m_texture.m_VMA_textureImageAllocation);
+        device.destroyImageView(model.m_texture.m_VK_textureImageView);
+        vmaDestroyImage(memoryAllocator, model.m_texture.m_VK_textureImage, model.m_texture.m_VMA_textureImageAllocation);
+    }
+
+
 
 }

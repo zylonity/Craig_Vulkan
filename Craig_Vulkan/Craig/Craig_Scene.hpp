@@ -15,9 +15,6 @@ namespace Craig {
 		std::vector<Craig::GameObject>& getGameObjects() { return mv_Gameobjects; }
 	private:
 
-		Craig::GameObject m_MainObject;
-		Craig::GameObject m_secondObject;
-
 		std::vector<Craig::GameObject> mv_Gameobjects;
 	};
 

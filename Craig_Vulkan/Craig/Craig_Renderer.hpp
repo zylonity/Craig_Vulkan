@@ -147,7 +147,7 @@ namespace Craig {
 		std::vector<void*>        mv_VK_uniformBuffersMapped;
 
 		vk::DescriptorPool              m_VK_descriptorPool;
-		std::vector<vk::DescriptorSet>  mv_VK_descriptorSets;
+		//std::vector<vk::DescriptorSet>  mv_VK_descriptorSets;
 
 
 		uint32_t m_minLODLevel = 0;        // User-selected min LOD clamp
