@@ -10,9 +10,10 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #if defined(IMGUI_ENABLED)
-#include "../External/Imgui/imgui.h"   
+#include "../External/Imgui/imgui.h"
 #include "../External/Imgui/imgui_impl_vulkan.h"
 #include "../External/Imgui/imgui_impl_sdl2.h"
+#include "../External/Imgui/ImGuizmo/ImGuizmo.h"
 #endif
 
 #include "Craig_Renderer.hpp"
@@ -129,6 +130,7 @@ CraigError Craig::Renderer::update(const float& deltaTime) {
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
+        ImGuizmo::BeginFrame();
         Craig::ImguiEditor::getInstance().editorMain(deltaTime);
     }
 
