@@ -17,7 +17,7 @@ namespace Craig {
 	class GameObject {
 
 	public:
-		CraigError init(std::string modelPath);
+		CraigError init(std::string name, std::string modelPath);
 		CraigError update();
 		CraigError terminate();
 
@@ -28,8 +28,11 @@ namespace Craig {
 		const glm::vec3& getPosition() const { return mv3_position; }
 
 		const std::string& getModelPath() const { return m_modelPath; }
+		const std::string& getName() const { return m_name; }
 
 		std::vector<vk::DescriptorSet>& getDescriptorSets() { return mv_VK_descriptorSets; }
+
+		void displayImGuiAttributes();
 	private:
 		std::vector<vk::DescriptorSet> mv_VK_descriptorSets = std::vector<vk::DescriptorSet>(kMaxFramesInFlight);
 
@@ -43,7 +46,7 @@ namespace Craig {
 		glm::mat4 m_inverseModelMatrix{};
 
 		std::string m_modelPath;// = "data/models/BarramundiFish.glb";
-
+		std::string m_name;
 
 
 	};

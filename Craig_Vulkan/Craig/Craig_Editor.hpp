@@ -5,6 +5,7 @@
 #include <string>
 
 namespace Craig {
+	class GameObject;
 
 	//Forward declarations
 	class SceneManager;
@@ -45,6 +46,8 @@ namespace Craig {
 		Craig::Renderer* mp_renderer;
 		Craig::SceneManager* mp_sceneManager;
 		Craig::Camera* mp_camera;
+
+		Craig::GameObject* mp_selectedGameObject;
 
 		int m_currentMipLevel = 0;
 		int m_currentMSAALevel = 0;

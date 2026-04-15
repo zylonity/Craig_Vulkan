@@ -103,18 +103,17 @@ void Craig::Renderer::InitImgui() {
     init_info.QueueFamily = indices.graphicsFamily.value();
     init_info.Queue = m_Devices.getGraphicsQueue();
     init_info.DescriptorPool = m_VK_imguiDescriptorPool;
-    init_info.Subpass = 0;
     init_info.MinImageCount = 2;
     init_info.ImageCount = kMaxFramesInFlight;
-    init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     init_info.CheckVkResultFn = check_vk_result;
     init_info.UseDynamicRendering = true;
 
-    // dynamic rendering parameters for imgui to use
-    init_info.PipelineRenderingCreateInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-    init_info.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+    //imgui updated a lot of vulkan/pipeline stuff
+    init_info.PipelineInfoMain.PipelineRenderingCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+    init_info.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
     VkFormat colourFormat = static_cast<VkFormat>(m_swapChain.getImageFormat());
-    init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &colourFormat;
+    init_info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &colourFormat;
+    init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
     ImGui_ImplVulkan_Init(&init_info);
 

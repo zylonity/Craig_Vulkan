@@ -6,11 +6,11 @@ CraigError Craig::Scene::init() {
 	Craig::GameObject* m_MainObject = new Craig::GameObject;
 	Craig::GameObject* m_secondObject= new Craig::GameObject;
 
-	m_MainObject->init("data/models/BarramundiFish.glb");
+	m_MainObject->init("phish","data/models/BarramundiFish.glb");
 	m_MainObject->setPosition({m_MainObject->getPosition().x, m_MainObject->getPosition().y - 15, m_MainObject->getPosition().z});
 	mpv_Gameobjects.push_back(m_MainObject);
 
-	m_secondObject->init("data/models/Duck.glb");
+	m_secondObject->init("fuck","data/models/Duck.glb");
 	m_secondObject->setScale(glm::vec3(0.01f));
 	mpv_Gameobjects.push_back(m_secondObject);
 	//mv_Gameobjects.push_back(m_MainObject);
