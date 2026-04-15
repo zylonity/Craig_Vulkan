@@ -5,7 +5,7 @@
 #include <algorithm>
 
 //Vector3
-void Craig::Utilities::displayVectorAttribute(const std::string& inputName, glm::vec3& attribute)
+bool Craig::Utilities::displayVectorAttribute(const std::string& inputName, glm::vec3& attribute)
 {
 	float vecToFloatArray[3] = { attribute.x, attribute.y, attribute.z };
 
@@ -14,7 +14,9 @@ void Craig::Utilities::displayVectorAttribute(const std::string& inputName, glm:
 		attribute.x = vecToFloatArray[0];
 		attribute.y = vecToFloatArray[1];
 		attribute.z = vecToFloatArray[2];
+		return true;
 	}
+	return false;
 }
 
 

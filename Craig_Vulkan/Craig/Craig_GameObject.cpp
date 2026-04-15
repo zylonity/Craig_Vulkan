@@ -21,9 +21,20 @@ CraigError Craig::GameObject::init(std::string name, std::string modelPath, Crai
 	Craig::ResourceManager::getInstance().loadModel(m_modelPath);
 
 	mv3_position = { 0.0f, 0.0f, 0.0f };
-	mv3_rotation = { 0.0f, 180.0f, 0.0f };
+	mv3_rotation = { 0.0f, 0.0f, 0.0f };
+	m_rotationQuat = glm::quat(glm::radians(mv3_rotation));
 
 	return ret;
+}
+
+void Craig::GameObject::setRotation(glm::vec3 rotation) {
+	mv3_rotation = rotation;
+	m_rotationQuat = glm::quat(glm::radians(mv3_rotation));
+}
+
+void Craig::GameObject::setRotationQuat(const glm::quat& q) {
+	m_rotationQuat = glm::normalize(q);
+	mv3_rotation = glm::degrees(glm::eulerAngles(m_rotationQuat));
 }
 
 CraigError Craig::GameObject::update() {
@@ -38,23 +49,9 @@ CraigError Craig::GameObject::update() {
 
 void Craig::GameObject::updateModelMatrix()
 {
-	//Empty matrix to use in order, SRT - Scale rotation Translation
-	m_modelMatrix = glm::mat4(1);
-
-	glm::vec3 mv3_rotationInRads = {
-		glm::radians(mv3_rotation[0]),
-		glm::radians(mv3_rotation[1]),
-		glm::radians(mv3_rotation[2])
-	};
-
-
-	m_modelMatrix = glm::translate(m_modelMatrix, mv3_position);
-	m_modelMatrix = m_modelMatrix * glm::yawPitchRoll(
-		mv3_rotationInRads.y,
-		mv3_rotationInRads.x,
-		mv3_rotationInRads.z
-	);
-	m_modelMatrix = glm::scale(m_modelMatrix, mv3_scale);
+	m_modelMatrix = glm::translate(glm::mat4(1), mv3_position)
+		* glm::mat4_cast(m_rotationQuat)
+		* glm::scale(glm::mat4(1), mv3_scale);
 
 }
 
@@ -104,23 +101,15 @@ void Craig::GameObject::displayImGuiAttributes()
 	if (ImGui::TreeNode("Transform"))
 	{
 		Utilities::displayVectorAttribute("Position", mv3_position);
-		Utilities::displayVectorAttribute("Rotation", mv3_rotation);
+		if (Utilities::displayVectorAttribute("Rotation", mv3_rotation)) {
+			m_rotationQuat = glm::quat(glm::radians(mv3_rotation));
+		}
 		Utilities::displayVectorAttribute("Scale", mv3_scale);
 		ImGui::TreePop();
 	};
 
 }
 
-void Craig::GameObject::setPosition(glm::vec3 position)
-{
-	mv3_position = position;
-
-}
-
-void Craig::GameObject::setScale(glm::vec3 scale)
-{
-	mv3_scale = scale;
-}
 
 
 

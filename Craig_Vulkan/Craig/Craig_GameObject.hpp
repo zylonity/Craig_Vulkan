@@ -5,6 +5,7 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <string>
 #include <vector>
 #include <vulkan/vulkan.hpp>
@@ -24,9 +25,15 @@ namespace Craig {
 
 		glm::mat4 GetModelMatrix() { return m_modelMatrix; }
 
-		void setPosition(glm::vec3 position);
-		void setScale(glm::vec3 scale);
 		const glm::vec3& getPosition() const { return mv3_position; }
+		const glm::vec3& getRotation() const { return mv3_rotation; }
+		const glm::vec3& getScale() const { return mv3_scale; }
+		const glm::quat& getRotationQuat() const { return m_rotationQuat; }
+
+		void setPosition(glm::vec3 position) { mv3_position = position; };
+		void setRotation(glm::vec3 rotation);
+		void setScale(glm::vec3 scale)		 { mv3_scale = scale; };
+		void setRotationQuat(const glm::quat& q);
 
 		const std::string& getModelPath() const { return m_modelPath; }
 		const std::string& getName() const { return m_name; }
@@ -45,6 +52,7 @@ namespace Craig {
 		glm::vec3 mv3_position{};
 		glm::vec3 mv3_rotation{};
 		glm::vec3 mv3_scale = glm::vec3(1);
+		glm::quat m_rotationQuat = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 
 		glm::mat4 m_modelMatrix = glm::mat4(1);
 		glm::mat4 m_inverseModelMatrix{};

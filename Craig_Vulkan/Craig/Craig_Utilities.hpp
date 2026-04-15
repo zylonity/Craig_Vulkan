@@ -12,7 +12,7 @@ namespace Craig {
 	class Utilities {
 
 	public:
-		static void displayVectorAttribute(
+		static bool displayVectorAttribute(
 			const std::string& inputName,
 			glm::vec3& attribute
 		);

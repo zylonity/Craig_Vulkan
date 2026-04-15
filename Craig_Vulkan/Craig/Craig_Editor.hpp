@@ -4,6 +4,9 @@
 #include <vector>
 #include <string>
 
+#include "../External/Imgui/imgui.h"
+#include "../External/Imgui/ImGuizmo/ImGuizmo.h"
+
 namespace Craig {
 	class GameObject;
 
@@ -48,6 +51,9 @@ namespace Craig {
 		Craig::Camera* mp_camera;
 
 		Craig::GameObject* mp_selectedGameObject;
+
+		void updateImGuizmo();
+		ImGuizmo::OPERATION m_CurrentOperation = ImGuizmo::OPERATION::TRANSLATE;
 
 		int m_currentMipLevel = 0;
 		int m_currentMSAALevel = 0;

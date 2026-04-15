@@ -4,6 +4,7 @@
 
 #include "../External/Imgui/imgui.h"   
 #include "../External/Imgui/imgui_internal.h"
+#include "../External/Imgui/ImGuizmo/ImGuizmo.h"
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
@@ -62,6 +63,7 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 
 	showRenderProperties(deltaTime);
 	showSceneDetails(deltaTime);
+	updateImGuizmo();
 
 	return ret;
 }
@@ -153,23 +155,23 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	 						mp_selectedGameObject = nullptr;
 	 					}
 
-	 					// // Toggle translate mode on the selected game object.
-	 					// if (ImGui::Button("Move"))
-	 					// {
-	 					// 	m_CurrentOperation = ImGuizmo::TRANSLATE;
-	 					// }
-	 					// ImGui::SameLine();
-	 					// // Toggle rotate mode on the selected game object.
-	 					// if (ImGui::Button("Rotate"))
-	 					// {
-	 					// 	m_CurrentOperation = ImGuizmo::ROTATE;
-	 					// }
-	 					// ImGui::SameLine();
-	 					// // Toggle scale mode on the selected game object.
-	 					// if (ImGui::Button("Scale"))
-	 					// {
-	 					// 	m_CurrentOperation = ImGuizmo::SCALE;
-	 					// }
+	 					// Toggle translate mode on the selected game object.
+	 					if (ImGui::Button("Move"))
+	 					{
+	 						m_CurrentOperation = ImGuizmo::TRANSLATE;
+	 					}
+	 					ImGui::SameLine();
+	 					// Toggle rotate mode on the selected game object.
+	 					if (ImGui::Button("Rotate"))
+	 					{
+	 						m_CurrentOperation = ImGuizmo::ROTATE;
+	 					}
+	 					ImGui::SameLine();
+	 					// Toggle scale mode on the selected game object.
+	 					if (ImGui::Button("Scale"))
+	 					{
+	 						m_CurrentOperation = ImGuizmo::SCALE;
+	 					}
 	 				}
 
 	 				// // Allow the user to delete the game object.
@@ -201,6 +203,90 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 		}
 
 		ImGui::End();
+	}
+}
+
+void Craig::ImguiEditor::updateImGuizmo()
+{
+	// So I was having an issue where when I scaled the object with ImGuizmo, it would set the rotation to 0,0,0 DURING the scaling, it would go back to normal after
+	// But I hated that visually, I had a look online and found this issue on github
+	// https://github.com/CedricGuillemet/ImGuizmo/issues/125
+	// I grabbed his code and adapted it, mine was similar before
+
+	if (mp_selectedGameObject != nullptr)
+	{
+		// Use hotkeys to update the current transformation.
+		if (ImGui::IsKeyPressed(ImGuiKey_T))
+		{
+			m_CurrentOperation = ImGuizmo::TRANSLATE;
+		}
+		if (ImGui::IsKeyPressed(ImGuiKey_R))
+		{
+			m_CurrentOperation = ImGuizmo::ROTATE;
+		}
+		if (ImGui::IsKeyPressed(ImGuiKey_E))
+		{
+			m_CurrentOperation = ImGuizmo::SCALE;
+		}
+
+		// Set the screen rect and tell ImGuizmo how to project.
+		ImGuizmo::SetOrthographic(false);
+		const glm::vec2 screenSize = mp_renderer->getWindowSize();
+		ImGuizmo::SetRect(0, 0, screenSize.x, screenSize.y);
+
+		// Build the transform matrix directly from pos + quat + scale. Avoids Euler round-tripping
+		// through ImGuizmo's Recompose/Decompose, which clamps Y to [-90,90] and causes jumps.
+		glm::mat4 transform = glm::translate(glm::mat4(1.0f), mp_selectedGameObject->getPosition())
+			* glm::mat4_cast(mp_selectedGameObject->getRotationQuat())
+			* glm::scale(glm::mat4(1.0f), mp_selectedGameObject->getScale());
+
+		// ImGuizmo expects the opposite handedness from what we render with. Our scene renders
+		// with a right-handed view/projection (GLM default) plus a Vulkan Y-flip, so we hand
+		// ImGuizmo left-handed equivalents: a perspectiveLH proj and the view with its Z axis flipped.
+		const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
+		const glm::mat4 projLH = glm::perspectiveLH(
+			glm::radians(camera.m_fov), camera.m_aspect, camera.m_nearPlane, camera.m_farPlane);
+		const glm::mat4 viewLH = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, -1.0f)) * camera.getView();
+
+		ImGuizmo::Manipulate(
+			(const float*)glm::value_ptr(viewLH),
+			(const float*)glm::value_ptr(projLH),
+			m_CurrentOperation,
+			ImGuizmo::MODE::LOCAL,
+			glm::value_ptr(transform)
+		);
+
+		if (ImGuizmo::IsUsing())
+		{
+			// Decompose the matrix manually so rotation stays as a quaternion (no Euler jumps).
+			glm::vec3 pos = glm::vec3(transform[3]);
+			glm::vec3 scale = {
+				glm::length(glm::vec3(transform[0])),
+				glm::length(glm::vec3(transform[1])),
+				glm::length(glm::vec3(transform[2]))
+			};
+			glm::mat3 rotMat(
+				glm::vec3(transform[0]) / (scale.x != 0.0f ? scale.x : 1.0f),
+				glm::vec3(transform[1]) / (scale.y != 0.0f ? scale.y : 1.0f),
+				glm::vec3(transform[2]) / (scale.z != 0.0f ? scale.z : 1.0f)
+			);
+			glm::quat rot = glm::quat_cast(rotMat);
+
+			switch (m_CurrentOperation)
+			{
+			case ImGuizmo::OPERATION::TRANSLATE:
+				mp_selectedGameObject->setPosition(pos);
+				break;
+			case ImGuizmo::OPERATION::ROTATE:
+				mp_selectedGameObject->setRotationQuat(rot);
+				break;
+			case ImGuizmo::OPERATION::SCALE:
+				mp_selectedGameObject->setScale(scale);
+				break;
+			default:
+				break;
+			}
+		}
 	}
 }
 

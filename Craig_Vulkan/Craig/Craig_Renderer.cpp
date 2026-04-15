@@ -205,8 +205,8 @@ void Craig::Renderer::InitVulkan() {
     createImguiDescriptorPool();
 #endif
 
-    mp_CurrentWindow->setCameraRef(&m_camera);
-    Craig::ImguiEditor::getInstance().setCamera(&m_camera);
+    mp_CurrentWindow->setCameraRef(&mp_SceneManager->getCurrentScene()->getCamera());
+    Craig::ImguiEditor::getInstance().setCamera(&mp_SceneManager->getCurrentScene()->getCamera());
 }
 
 void Craig::Renderer::recreateSwapChain() {
@@ -701,22 +701,23 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-    m_camera.m_aspect = m_swapChain.getExtent().width / (float)m_swapChain.getExtent().height;
+    Craig::Camera& camera = mp_SceneManager->getCurrentScene()->getCamera();
 
+    camera.m_aspect = m_swapChain.getExtent().width / (float)m_swapChain.getExtent().height;
 
     std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
     Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
     size_t numObjects = currentSceneObjects.size();
 
-    m_camera.update(deltaTime);
+    camera.update(deltaTime);
 
     for (Craig::GameObject* gameObject : currentSceneObjects)
     {
         UniformBufferObject ubo{};
         ubo.model = gameObject->GetModelMatrix();
-        ubo.view = m_camera.getView();
-        ubo.proj = m_camera.getProj();
+        ubo.view = camera.getView();
+        ubo.proj = camera.getProj();
         size_t bufferIndex = currentImage * numObjects + gameObject->getUboIndex();
 
 
@@ -839,6 +840,14 @@ void Craig::Renderer::updateSamplingLevel(int levelToSet) {
     }
     recreateSwapChainFull();
 
+}
+
+const glm::vec2 Craig::Renderer::getWindowSize() const
+{
+    glm::vec2 size;
+    size.x = m_swapChain.getExtent().width;
+    size.y = m_swapChain.getExtent().height;
+    return size;
 }
 
 void Craig::Renderer::updateMinLOD(int minLOD) {

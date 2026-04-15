@@ -42,13 +42,14 @@ namespace Craig {
 		void refreshSwapChain() { recreateSwapChain(); };
 		void createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels, Texture* outTexture);
 
-		const uint32_t& getMaxLOD() const { return 3; };
 		void updateMinLOD(int minLOD);
 
 		//const uint32_t& getMaxSamplingLevel() const { return m_MaxSamplingLevel; };
 		void updateSamplingLevel(int levelToSet);
 
 		RenderingAttachments getRenderingAttachments() {return m_renderingAttachments; };
+
+		const glm::vec2 getWindowSize() const;
 
 	private:
 		
@@ -106,7 +107,6 @@ namespace Craig {
 		SceneManager* mp_SceneManager = nullptr;
 		Window* mp_CurrentWindow = nullptr;
 
-		Craig::Camera m_camera = Craig::Camera(); //Virtual camera for the scene
 		Craig::Instance m_instance; //Contains vulkan instance and debugging stuff
 		Craig::Device m_Devices; //Contains physical and logical device
 
