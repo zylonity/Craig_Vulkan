@@ -3,16 +3,16 @@
 CraigError Craig::Scene::init() {
 
 	CraigError ret = CRAIG_SUCCESS;
-	Craig::GameObject m_MainObject;
-	Craig::GameObject m_secondObject;
+	Craig::GameObject* m_MainObject = new Craig::GameObject;
+	Craig::GameObject* m_secondObject= new Craig::GameObject;
 
-	m_MainObject.init("data/models/BarramundiFish.glb");
-	m_MainObject.setPosition({m_MainObject.getPosition().x, m_MainObject.getPosition().y - 15, m_MainObject.getPosition().z});
-	mv_Gameobjects.push_back(m_MainObject);
+	m_MainObject->init("data/models/BarramundiFish.glb");
+	m_MainObject->setPosition({m_MainObject->getPosition().x, m_MainObject->getPosition().y - 15, m_MainObject->getPosition().z});
+	mpv_Gameobjects.push_back(m_MainObject);
 
-	m_secondObject.init("data/models/Duck.glb");
-	m_secondObject.setScale(glm::vec3(0.01f));
-	mv_Gameobjects.push_back(m_secondObject);
+	m_secondObject->init("data/models/Duck.glb");
+	m_secondObject->setScale(glm::vec3(0.01f));
+	mpv_Gameobjects.push_back(m_secondObject);
 	//mv_Gameobjects.push_back(m_MainObject);
 	// for (size_t i = 0; i < mv_Gameobjects.size(); i++)
 	// {
@@ -25,9 +25,9 @@ CraigError Craig::Scene::init() {
 CraigError Craig::Scene::update(const float& deltaTime) {
 
 	CraigError ret = CRAIG_SUCCESS;
-	for (size_t i = 0; i < mv_Gameobjects.size(); i++)
+	for (size_t i = 0; i < mpv_Gameobjects.size(); i++)
 	{
-		mv_Gameobjects[i].update();
+		mpv_Gameobjects[i]->update();
 	}
 	return ret;
 }
@@ -37,10 +37,13 @@ CraigError Craig::Scene::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-	for (size_t i = 0; i < mv_Gameobjects.size(); i++)
+	for (size_t i = 0; i < mpv_Gameobjects.size(); i++)
 	{
-		mv_Gameobjects[i].terminate();
+		mpv_Gameobjects[i]->terminate();
+		delete mpv_Gameobjects[i];
+		mpv_Gameobjects[i] = nullptr;
 	}
+	mpv_Gameobjects.clear();
 	return ret;
 }
 

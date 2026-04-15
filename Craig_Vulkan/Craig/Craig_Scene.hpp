@@ -12,10 +12,10 @@ namespace Craig {
 		CraigError update(const float& deltaTime);
 		CraigError terminate();
 
-		std::vector<Craig::GameObject>& getGameObjects() { return mv_Gameobjects; }
+		std::vector<Craig::GameObject*>& getGameObjects() { return mpv_Gameobjects; }
 	private:
 
-		std::vector<Craig::GameObject> mv_Gameobjects;
+		std::vector<Craig::GameObject*> mpv_Gameobjects;
 	};
 
 
