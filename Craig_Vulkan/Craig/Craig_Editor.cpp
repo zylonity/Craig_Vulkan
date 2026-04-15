@@ -126,84 +126,79 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	 	ImGui::Begin("Scene Details###SceneDetails", &m_ShowRendererProperties);
 
 	 	if (ImGui::CollapsingHeader("Game Objects", ImGuiTreeNodeFlags_DefaultOpen))
-	 {
-	 	// Allow the user to create a new game object.
-	 	// if (ImGui::Button("New Game Object"))
-	 	// {
-	 	// 	m_ShowNewGameObjectWindow = true;
-	 	// }
-
-	 	// Display all properties of game objects in the scene.
-	 	const std::vector<Craig::GameObject*>& gameOjects = mp_sceneManager->getCurrentScene()->getGameObjects();
-	 	for (Craig::GameObject* pGameObject : gameOjects)
 	 	{
-	 		// Separate the list a little for visibility
-	 		ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 4.0f);
 
-	 		// We have to push a different ID to each node as we're using the same ID otherwise.
-	 		ImGui::PushID(pGameObject);
-	 		if (ImGui::TreeNode("##TreeNode", "%s", pGameObject->getName().c_str()))
+	 		// Display all properties of game objects in the scene.
+	 		const std::vector<Craig::GameObject*>& gameOjects = mp_sceneManager->getCurrentScene()->getGameObjects();
+	 		for (Craig::GameObject* pGameObject : gameOjects)
 	 		{
-	 			// Allow the user to select the game object.
-	 			if ((pGameObject == nullptr || pGameObject != mp_selectedGameObject) && ImGui::Button("Select"))
-	 			{
-	 				mp_selectedGameObject = pGameObject;
-	 			}
+	 			// Separate the list a little for visibility
+	 			ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 4.0f);
 
-	 			if (mp_selectedGameObject != nullptr && pGameObject == mp_selectedGameObject)
+	 			// We have to push a different ID to each node as we're using the same ID otherwise.
+	 			ImGui::PushID(pGameObject);
+	 			if (ImGui::TreeNode("##TreeNode", "%s", pGameObject->getName().c_str()))
 	 			{
-	 				// Allow the user to deselect the game object.
-	 				if (ImGui::Button("Deselect"))
+	 				// Allow the user to select the game object.
+	 				if ((pGameObject == nullptr || pGameObject != mp_selectedGameObject) && ImGui::Button("Select"))
 	 				{
-	 					mp_selectedGameObject = nullptr;
+	 					mp_selectedGameObject = pGameObject;
 	 				}
 
-	 				// // Toggle translate mode on the selected game object.
-	 				// if (ImGui::Button("Move"))
+	 				if (mp_selectedGameObject != nullptr && pGameObject == mp_selectedGameObject)
+	 				{
+	 					// Allow the user to deselect the game object.
+	 					if (ImGui::Button("Deselect"))
+	 					{
+	 						mp_selectedGameObject = nullptr;
+	 					}
+
+	 					// // Toggle translate mode on the selected game object.
+	 					// if (ImGui::Button("Move"))
+	 					// {
+	 					// 	m_CurrentOperation = ImGuizmo::TRANSLATE;
+	 					// }
+	 					// ImGui::SameLine();
+	 					// // Toggle rotate mode on the selected game object.
+	 					// if (ImGui::Button("Rotate"))
+	 					// {
+	 					// 	m_CurrentOperation = ImGuizmo::ROTATE;
+	 					// }
+	 					// ImGui::SameLine();
+	 					// // Toggle scale mode on the selected game object.
+	 					// if (ImGui::Button("Scale"))
+	 					// {
+	 					// 	m_CurrentOperation = ImGuizmo::SCALE;
+	 					// }
+	 				}
+
+	 				// // Allow the user to delete the game object.
+	 				// if (ImGui::Button("Delete Object"))
 	 				// {
-	 				// 	m_CurrentOperation = ImGuizmo::TRANSLATE;
+	 				// 	// Remove the game object from the scene.
+	 				// 	mp_SceneManager->getCurrentScene()->deleteGameObject(pGameObject);
+					 //
+	 				// 	// If the deleted object is also the selected object remove it as being selected.
+	 				// 	if (m_SelectedObject == pGameObject)
+	 				// 	{
+	 				// 		m_SelectedObject = nullptr;
+	 				// 	}
+					 //
+	 				// 	// We have to end imgui for this frame, otherwise we get a crash as it'll try to look through the deleted object
+	 				// 	ImGui::TreePop();
+	 				// 	ImGui::PopID();
+	 				// 	break;
 	 				// }
-	 				// ImGui::SameLine();
-	 				// // Toggle rotate mode on the selected game object.
-	 				// if (ImGui::Button("Rotate"))
-	 				// {
-	 				// 	m_CurrentOperation = ImGuizmo::ROTATE;
-	 				// }
-	 				// ImGui::SameLine();
-	 				// // Toggle scale mode on the selected game object.
-	 				// if (ImGui::Button("Scale"))
-	 				// {
-	 				// 	m_CurrentOperation = ImGuizmo::SCALE;
-	 				// }
+
+	 				// Display the objects attributes
+	 				pGameObject->displayImGuiAttributes();
+
+	 				ImGui::TreePop();
 	 			}
 
-	 			// // Allow the user to delete the game object.
-	 			// if (ImGui::Button("Delete Object"))
-	 			// {
-	 			// 	// Remove the game object from the scene.
-	 			// 	mp_SceneManager->getCurrentScene()->deleteGameObject(pGameObject);
-				 //
-	 			// 	// If the deleted object is also the selected object remove it as being selected.
-	 			// 	if (m_SelectedObject == pGameObject)
-	 			// 	{
-	 			// 		m_SelectedObject = nullptr;
-	 			// 	}
-				 //
-	 			// 	// We have to end imgui for this frame, otherwise we get a crash as it'll try to look through the deleted object
-	 			// 	ImGui::TreePop();
-	 			// 	ImGui::PopID();
-	 			// 	break;
-	 			// }
-
-	 			// Display the objects attributes
-	 			//pGameObject->displayImGuiAttributes();
-
-	 			ImGui::TreePop();
-	 		}
-
-	 		ImGui::PopID();
+	 			ImGui::PopID();
+			}
 		}
-	}
 
 		ImGui::End();
 	}

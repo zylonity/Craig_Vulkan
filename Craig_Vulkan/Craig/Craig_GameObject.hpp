@@ -13,11 +13,12 @@
 
 
 namespace Craig {
+	class Scene;
 
 	class GameObject {
 
 	public:
-		CraigError init(std::string name, std::string modelPath);
+		CraigError init(std::string name, std::string modelPath, Craig::Scene* scenePtr);
 		CraigError update();
 		CraigError terminate();
 
@@ -31,6 +32,9 @@ namespace Craig {
 		const std::string& getName() const { return m_name; }
 
 		std::vector<vk::DescriptorSet>& getDescriptorSets() { return mv_VK_descriptorSets; }
+
+		void setUboIndex(size_t index) { m_uboIndex = index; }
+		size_t getUboIndex() const { return m_uboIndex; }
 
 		void displayImGuiAttributes();
 	private:
@@ -47,6 +51,10 @@ namespace Craig {
 
 		std::string m_modelPath;// = "data/models/BarramundiFish.glb";
 		std::string m_name;
+
+		size_t m_uboIndex = 0;
+
+		Craig::Scene* mp_scene;
 
 
 	};

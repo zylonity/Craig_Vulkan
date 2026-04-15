@@ -1,4 +1,4 @@
-﻿#define GLM_FORCE_RADIANS
+#define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 
 #include <cassert>
@@ -622,6 +622,7 @@ void Craig::Renderer::createDescriptorSets() {
 
             Craig::GameObject* gameObject = currentSceneObjects[object];
             gameObject->getDescriptorSets()[frame] = allSets[setIndex];
+            gameObject->setUboIndex(object);
 
             vk::DescriptorBufferInfo bufferInfo{};
             bufferInfo.setBuffer(mv_VK_uniformBuffers[setIndex])
@@ -708,19 +709,16 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
 
     m_camera.update(deltaTime);
 
-    int i = 0;
     for (Craig::GameObject* gameObject : currentSceneObjects)
     {
         UniformBufferObject ubo{};
         ubo.model = gameObject->GetModelMatrix();
         ubo.view = m_camera.getView();
         ubo.proj = m_camera.getProj();
-        size_t bufferIndex = currentImage * numObjects + i;
+        size_t bufferIndex = currentImage * numObjects + gameObject->getUboIndex();
 
 
         memcpy(mv_VK_uniformBuffersMapped[bufferIndex], &ubo, sizeof(ubo));
-
-        i++;
     }
 
 

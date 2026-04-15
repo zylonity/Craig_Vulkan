@@ -6,14 +6,18 @@
 
 #include "Craig_GameObject.hpp"
 #include "Craig_ResourceManager.hpp"
+#include "Craig_Scene.hpp"
+#include "Craig_Utilities.hpp"
 #include "imgui.h"
+#include "imgui_stdlib.h"
 
-CraigError Craig::GameObject::init(std::string name, std::string modelPath) {
+CraigError Craig::GameObject::init(std::string name, std::string modelPath, Craig::Scene* scenePtr) {
 
 	CraigError ret = CRAIG_SUCCESS;
 
 	m_modelPath = modelPath;
 	m_name = name;
+	mp_scene = scenePtr;
 	Craig::ResourceManager::getInstance().loadModel(m_modelPath);
 
 	mv3_position = { 0.0f, 0.0f, 0.0f };
@@ -65,51 +69,46 @@ CraigError Craig::GameObject::terminate() {
 void Craig::GameObject::displayImGuiAttributes()
 {
 
-	// // Show text box for the game objects name.
-	// std::string tempName = m_name;
-	// if (ImGui::InputText("Name", &tempName))
-	// {
-	// 	// Game object requires a name.
-	// 	if (tempName.empty())
-	// 	{
-	// 		ImGui::TextColored({ 1.0f, 0.f, 0.f, 1.0f }, "Name cannot be empty");
-	// 	}
-	// 	else
-	// 	{
-	// 		// Game object cannot share name with another game object in the scene.
-	// 		const GameObject* pGameObject = mp_Scene->findObject(tempName);
-	// 		if (pGameObject != nullptr && pGameObject != this)
-	// 		{
-	// 			ImGui::TextColored({ 1.0f, 0.f, 0.f, 1.0f }, "Game object already exists with that name.");
-	// 		}
-	// 		// Name has passed validation so update it.
-	// 		else
-	// 		{
-	// 			m_Name = tempName;
-	// 			// Update the game object list by sorting into alphabetical order.
-	// 			Utilities::sortGameObjectsByName(mp_Scene->getGameObjects());
-	// 		}
-	// 	}
-	// }
-	//
-	// // Display parent information.
-	// mp_Parent = Utilities::displayReferenceAttribute("Parent", mp_Parent, m_Name, mp_Scene);
-	//
-	// // Display transform details.
-	// if (ImGui::TreeNode("Transform"))
-	// {
-	// 	Utilities::displayVectorAttribute("Position", m_Position);
-	// 	Utilities::displayVectorAttribute("Rotation", m_Rotation);
-	// 	Utilities::displayVectorAttribute("Scale", m_Scale);
-	// 	ImGui::TreePop();
-	// };
-	//
-	// // Display default sprite info.
-	// if (ImGui::TreeNode("Default Sprite"))
-	// {
-	// 	Utilities::displayTextureAttribute("Default Texture", m_DefaultTextureID, "Default Frame", m_DefaultFrameID);
-	// 	ImGui::TreePop();
-	// }
+	// Show text box for the game objects name.
+	std::string tempName = m_name;
+	ImGui::InputText("Name", &tempName);
+
+	if (ImGui::IsItemDeactivatedAfterEdit())
+	{
+		// Game object requires a name.
+		if (tempName.empty())
+		{
+			ImGui::TextColored({ 1.0f, 0.f, 0.f, 1.0f }, "Name cannot be empty");
+			tempName = m_name; // Revert
+		}
+		else
+		{
+			// Game object cannot share name with another game object in the scene.
+			const GameObject* pGameObject = mp_scene->findObject(tempName);
+			if (pGameObject != nullptr && pGameObject != this)
+			{
+				ImGui::TextColored({ 1.0f, 0.f, 0.f, 1.0f }, "Game object already exists with that name.");
+				tempName = m_name; // Revert
+			}
+			// Name has passed validation so update it.
+			else
+			{
+				m_name = tempName;
+				// Update the game object list by sorting into alphabetical order.
+				Utilities::sortGameObjectsByName(mp_scene->getGameObjects());
+			}
+		}
+	}
+
+	// Display transform details.
+	if (ImGui::TreeNode("Transform"))
+	{
+		Utilities::displayVectorAttribute("Position", mv3_position);
+		Utilities::displayVectorAttribute("Rotation", mv3_rotation);
+		Utilities::displayVectorAttribute("Scale", mv3_scale);
+		ImGui::TreePop();
+	};
+
 }
 
 void Craig::GameObject::setPosition(glm::vec3 position)
