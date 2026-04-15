@@ -17,7 +17,7 @@ namespace Craig {
 			vk::Device     device;
 			vk::Format		colorFormat;
 			vk::Format		depthFormat;
-			vk::SampleCountFlagBits msaaSamples;
+			vk::SampleCountFlagBits* msaaSamples;
 
 		};
 
@@ -42,7 +42,7 @@ namespace Craig {
 		vk::Device		mPipe_device;
 		vk::Format		mPipe_colorFormat;
 		vk::Format		mPipe_depthFormat;
-		vk::SampleCountFlagBits mPipe_msaaSamples;
+		vk::SampleCountFlagBits* mPipe_msaaSamples;
 
 		void createGraphicsPipeline();
 		void cleanupGraphicsPipeline();

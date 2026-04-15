@@ -7,6 +7,7 @@
 namespace Craig {
 
 	//Forward declarations
+	class SceneManager;
 	class Renderer;
 	class Camera;
 
@@ -18,6 +19,7 @@ namespace Craig {
 		CraigError terminate();
 
 		void setRenderer(Craig::Renderer* pRenderer) { mp_renderer = pRenderer; };
+		void setSceneManager(Craig::SceneManager* pSceneManager) { mp_sceneManager = pSceneManager; };
 		void setCamera(Craig::Camera* pCamera) { mp_camera = pCamera; };
 
 		//===============================================================================
@@ -41,6 +43,7 @@ namespace Craig {
 		bool m_ShowSceneDetails = false;
 
 		Craig::Renderer* mp_renderer;
+		Craig::SceneManager* mp_sceneManager;
 		Craig::Camera* mp_camera;
 
 		int m_currentMipLevel = 0;

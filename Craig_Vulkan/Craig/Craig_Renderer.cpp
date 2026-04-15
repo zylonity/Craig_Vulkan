@@ -173,7 +173,7 @@ void Craig::Renderer::InitVulkan() {
     pipelineInitInfo.device = m_Devices.getLogicalDevice();
     pipelineInitInfo.colorFormat = m_swapChain.getImageFormat();
     pipelineInitInfo.depthFormat = m_renderingAttachments.findDepthFormat();
-    pipelineInitInfo.msaaSamples = m_renderingAttachments.m_VK_msaaSamples;
+    pipelineInitInfo.msaaSamples = &m_renderingAttachments.m_VK_msaaSamples;
 
     m_pipeline.init(pipelineInitInfo);
 

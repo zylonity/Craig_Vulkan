@@ -42,7 +42,7 @@ namespace Craig {
 		void refreshSwapChain() { recreateSwapChain(); };
 		void createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels, Texture* outTexture);
 
-		const uint32_t& getMaxLOD() const { return 1; };
+		const uint32_t& getMaxLOD() const { return 3; };
 		void updateMinLOD(int minLOD);
 
 		//const uint32_t& getMaxSamplingLevel() const { return m_MaxSamplingLevel; };
@@ -121,15 +121,7 @@ namespace Craig {
 		Craig::CommandManager m_commandManager;
 
 		
-		// // Sync
-		// uint32_t m_currentFrame = 0;
-		//
-		// std::vector<vk::Semaphore> mv_VK_imageAvailableSemaphores;
-		// std::vector<vk::Semaphore> mv_VK_renderFinishedSemaphores;
-		//
-		// // Timeline semaphore (optional sync style)
-		// vk::Semaphore m_VK_timelineSemaphore;
-		// uint64_t      m_sempahoreTimelineValue = 0;
+		// Sync
 		Craig::SyncManager m_syncManager;
 
 		
@@ -156,6 +148,7 @@ namespace Craig {
 		
 		// Texture
 		vk::Sampler   m_VK_textureSampler;
+
 
 		
 		// VMA allocator / pools

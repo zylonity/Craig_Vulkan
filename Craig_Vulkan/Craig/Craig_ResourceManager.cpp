@@ -90,7 +90,7 @@ void Craig::ResourceManager::loadModel(std::string modelPath) {
         printf("model found \n");
     }
 
-    Craig::Model m_testModel;
+    Craig::Model tempModel;
 
     int i = 0;
     // iterate all meshes / primitives, no scene graph yet
@@ -226,19 +226,19 @@ void Craig::ResourceManager::loadModel(std::string modelPath) {
                         int comp = img.component; // usually 4 (RGBA)
 
                         // createVulkanTextureFromPixels(pixels, width, height, comp);
-                        m_renderer->createTextureImage2(pixels, width, height, comp, &m_testModel.m_texture);
+                        m_renderer->createTextureImage2(pixels, width, height, comp, &tempModel.m_texture);
                     }
                 }
             }
 
         }
 
-        m_testModel.subMeshes.push_back(tempMesh);
+        tempModel.subMeshes.push_back(tempMesh);
     }
 
-    m_testModel.subMeshesCount = i;
+    tempModel.subMeshesCount = i;
 
-    m_loadedModels.insert({modelPath, m_testModel});
+    m_loadedModels.insert({modelPath, tempModel});
 }
 
 void Craig::ResourceManager::terminateModels(const vk::Device& device, const VmaAllocator& memoryAllocator) {

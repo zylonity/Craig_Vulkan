@@ -31,6 +31,7 @@ CraigError Craig::Framework::init() {
 	assert(ret == CRAIG_SUCCESS);
 
 	Craig::ImguiEditor::getInstance().setRenderer(mp_Renderer);
+	Craig::ImguiEditor::getInstance().setSceneManager(mp_SceneManager);
 	Craig::ResourceManager::getInstance().init(mp_Renderer); // Initialize the Resource Manager Singleton, this needs to be done before the renderer
 
 	ret = mp_Renderer->init(mp_Window, mp_SceneManager);

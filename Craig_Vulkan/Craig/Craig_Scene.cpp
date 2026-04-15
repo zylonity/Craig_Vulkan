@@ -10,8 +10,8 @@ CraigError Craig::Scene::init() {
 	m_MainObject.setPosition({m_MainObject.getPosition().x, m_MainObject.getPosition().y - 15, m_MainObject.getPosition().z});
 	mv_Gameobjects.push_back(m_MainObject);
 
-	m_secondObject.init("data/models/BarramundiFish.glb");
-	//m_secondObject.setScale(glm::vec3(0.05f));
+	m_secondObject.init("data/models/Duck.glb");
+	m_secondObject.setScale(glm::vec3(0.01f));
 	mv_Gameobjects.push_back(m_secondObject);
 	//mv_Gameobjects.push_back(m_MainObject);
 	// for (size_t i = 0; i < mv_Gameobjects.size(); i++)

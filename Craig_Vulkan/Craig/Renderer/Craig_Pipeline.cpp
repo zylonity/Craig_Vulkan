@@ -80,7 +80,7 @@ void Craig::Pipeline::createGraphicsPipeline() {
     vk::PipelineMultisampleStateCreateInfo multisampling{};
     multisampling
         .setSampleShadingEnable(vk::False)
-        .setRasterizationSamples(mPipe_msaaSamples);
+        .setRasterizationSamples(*mPipe_msaaSamples);
 
     vk::PipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil
