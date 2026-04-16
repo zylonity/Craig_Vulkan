@@ -1,5 +1,6 @@
-Texture2D texSampler : register(t1);
-SamplerState texSamplerState : register(s1);
+// Set 1, binding 0 - per-object texture. Rebinds each draw.
+[[vk::binding(0, 1)]] Texture2D texSampler;
+[[vk::binding(0, 1)]] SamplerState texSamplerState;
 
 struct PSInput
 {

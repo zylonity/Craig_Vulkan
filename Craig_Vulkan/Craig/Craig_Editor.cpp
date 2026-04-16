@@ -174,23 +174,23 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	 					}
 	 				}
 
-	 				// // Allow the user to delete the game object.
-	 				// if (ImGui::Button("Delete Object"))
-	 				// {
-	 				// 	// Remove the game object from the scene.
-	 				// 	mp_SceneManager->getCurrentScene()->deleteGameObject(pGameObject);
-					 //
-	 				// 	// If the deleted object is also the selected object remove it as being selected.
-	 				// 	if (m_SelectedObject == pGameObject)
-	 				// 	{
-	 				// 		m_SelectedObject = nullptr;
-	 				// 	}
-					 //
-	 				// 	// We have to end imgui for this frame, otherwise we get a crash as it'll try to look through the deleted object
-	 				// 	ImGui::TreePop();
-	 				// 	ImGui::PopID();
-	 				// 	break;
-	 				// }
+	 				// Allow the user to delete the game object.
+	 				if (ImGui::Button("Delete Object"))
+	 				{
+	 					// Remove the game object from the scene.
+	 					mp_renderer->deleteGameObject(pGameObject);
+
+	 					// If the deleted object is also the selected object remove it as being selected.
+	 					if (mp_selectedGameObject == pGameObject)
+	 					{
+	 						mp_selectedGameObject = nullptr;
+	 					}
+
+	 					// We have to end imgui for this frame, otherwise we get a crash as it'll try to look through the deleted object
+	 					ImGui::TreePop();
+	 					ImGui::PopID();
+	 					break;
+	 				}
 
 	 				// Display the objects attributes
 	 				pGameObject->displayImGuiAttributes();

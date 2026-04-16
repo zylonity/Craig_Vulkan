@@ -30,6 +30,7 @@ namespace Craig {
 	//Forward declarations
 	class Window;
 	class SceneManager;
+	class GameObject;
 
 	class Renderer {
 
@@ -51,13 +52,23 @@ namespace Craig {
 
 		const glm::vec2 getWindowSize() const;
 
+		void deleteGameObject(Craig::GameObject* gameObject);
+
 	private:
-		
-		struct UniformBufferObject {
+		struct PerObjectData {
 			glm::mat4 model;
+		};
+
+		struct CameraData {
 			glm::mat4 view;
 			glm::mat4 proj;
 		};
+
+		// struct UniformBufferObject {
+		// 	glm::mat4 model;
+		// 	glm::mat4 view;
+		// 	glm::mat4 proj;
+		// };
 		
 		// Core init / teardown
 		void InitVulkan();                 // Full Vulkan bring-up
@@ -74,7 +85,8 @@ namespace Craig {
 		// Buffers / per-frame data
 		void createVertexBuffer();
 		void createIndexBuffer();
-		void createUniformBuffers();
+		//void createUniformBuffers();
+		void createUniformBuffers2();
 		void updateUniformBuffer(uint32_t currentImage, const float& deltaTime);
 
 		
@@ -134,12 +146,16 @@ namespace Craig {
 
 		
 		// Uniforms / descriptors
-		std::vector<vk::Buffer>    mv_VK_uniformBuffers;
-		std::vector<VmaAllocation> mv_VK_uniformBuffersAllocations;
-		std::vector<void*>        mv_VK_uniformBuffersMapped;
+		std::vector<vk::Buffer>    mv_VK_storageBuffers;
+		std::vector<VmaAllocation> mv_VK_storageBuffersAllocations;
+		std::vector<void*>        mv_VK_storageBuffersMapped;
+
+		std::vector<vk::Buffer> mv_viewProjUboBuffer;
+		std::vector<VmaAllocation> mv_viewProjUboAllocation;
+		std::vector<void*> mv_viewProjUboMap;
 
 		vk::DescriptorPool              m_VK_descriptorPool;
-		//std::vector<vk::DescriptorSet>  mv_VK_descriptorSets;
+		std::vector<vk::DescriptorSet>	mv_VK_perFrameDescriptorSet;
 
 
 		uint32_t m_minLODLevel = 0;        // User-selected min LOD clamp

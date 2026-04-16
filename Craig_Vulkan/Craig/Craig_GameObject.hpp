@@ -38,14 +38,11 @@ namespace Craig {
 		const std::string& getModelPath() const { return m_modelPath; }
 		const std::string& getName() const { return m_name; }
 
-		std::vector<vk::DescriptorSet>& getDescriptorSets() { return mv_VK_descriptorSets; }
-
-		void setUboIndex(size_t index) { m_uboIndex = index; }
-		size_t getUboIndex() const { return m_uboIndex; }
+		vk::DescriptorSet& getDescriptorSet() { return m_VK_descriptorSet; }
 
 		void displayImGuiAttributes();
 	private:
-		std::vector<vk::DescriptorSet> mv_VK_descriptorSets = std::vector<vk::DescriptorSet>(kMaxFramesInFlight);
+		vk::DescriptorSet m_VK_descriptorSet;
 
 		void updateModelMatrix();
 
@@ -59,8 +56,6 @@ namespace Craig {
 
 		std::string m_modelPath;// = "data/models/BarramundiFish.glb";
 		std::string m_name;
-
-		size_t m_uboIndex = 0;
 
 		Craig::Scene* mp_scene;
 

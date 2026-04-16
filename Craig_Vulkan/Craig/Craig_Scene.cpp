@@ -1,5 +1,7 @@
 #include "Craig_Scene.hpp"
 
+#include "Craig_Utilities.hpp"
+
 CraigError Craig::Scene::init() {
 
 	CraigError ret = CRAIG_SUCCESS;
@@ -35,6 +37,23 @@ Craig::GameObject* Craig::Scene::findObject(const std::string& objectName) const
 	);
 
 	return it != mpv_Gameobjects.end() ? *it : nullptr;
+}
+
+void Craig::Scene::deleteGameObject(GameObject* const pObject)
+{
+	assert(pObject != nullptr);
+
+	// Clean up the object's resouces
+	pObject->terminate();
+
+	// Remove the game object from the scene objects
+	std::erase(mpv_Gameobjects, pObject);
+
+	// Sort the editor game object list by alphabetical order.
+	Utilities::sortGameObjectsByName(mpv_Gameobjects);
+
+	// Free the memory allocated for the game object
+	delete pObject;
 }
 
 CraigError Craig::Scene::update(const float& deltaTime) {

@@ -118,9 +118,21 @@ void Craig::Pipeline::createGraphicsPipeline() {
         .setPDynamicStates(dynamicStates.data());
 
 
+    vk::PushConstantRange pushRange{};
+    pushRange
+        .setStageFlags(vk::ShaderStageFlagBits::eVertex)
+        .setOffset(0)
+        .setSize(sizeof(uint32_t));
+
+    std::array setLayouts = { m_VK_perFrameSetLayout, m_VK_perObjectSetLayout };
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.setSetLayoutCount(1)
-        .setSetLayouts(m_VK_descriptorSetLayout);
+    pipelineLayoutInfo
+        .setSetLayouts(setLayouts)
+        .setPushConstantRanges(pushRange);
+
+    
+
+
 
     try {
         m_VK_pipelineLayout = mPipe_device.createPipelineLayout(pipelineLayoutInfo);
@@ -197,29 +209,46 @@ void Craig::Pipeline::cleanupGraphicsPipeline() {
 //A descriptor set specifies the actual buffer or image resources that will be bound to the descriptors, just like a framebuffer specifies the actual image views to bind to render pass attachments.
 void Craig::Pipeline::createDescriptorSetLayout() {
 
-    vk::DescriptorSetLayoutBinding uboLayoutBinding{};
-    uboLayoutBinding
+
+    vk::DescriptorSetLayoutBinding cameraLayoutBinding{};
+    cameraLayoutBinding
         .setBinding(0)
         .setDescriptorType(vk::DescriptorType::eUniformBuffer)
         .setDescriptorCount(1)
         .setStageFlags(vk::ShaderStageFlagBits::eVertex);
 
-    vk::DescriptorSetLayoutBinding samplerLayourBinding{};
-    samplerLayourBinding
+    vk::DescriptorSetLayoutBinding storageBufferLayoutBinding{};
+    storageBufferLayoutBinding
         .setBinding(1)
+        .setDescriptorType(vk::DescriptorType::eStorageBuffer)
+        .setDescriptorCount(1)
+        .setStageFlags(vk::ShaderStageFlagBits::eVertex);
+
+    std::array<vk::DescriptorSetLayoutBinding, 2> perFrameBindings = { cameraLayoutBinding, storageBufferLayoutBinding };
+
+    vk::DescriptorSetLayoutCreateInfo perFrameLayoutInfo{};
+    perFrameLayoutInfo
+        .setBindingCount(static_cast<uint32_t>(perFrameBindings.size()))
+        .setBindings(perFrameBindings);
+
+    m_VK_perFrameSetLayout = mPipe_device.createDescriptorSetLayout(perFrameLayoutInfo);
+
+    vk::DescriptorSetLayoutBinding samplerLayoutBinding{};
+    samplerLayoutBinding
+        .setBinding(0)
         .setDescriptorCount(1)
         .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
         .setPImmutableSamplers(nullptr)
         .setStageFlags(vk::ShaderStageFlagBits::eFragment);
 
-    std::array<vk::DescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayourBinding };
+    std::array<vk::DescriptorSetLayoutBinding, 1> perObjectBindings = { samplerLayoutBinding };
 
-    vk::DescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo
-        .setBindingCount(static_cast<uint32_t>(bindings.size()))
-        .setBindings(bindings);
+    vk::DescriptorSetLayoutCreateInfo perObjectLayoutInfo{};
+    perObjectLayoutInfo
+        .setBindingCount(static_cast<uint32_t>(perObjectBindings.size()))
+        .setBindings(perObjectBindings);
 
-    m_VK_descriptorSetLayout = mPipe_device.createDescriptorSetLayout(layoutInfo);
+    m_VK_perObjectSetLayout = mPipe_device.createDescriptorSetLayout(perObjectLayoutInfo);
 
 
 }
@@ -229,7 +258,8 @@ CraigError Craig::Pipeline::terminate() {
 	CraigError ret = CRAIG_SUCCESS;
 
     cleanupGraphicsPipeline();
-    mPipe_device.destroyDescriptorSetLayout(m_VK_descriptorSetLayout);
+    mPipe_device.destroyDescriptorSetLayout(m_VK_perFrameSetLayout);
+    mPipe_device.destroyDescriptorSetLayout(m_VK_perObjectSetLayout);
 
 	return ret;
 }

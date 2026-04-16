@@ -19,6 +19,7 @@ namespace Craig {
 		Craig::GameObject* findObject(const std::string& objectName) const;
 
 		Craig::Camera& getCamera() { return m_camera; }
+		void deleteGameObject(Craig::GameObject* gameObject);
 	private:
 
 		std::vector<Craig::GameObject*> mpv_Gameobjects;

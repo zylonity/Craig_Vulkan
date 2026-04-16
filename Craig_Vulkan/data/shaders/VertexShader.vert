@@ -1,9 +1,26 @@
-cbuffer UniformBufferObject : register(b0)
+// Set 0, binding 0 - per-frame camera data (view + proj). Same for every object this frame.
+[[vk::binding(0, 0)]]
+cbuffer CameraData
 {
-    float4x4 model;
     float4x4 view;
     float4x4 proj;
 };
+
+// Set 0, binding 1 - big array of per-object transforms. We index into it using the push constant.
+struct PerObjectData
+{
+    float4x4 model;
+};
+
+[[vk::binding(1, 0)]]
+StructuredBuffer<PerObjectData> transforms;
+
+// Push constant, tells the shader which slot of the transforms array to read for this draw.
+struct PushConstants
+{
+    uint objectIndex;
+};
+[[vk::push_constant]] PushConstants pc;
 
 struct VSInput
 {
@@ -24,17 +41,20 @@ struct VSOutput
 VSOutput main(VSInput input)
 {
     VSOutput output;
-    
+
     float4 worldPos = float4(input.pos, 1.0);
-    
+
+    // Grab this object's model matrix from the SSBO using the push-constant index.
+    float4x4 model = transforms[pc.objectIndex].model;
+
     //Apply MVP
     worldPos = mul(model, worldPos); //Apply model matrix
     worldPos = mul(view, worldPos); //Apply view matrix
     worldPos = mul(proj, worldPos); //Apply projection matrix
-    
+
     output.pos = worldPos;
     output.color = input.color;
     output.texCoord = input.texCoord;
-    
+
     return output;
 }

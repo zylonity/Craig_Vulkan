@@ -27,7 +27,8 @@ namespace Craig {
 		void recreate();
 
 		const vk::Pipeline getGraphicsPipeline() const { return m_VK_graphicsPipeline; }
-		const vk::DescriptorSetLayout getDescriptorSetLayout() const { return m_VK_descriptorSetLayout; }
+		const vk::DescriptorSetLayout getPerFrameDescriptorSetLayout() const { return m_VK_perFrameSetLayout; }
+		const vk::DescriptorSetLayout getPerObjectDescriptorSetLayout() const { return m_VK_perObjectSetLayout; }
 		const vk::PipelineLayout getPipelineLayout() const { return m_VK_pipelineLayout; }
 
 	private:
@@ -35,7 +36,8 @@ namespace Craig {
 		vk::ShaderModule       m_VK_vertShaderModule;
 		vk::ShaderModule       m_VK_fragShaderModule;
 
-		vk::DescriptorSetLayout m_VK_descriptorSetLayout;
+		vk::DescriptorSetLayout m_VK_perFrameSetLayout;
+		vk::DescriptorSetLayout m_VK_perObjectSetLayout;
 		vk::PipelineLayout      m_VK_pipelineLayout;
 		vk::Pipeline            m_VK_graphicsPipeline;
 

@@ -190,7 +190,7 @@ void Craig::Renderer::InitVulkan() {
     createTextureSampler();
     createVertexBuffer();
     createIndexBuffer();
-    createUniformBuffers();
+    createUniformBuffers2();
     createDescriptorPool();
     createDescriptorSets();
 
@@ -200,13 +200,13 @@ void Craig::Renderer::InitVulkan() {
 
     m_syncManager.init(syncManagerInitInfo);
 
+    mp_CurrentWindow->setCameraRef(&mp_SceneManager->getCurrentScene()->getCamera());
 
 #if defined(IMGUI_ENABLED)
     createImguiDescriptorPool();
+    Craig::ImguiEditor::getInstance().setCamera(&mp_SceneManager->getCurrentScene()->getCamera());
 #endif
 
-    mp_CurrentWindow->setCameraRef(&mp_SceneManager->getCurrentScene()->getCamera());
-    Craig::ImguiEditor::getInstance().setCamera(&mp_SceneManager->getCurrentScene()->getCamera());
 }
 
 void Craig::Renderer::recreateSwapChain() {
@@ -350,9 +350,34 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
     Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
-    for (Craig::GameObject* gameObject : currentSceneObjects)
+    // Per-frame set (camera UBO + transforms SSBO) only needs binding once per frame, it stays bound for every draw after.
+    commandBuffer.bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics,
+        m_pipeline.getPipelineLayout(),
+        0, // set 0
+        mv_VK_perFrameDescriptorSet[m_syncManager.getCurrentFrame()],
+        nullptr);
+
+    for (size_t objectIdx = 0; objectIdx < currentSceneObjects.size(); objectIdx++)
     {
-        commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, m_pipeline.getPipelineLayout(), 0, gameObject->getDescriptorSets()[m_syncManager.getCurrentFrame()], nullptr);
+        Craig::GameObject* gameObject = currentSceneObjects[objectIdx];
+
+        // Per-object set (just the texture) goes into set 1, rebinds each draw since the texture differs.
+        commandBuffer.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics,
+            m_pipeline.getPipelineLayout(),
+            1, // set 1
+            gameObject->getDescriptorSet(),
+            nullptr);
+
+        // Tell the vertex shader which slot of the SSBO to read for this object's model matrix.
+        uint32_t objectIndex = static_cast<uint32_t>(objectIdx);
+        commandBuffer.pushConstants(
+            m_pipeline.getPipelineLayout(),
+            vk::ShaderStageFlagBits::eVertex,
+            0,
+            sizeof(uint32_t),
+            &objectIndex);
 
         Craig::Model& model = resources.getModel(gameObject->getModelPath());
         for (size_t i = 0; i < model.subMeshesCount; i++)
@@ -550,114 +575,138 @@ void Craig::Renderer::createIndexBuffer() {
     vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
 }
 
-void Craig::Renderer::createUniformBuffers() {
-    std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
-    size_t numObjects = currentSceneObjects.size();
-
-    vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
-
-    vk::Buffer stagingBuffer{};
-    VmaAllocation stagingAlloc{};
-
-    VmaAllocationCreateInfo stagingAci{};
-    stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
-    stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-    stagingAci.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-
-    mv_VK_uniformBuffers.resize(kMaxFramesInFlight * numObjects);
-    mv_VK_uniformBuffersAllocations.resize(kMaxFramesInFlight * numObjects);
-    mv_VK_uniformBuffersMapped.resize(kMaxFramesInFlight * numObjects);
-
-    for (size_t i = 0; i < kMaxFramesInFlight * numObjects; i++)
-    {
-        VmaAllocationInfo info{};
-        m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, stagingAci, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i], &info);
-
-        mv_VK_uniformBuffersMapped[i] = info.pMappedData;
-
-    }
-
-
-}
+// void Craig::Renderer::createUniformBuffers() {
+//     std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
+//     size_t numObjects = currentSceneObjects.size();
+//
+//     vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+//
+//     vk::Buffer stagingBuffer{};
+//     VmaAllocation stagingAlloc{};
+//
+//     VmaAllocationCreateInfo stagingAci{};
+//     stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
+//     stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+//     stagingAci.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+//
+//     mv_VK_uniformBuffers.resize(kMaxFramesInFlight * numObjects);
+//     mv_VK_uniformBuffersAllocations.resize(kMaxFramesInFlight * numObjects);
+//     mv_VK_uniformBuffersMapped.resize(kMaxFramesInFlight * numObjects);
+//
+//     for (size_t i = 0; i < kMaxFramesInFlight * numObjects; i++)
+//     {
+//         VmaAllocationInfo info{};
+//         m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, stagingAci, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i], &info);
+//
+//         mv_VK_uniformBuffersMapped[i] = info.pMappedData;
+//
+//     }
+//
+//
+// }
 
 void Craig::Renderer::createDescriptorPool() {
-    std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
 
-    std::array<vk::DescriptorPoolSize, 2> poolSizes;
+    std::array<vk::DescriptorPoolSize, 3> poolSizes;
     poolSizes[0]
         .setType(vk::DescriptorType::eUniformBuffer)
-        .setDescriptorCount(static_cast<uint32_t>(kMaxFramesInFlight * currentSceneObjects.size()));
+        .setDescriptorCount(kMaxFramesInFlight);
     poolSizes[1]
+        .setType(vk::DescriptorType::eStorageBuffer)
+        .setDescriptorCount(kMaxFramesInFlight);
+    poolSizes[2]
         .setType(vk::DescriptorType::eCombinedImageSampler)
-        .setDescriptorCount(static_cast<uint32_t>(kMaxFramesInFlight * currentSceneObjects.size()));
+        .setDescriptorCount(kMaxNumObjects);
+
 
     vk::DescriptorPoolCreateInfo poolInfo{};
     poolInfo
-        .setPoolSizeCount(static_cast<uint32_t>(poolSizes.size()))
         .setPoolSizes(poolSizes)
-        .setMaxSets(static_cast<uint32_t>(kMaxFramesInFlight * currentSceneObjects.size()));
+        .setMaxSets(kMaxFramesInFlight + kMaxNumObjects);
 
     m_VK_descriptorPool = m_Devices.getLogicalDevice().createDescriptorPool(poolInfo);
 
 }
 
+//for my own sanity
+//descriptor sets are basically just the way we pass stuff to the shaders/GPU, so in my case i have 2 descriptor sets, one with the UBO and one with the image sampler
 void Craig::Renderer::createDescriptorSets() {
-    std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
-    Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
-    size_t numObjects = currentSceneObjects.size();
-    size_t totalSets = kMaxFramesInFlight * numObjects;
+    std::vector<vk::DescriptorSetLayout> perFramelayouts(kMaxFramesInFlight, m_pipeline.getPerFrameDescriptorSetLayout());
 
-    std::vector<vk::DescriptorSetLayout> layouts(totalSets, m_pipeline.getDescriptorSetLayout());
-    vk::DescriptorSetAllocateInfo allocInfo{};
-    allocInfo.setDescriptorPool(m_VK_descriptorPool)
-        .setDescriptorSetCount(static_cast<uint32_t>(totalSets))
-        .setSetLayouts(layouts);
+    vk::DescriptorSetAllocateInfo perFrameAllocInfo{};
+    perFrameAllocInfo.setDescriptorPool(m_VK_descriptorPool)
+        .setDescriptorSetCount(kMaxFramesInFlight)
+        .setSetLayouts(perFramelayouts);
 
-    std::vector<vk::DescriptorSet> allSets = m_Devices.getLogicalDevice().allocateDescriptorSets(allocInfo);
+    mv_VK_perFrameDescriptorSet = m_Devices.getLogicalDevice().allocateDescriptorSets(perFrameAllocInfo);
+    std::array<vk::WriteDescriptorSet, 2> perFrameWrites{};
 
     for (size_t frame = 0; frame < kMaxFramesInFlight; frame++)
     {
-        for (size_t object = 0; object < numObjects; object++)
-        {
-            size_t setIndex = frame * numObjects + object;
+        vk::DescriptorBufferInfo cameraBufferInfo{};
+        cameraBufferInfo.setBuffer(mv_viewProjUboBuffer[frame])
+            .setOffset(0)
+            .setRange(sizeof(CameraData));
 
-            Craig::GameObject* gameObject = currentSceneObjects[object];
-            gameObject->getDescriptorSets()[frame] = allSets[setIndex];
-            gameObject->setUboIndex(object);
+        vk::DescriptorBufferInfo modelUboBufferInfo{};
+        modelUboBufferInfo.setBuffer(mv_VK_storageBuffers[frame])
+            .setOffset(0)
+            .setRange(sizeof(PerObjectData) * kMaxNumObjects);
 
-            vk::DescriptorBufferInfo bufferInfo{};
-            bufferInfo.setBuffer(mv_VK_uniformBuffers[setIndex])
-                .setOffset(0)
-                .setRange(sizeof(UniformBufferObject));
+        perFrameWrites[0]
+            .setDstSet(mv_VK_perFrameDescriptorSet[frame])
+            .setDstBinding(0)
+            .setDstArrayElement(0)
+            .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+            .setDescriptorCount(1)
+            .setBufferInfo(cameraBufferInfo);
+        perFrameWrites[1]
+            .setDstSet(mv_VK_perFrameDescriptorSet[frame])
+            .setDstBinding(1)
+            .setDstArrayElement(0)
+            .setDescriptorType(vk::DescriptorType::eStorageBuffer)
+            .setDescriptorCount(1)
+            .setBufferInfo(modelUboBufferInfo);
 
-            vk::DescriptorImageInfo imageInfo{};
-            imageInfo
-                .setImageView(resources.getModel(gameObject->getModelPath()).m_texture.m_VK_textureImageView)
-                .setSampler(m_VK_textureSampler)
-                .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
-
-            std::array<vk::WriteDescriptorSet, 2> descriptorWrites{};
-            descriptorWrites[0]
-                .setDstSet(allSets[setIndex])
-                .setDstBinding(0)
-                .setDstArrayElement(0)
-                .setDescriptorType(vk::DescriptorType::eUniformBuffer)
-                .setDescriptorCount(1)
-                .setBufferInfo(bufferInfo);
-
-            descriptorWrites[1]
-                .setDstSet(allSets[setIndex])
-                .setDstBinding(1)
-                .setDstArrayElement(0)
-                .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-                .setDescriptorCount(1)
-                .setImageInfo(imageInfo);
-
-            m_Devices.getLogicalDevice().updateDescriptorSets(descriptorWrites, nullptr);
-
-        }
+        m_Devices.getLogicalDevice().updateDescriptorSets(perFrameWrites, nullptr);
     }
+
+    std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
+    Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
+    size_t numObjects = currentSceneObjects.size();
+
+    std::vector<vk::DescriptorSetLayout> perObjectLayouts(numObjects, m_pipeline.getPerObjectDescriptorSetLayout());
+
+    vk::DescriptorSetAllocateInfo perObjectAllocInfo{};
+    perObjectAllocInfo.setDescriptorPool(m_VK_descriptorPool)
+        .setDescriptorSetCount(numObjects)
+        .setSetLayouts(perObjectLayouts);
+
+
+    std::array<vk::WriteDescriptorSet, 1> perObjectWrites{};
+    auto perObjectSets = m_Devices.getLogicalDevice().allocateDescriptorSets(perObjectAllocInfo);
+    for (size_t object = 0; object < numObjects; object++)
+    {
+        currentSceneObjects[object]->getDescriptorSet() = perObjectSets[object];
+        vk::DescriptorImageInfo imageInfo{};
+        imageInfo
+            .setImageView(resources.getModel(currentSceneObjects[object]->getModelPath()).m_texture.m_VK_textureImageView)
+            .setSampler(m_VK_textureSampler)
+            .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+        perObjectWrites[0]
+            .setDstSet(currentSceneObjects[object]->getDescriptorSet())
+            .setDstBinding(0)
+            .setDstArrayElement(0)
+            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+            .setDescriptorCount(1)
+            .setImageInfo(imageInfo);
+
+        m_Devices.getLogicalDevice().updateDescriptorSets(perObjectWrites, nullptr);
+    }
+
+
 
 }
 
@@ -679,7 +728,7 @@ void Craig::Renderer::updateDescriptorSets() {
 
             vk::WriteDescriptorSet descriptorWrite{};
             descriptorWrite
-                .setDstSet(gameObject->getDescriptorSets()[i])
+                .setDstSet(gameObject->getDescriptorSet())
                 .setDstBinding(1)
                 .setDstArrayElement(0)
                 .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
@@ -693,13 +742,52 @@ void Craig::Renderer::updateDescriptorSets() {
 
 }
 
-//TODO: Separate camera
+// Sets up our two GPU buffers: the big SSBO holding every object's model matrix, and a tiny UBO for the camera's view/proj.
+// We make kMaxFramesInFlight copies of each so the CPU and GPU aren't fighting over the same memory.
+void Craig::Renderer::createUniformBuffers2() {
+
+    // Host visible + mapped so we can just write into it from the CPU every frame, no staging buffer needed.
+    VmaAllocationCreateInfo stagingAci{};
+    stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
+    stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    stagingAci.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+    // The SSBO: one big array holding per-object data (just model matrix for now). One buffer per frame-in-flight,
+    // oversized for kMaxNumObjects so adding/removing gameobjects doesn't need a reallocation.
+    mv_VK_storageBuffers.resize(kMaxFramesInFlight);
+    mv_VK_storageBuffersAllocations.resize(kMaxFramesInFlight);
+    mv_VK_storageBuffersMapped.resize(kMaxFramesInFlight);
+
+    vk::DeviceSize storageBufferSize = kMaxNumObjects * sizeof(PerObjectData);
+    for (size_t i = 0; i < kMaxFramesInFlight; i++)
+    {
+        VmaAllocationInfo info{};
+        m_Devices.createBufferVMA(storageBufferSize, vk::BufferUsageFlagBits::eStorageBuffer, stagingAci, mv_VK_storageBuffers[i], mv_VK_storageBuffersAllocations[i], &info);
+
+        mv_VK_storageBuffersMapped[i] = info.pMappedData;
+    }
+
+
+    // The camera UBO: tiny, just view + proj. Still one per frame-in-flight though, the camera moves every frame so
+    // the GPU might still be reading last frame's copy while we write the new one.
+    mv_viewProjUboBuffer.resize(kMaxFramesInFlight);
+    mv_viewProjUboAllocation.resize(kMaxFramesInFlight);
+    mv_viewProjUboMap.resize(kMaxFramesInFlight);
+
+    vk::DeviceSize viewProjBufferSize = sizeof(CameraData);
+    for (size_t i = 0; i < kMaxFramesInFlight; i++)
+    {
+        VmaAllocationInfo info2{};
+        m_Devices.createBufferVMA(viewProjBufferSize, vk::BufferUsageFlagBits::eUniformBuffer, stagingAci, mv_viewProjUboBuffer[i], mv_viewProjUboAllocation[i], &info2);
+        mv_viewProjUboMap[i] = info2.pMappedData;
+    }
+
+
+}
+
+// UBO deals with where a thing is and how to project it, but the thing itself is held within the vertex buffer.
+// Only writes to currentImage's buffers cos the other frame-in-flight copies might still be in use by the GPU.
 void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& deltaTime) {
-
-    static auto startTime = std::chrono::high_resolution_clock::now();
-
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
     Craig::Camera& camera = mp_SceneManager->getCurrentScene()->getCamera();
 
@@ -708,24 +796,23 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
     std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
     Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
-    size_t numObjects = currentSceneObjects.size();
-
     camera.update(deltaTime);
 
-    for (Craig::GameObject* gameObject : currentSceneObjects)
+    // Write each gameobject's current model matrix into its slot in this frame's SSBO.
+    // The shader will index into this array to grab the right transform for the object it's drawing.
+    auto* dst = static_cast<PerObjectData*>(mv_VK_storageBuffersMapped[currentImage]);
+    for (size_t gObj = 0; gObj < currentSceneObjects.size(); gObj++)
     {
-        UniformBufferObject ubo{};
-        ubo.model = gameObject->GetModelMatrix();
-        ubo.view = camera.getView();
-        ubo.proj = camera.getProj();
-        size_t bufferIndex = currentImage * numObjects + gameObject->getUboIndex();
-
-
-        memcpy(mv_VK_uniformBuffersMapped[bufferIndex], &ubo, sizeof(ubo));
+        dst[gObj].model = currentSceneObjects[gObj]->GetModelMatrix();
     }
 
 
-
+    // View and proj are the same for every object this frame, so we write them once into the camera UBO rather than
+    // stuffing a copy into every object's slot.
+    CameraData viewProjUbo;
+    viewProjUbo.view = camera.getView();
+    viewProjUbo.proj = camera.getProj();
+    memcpy(mv_viewProjUboMap[currentImage], &viewProjUbo, sizeof(viewProjUbo));
 
 
 }
@@ -850,6 +937,32 @@ const glm::vec2 Craig::Renderer::getWindowSize() const
     return size;
 }
 
+void Craig::Renderer::deleteGameObject(Craig::GameObject* gameObject)
+{
+    // // Wait for the GPU to finish so nothing in flight references the resources we're about to free.
+    // m_Devices.getLogicalDevice().waitIdle();
+    //
+    // // Tear down per-object GPU state. Destroying the pool frees every set allocated from it
+    // // (including the stale handles each remaining GameObject still holds in mv_VK_descriptorSets).
+    // for (size_t i = 0; i < mv_VK_uniformBuffers.size(); i++) {
+    //     vmaDestroyBuffer(m_Devices.getVmaAllocator(), mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i]);
+    // }
+    // mv_VK_uniformBuffers.clear();
+    // mv_VK_uniformBuffersAllocations.clear();
+    // mv_VK_uniformBuffersMapped.clear();
+    //
+    // m_Devices.getLogicalDevice().destroyDescriptorPool(m_VK_descriptorPool);
+    //
+    // // Remove from the scene and delete the object itself.
+    // mp_SceneManager->getCurrentScene()->deleteGameObject(gameObject);
+    //
+    // // Rebuild UBOs, pool and descriptor sets sized for the new object count.
+    // // createDescriptorSets also reassigns each remaining GameObject's m_uboIndex.
+    // createUniformBuffers();
+    // createDescriptorPool();
+    // createDescriptorSets();
+}
+
 void Craig::Renderer::updateMinLOD(int minLOD) {
     m_minLODLevel = minLOD;
 
@@ -964,8 +1077,12 @@ CraigError Craig::Renderer::terminate() {
 
     m_swapChain.terminate();
 
-    for (size_t i = 0; i < mv_VK_uniformBuffers.size(); i++) {
-        vmaDestroyBuffer(m_Devices.getVmaAllocator(), mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i]);
+    for (size_t i = 0; i < mv_VK_storageBuffers.size(); i++) {
+        vmaDestroyBuffer(m_Devices.getVmaAllocator(), mv_VK_storageBuffers[i], mv_VK_storageBuffersAllocations[i]);
+    }
+
+    for (size_t i = 0; i < mv_viewProjUboBuffer.size(); i++) {
+        vmaDestroyBuffer(m_Devices.getVmaAllocator(), mv_viewProjUboBuffer[i], mv_viewProjUboAllocation[i]);
     }
 
     m_Devices.getLogicalDevice().destroyDescriptorPool(m_VK_descriptorPool);
