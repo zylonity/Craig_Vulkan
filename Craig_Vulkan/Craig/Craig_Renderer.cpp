@@ -712,32 +712,29 @@ void Craig::Renderer::createDescriptorSets() {
 
 void Craig::Renderer::updateDescriptorSets() {
 
-    for (size_t i = 0; i < kMaxFramesInFlight; i++) {
+    // Called when the sampler is recreated (e.g. LOD change). Per-object sets aren't duplicated per
+    // frame, so one pass over the gameobjects rewriting their sampler binding is enough.
+    std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
+    Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
-        std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
-        Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
-
+    for (Craig::GameObject* gameObject : currentSceneObjects)
+    {
         vk::DescriptorImageInfo imageInfo{};
+        imageInfo
+            .setImageView(resources.getModel(gameObject->getModelPath()).m_texture.m_VK_textureImageView)
+            .setSampler(m_VK_textureSampler)
+            .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 
-        for (Craig::GameObject* gameObject : currentSceneObjects)
-        {
-            imageInfo
-                .setImageView(resources.getModel(gameObject->getModelPath()).m_texture.m_VK_textureImageView)
-                .setSampler(m_VK_textureSampler)
-                .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+        vk::WriteDescriptorSet descriptorWrite{};
+        descriptorWrite
+            .setDstSet(gameObject->getDescriptorSet())
+            .setDstBinding(0)
+            .setDstArrayElement(0)
+            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+            .setDescriptorCount(1)
+            .setImageInfo(imageInfo);
 
-            vk::WriteDescriptorSet descriptorWrite{};
-            descriptorWrite
-                .setDstSet(gameObject->getDescriptorSet())
-                .setDstBinding(1)
-                .setDstArrayElement(0)
-                .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-                .setDescriptorCount(1)
-                .setImageInfo(imageInfo);
-
-            m_Devices.getLogicalDevice().updateDescriptorSets(descriptorWrite, nullptr);
-        }
-
+        m_Devices.getLogicalDevice().updateDescriptorSets(descriptorWrite, nullptr);
     }
 
 }
