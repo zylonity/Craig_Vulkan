@@ -166,8 +166,6 @@ namespace Craig {
 		// Texture
 		vk::Sampler   m_VK_textureSampler;
 
-
-		
 		// VMA allocator / pools
 		VmaPool      m_VMA_smallItemsPool = VK_NULL_HANDLE;
 

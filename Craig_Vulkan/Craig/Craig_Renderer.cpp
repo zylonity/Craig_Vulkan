@@ -592,6 +592,7 @@ void Craig::Renderer::createDescriptorPool() {
 
     vk::DescriptorPoolCreateInfo poolInfo{};
     poolInfo
+        .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet)
         .setPoolSizes(poolSizes)
         .setMaxSets(kMaxFramesInFlight + kMaxNumObjects);
 
@@ -911,8 +912,11 @@ const glm::vec2 Craig::Renderer::getWindowSize() const
 
 void Craig::Renderer::deleteGameObject(Craig::GameObject* gameObject)
 {
-
-    //delte the descriptor set
+    //gotta wait for the object to leave the command buffer or vulkan cries with validation error
+    m_Devices.getLogicalDevice().waitIdle();
+    //free the set from the pool
+    m_Devices.getLogicalDevice().freeDescriptorSets(m_VK_descriptorPool, mMap_GameObjectToDescriptorSet[gameObject]);
+    //remove it from the map
     mMap_GameObjectToDescriptorSet.erase(mMap_GameObjectToDescriptorSet.find(gameObject));
     // Remove from the scene and delete the object itself.
     mp_SceneManager->getCurrentScene()->deleteGameObject(gameObject);
