@@ -367,7 +367,8 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
             vk::PipelineBindPoint::eGraphics,
             m_pipeline.getPipelineLayout(),
             1, // set 1
-            gameObject->getDescriptorSet(),
+            //gameObject->getDescriptorSet(),
+            mMap_GameObjectToDescriptorSet[gameObject],
             nullptr);
 
         // Tell the vertex shader which slot of the SSBO to read for this object's model matrix.
@@ -575,36 +576,6 @@ void Craig::Renderer::createIndexBuffer() {
     vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
 }
 
-// void Craig::Renderer::createUniformBuffers() {
-//     std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
-//     size_t numObjects = currentSceneObjects.size();
-//
-//     vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
-//
-//     vk::Buffer stagingBuffer{};
-//     VmaAllocation stagingAlloc{};
-//
-//     VmaAllocationCreateInfo stagingAci{};
-//     stagingAci.usage = VMA_MEMORY_USAGE_AUTO;
-//     stagingAci.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-//     stagingAci.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-//
-//     mv_VK_uniformBuffers.resize(kMaxFramesInFlight * numObjects);
-//     mv_VK_uniformBuffersAllocations.resize(kMaxFramesInFlight * numObjects);
-//     mv_VK_uniformBuffersMapped.resize(kMaxFramesInFlight * numObjects);
-//
-//     for (size_t i = 0; i < kMaxFramesInFlight * numObjects; i++)
-//     {
-//         VmaAllocationInfo info{};
-//         m_Devices.createBufferVMA(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, stagingAci, mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i], &info);
-//
-//         mv_VK_uniformBuffersMapped[i] = info.pMappedData;
-//
-//     }
-//
-//
-// }
-
 void Craig::Renderer::createDescriptorPool() {
 
     std::array<vk::DescriptorPoolSize, 3> poolSizes;
@@ -688,7 +659,9 @@ void Craig::Renderer::createDescriptorSets() {
     auto perObjectSets = m_Devices.getLogicalDevice().allocateDescriptorSets(perObjectAllocInfo);
     for (size_t object = 0; object < numObjects; object++)
     {
-        currentSceneObjects[object]->getDescriptorSet() = perObjectSets[object];
+        // currentSceneObjects[object]->getDescriptorSet() = perObjectSets[object];
+
+        mMap_GameObjectToDescriptorSet.insert({currentSceneObjects[object], perObjectSets[object]});
         vk::DescriptorImageInfo imageInfo{};
         imageInfo
             .setImageView(resources.getModel(currentSceneObjects[object]->getModelPath()).m_texture.m_VK_textureImageView)
@@ -696,7 +669,8 @@ void Craig::Renderer::createDescriptorSets() {
             .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 
         perObjectWrites[0]
-            .setDstSet(currentSceneObjects[object]->getDescriptorSet())
+            //.setDstSet(currentSceneObjects[object]->getDescriptorSet())
+            .setDstSet(mMap_GameObjectToDescriptorSet[currentSceneObjects[object]])
             .setDstBinding(0)
             .setDstArrayElement(0)
             .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
@@ -727,7 +701,8 @@ void Craig::Renderer::updateDescriptorSets() {
 
         vk::WriteDescriptorSet descriptorWrite{};
         descriptorWrite
-            .setDstSet(gameObject->getDescriptorSet())
+            //.setDstSet(gameObject->getDescriptorSet())
+            .setDstSet(mMap_GameObjectToDescriptorSet[gameObject])
             .setDstBinding(0)
             .setDstArrayElement(0)
             .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)

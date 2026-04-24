@@ -249,8 +249,8 @@ void Craig::ImguiEditor::updateImGuizmo()
 		const glm::mat4 viewLH = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, -1.0f)) * camera.getView();
 
 		ImGuizmo::Manipulate(
-			(const float*)glm::value_ptr(viewLH),
-			(const float*)glm::value_ptr(projLH),
+			glm::value_ptr(viewLH),
+			glm::value_ptr(projLH),
 			m_CurrentOperation,
 			ImGuizmo::MODE::LOCAL,
 			glm::value_ptr(transform)

@@ -38,12 +38,8 @@ namespace Craig {
 		const std::string& getModelPath() const { return m_modelPath; }
 		const std::string& getName() const { return m_name; }
 
-		vk::DescriptorSet& getDescriptorSet() { return m_VK_descriptorSet; }
-
 		void displayImGuiAttributes();
 	private:
-		vk::DescriptorSet m_VK_descriptorSet;
-
 		void updateModelMatrix();
 
 		glm::vec3 mv3_position{};
@@ -54,10 +50,12 @@ namespace Craig {
 		glm::mat4 m_modelMatrix = glm::mat4(1);
 		glm::mat4 m_inverseModelMatrix{};
 
-		std::string m_modelPath;// = "data/models/BarramundiFish.glb";
+		std::string m_modelPath;
 		std::string m_name;
 
 		Craig::Scene* mp_scene;
+
+		//TODO: Maybe some sort of UUID system? Currently relying on either the name or the pointer, either of which could easily mess up
 
 
 	};
