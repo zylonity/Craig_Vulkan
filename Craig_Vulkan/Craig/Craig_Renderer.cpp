@@ -190,7 +190,7 @@ void Craig::Renderer::InitVulkan() {
     createTextureSampler();
     createVertexBuffer();
     createIndexBuffer();
-    createUniformBuffers2();
+    createUniformBuffers();
     createDescriptorPool();
     createDescriptorSets();
 
@@ -716,7 +716,7 @@ void Craig::Renderer::updateDescriptorSets() {
 
 // Sets up our two GPU buffers: the big SSBO holding every object's model matrix, and a tiny UBO for the camera's view/proj.
 // We make kMaxFramesInFlight copies of each so the CPU and GPU aren't fighting over the same memory.
-void Craig::Renderer::createUniformBuffers2() {
+void Craig::Renderer::createUniformBuffers() {
 
     // Host visible + mapped so we can just write into it from the CPU every frame, no staging buffer needed.
     VmaAllocationCreateInfo stagingAci{};
@@ -911,28 +911,12 @@ const glm::vec2 Craig::Renderer::getWindowSize() const
 
 void Craig::Renderer::deleteGameObject(Craig::GameObject* gameObject)
 {
-    // // Wait for the GPU to finish so nothing in flight references the resources we're about to free.
-    // m_Devices.getLogicalDevice().waitIdle();
-    //
-    // // Tear down per-object GPU state. Destroying the pool frees every set allocated from it
-    // // (including the stale handles each remaining GameObject still holds in mv_VK_descriptorSets).
-    // for (size_t i = 0; i < mv_VK_uniformBuffers.size(); i++) {
-    //     vmaDestroyBuffer(m_Devices.getVmaAllocator(), mv_VK_uniformBuffers[i], mv_VK_uniformBuffersAllocations[i]);
-    // }
-    // mv_VK_uniformBuffers.clear();
-    // mv_VK_uniformBuffersAllocations.clear();
-    // mv_VK_uniformBuffersMapped.clear();
-    //
-    // m_Devices.getLogicalDevice().destroyDescriptorPool(m_VK_descriptorPool);
-    //
-    // // Remove from the scene and delete the object itself.
-    // mp_SceneManager->getCurrentScene()->deleteGameObject(gameObject);
-    //
-    // // Rebuild UBOs, pool and descriptor sets sized for the new object count.
-    // // createDescriptorSets also reassigns each remaining GameObject's m_uboIndex.
-    // createUniformBuffers();
-    // createDescriptorPool();
-    // createDescriptorSets();
+
+    //delte the descriptor set
+    mMap_GameObjectToDescriptorSet.erase(mMap_GameObjectToDescriptorSet.find(gameObject));
+    // Remove from the scene and delete the object itself.
+    mp_SceneManager->getCurrentScene()->deleteGameObject(gameObject);
+
 }
 
 void Craig::Renderer::updateMinLOD(int minLOD) {

@@ -86,7 +86,7 @@ namespace Craig {
 		void createVertexBuffer();
 		void createIndexBuffer();
 		//void createUniformBuffers();
-		void createUniformBuffers2();
+		void createUniformBuffers();
 		void updateUniformBuffer(uint32_t currentImage, const float& deltaTime);
 
 		
