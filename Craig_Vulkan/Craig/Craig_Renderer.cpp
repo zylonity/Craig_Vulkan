@@ -921,9 +921,16 @@ void Craig::Renderer::deleteGameObject(Craig::GameObject* gameObject)
 
 }
 
-void Craig::Renderer::newGameObject(std::string objectName, std::string modelPath, glm::vec3 position)
+CraigError Craig::Renderer::newGameObject(std::string objectName, std::string modelPath, glm::vec3 position)
 {
-    mp_SceneManager->getCurrentScene()->newGameObject(objectName, modelPath, position);
+    CraigError ret = CRAIG_SUCCESS;
+
+    ret = mp_SceneManager->getCurrentScene()->newGameObject(objectName, modelPath, position);
+
+    if (ret != CRAIG_SUCCESS)
+    {
+        return ret;
+    }
 
     Craig::GameObject* newObject = mp_SceneManager->getCurrentScene()->getGameObjects().back();
     Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
@@ -955,7 +962,7 @@ void Craig::Renderer::newGameObject(std::string objectName, std::string modelPat
 
     m_Devices.getLogicalDevice().updateDescriptorSets(perObjectWrites, nullptr);
 
-
+    return ret;
 }
 
 void Craig::Renderer::updateMinLOD(int minLOD) {

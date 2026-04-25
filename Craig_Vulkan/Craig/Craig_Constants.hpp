@@ -21,6 +21,8 @@ constexpr uint32_t kMaxNumObjects = 4096;
 enum CraigError {
 	CRAIG_SUCCESS = 0,
 	CRAIG_FAIL = 1,
-	CRAIG_CLOSED = 2
+	CRAIG_CLOSED = 2,
+	CRAIG_FILE_NOT_FOUND = 3,
+	CRAIG_NO_NAME = 4,
+	CRAIG_DUPLICATE_NAME = 5,
 };
-

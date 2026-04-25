@@ -20,7 +20,7 @@ namespace Craig {
 
 		Craig::Camera& getCamera() { return m_camera; }
 		void deleteGameObject(Craig::GameObject* gameObject);
-		void newGameObject(std::string objectName, std::string modelPath, glm::vec3 position);
+		CraigError newGameObject(std::string objectName, std::string modelPath, glm::vec3 position);
 	private:
 
 		std::vector<Craig::GameObject*> mpv_Gameobjects;

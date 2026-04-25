@@ -42,3 +42,5 @@ bool Craig::Utilities::compareStringsCaseInsensitive(std::string str1, std::stri
 	// Use std::string internal comparison operator.
 	return str1 < str2;
 }
+
+

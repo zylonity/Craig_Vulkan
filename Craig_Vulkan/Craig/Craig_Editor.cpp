@@ -2,7 +2,9 @@
 #include "Craig_Renderer.hpp"
 #include "Craig_Camera.hpp"
 
-#include "../External/Imgui/imgui.h"   
+#include "../External/Imgui/imgui.h"
+#include "../External/Imgui/imfilebrowser.h"
+#include "../External/Imgui/imgui_stdlib.h"
 #include "../External/Imgui/imgui_internal.h"
 #include "../External/Imgui/ImGuizmo/ImGuizmo.h"
 
@@ -64,6 +66,8 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 	showRenderProperties(deltaTime);
 	showSceneDetails(deltaTime);
 	updateImGuizmo();
+
+	renderNewGameObjectWindow();
 
 	return ret;
 }
@@ -131,8 +135,7 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	 	{
 
 	 		if (ImGui::Button("New Gameobject")) {
-	 			//pSceneManager->getCurrentScene()->newGameobject();
-	 			mp_renderer->newGameObject("testtt", "data/models/BarramundiFish.glb", glm::vec3(10.0f, 0.0f, 0.0f));
+	 			m_ShowNewGameObjectWindow = true;
 	 		}
 
 	 		// Display all properties of game objects in the scene.
@@ -210,6 +213,98 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 		ImGui::End();
 	}
 }
+
+void Craig::ImguiEditor::renderNewGameObjectWindow()
+{
+	if (m_ShowNewGameObjectWindow)
+	{
+
+		// Parameters for centering the window.
+		const ImVec2 windowSize(500, 100);
+		ImGui::SetNextWindowSize(windowSize, ImGuiCond_Appearing);
+		const ImVec2 windowPos = ImVec2((mp_renderer->getWindowSize().x - windowSize.x) * 0.5f, (mp_renderer->getWindowSize().y - windowSize.y) * 0.5f);
+		ImGui::SetNextWindowPos(windowPos, ImGuiCond_Appearing);
+
+		// Create new game object window.
+		ImGui::Begin("New Game Object", &m_ShowNewGameObjectWindow);
+
+		// Draw input box for game object name.
+		if (ImGui::InputText("Name", &m_newGameObjectName))
+		{
+			m_NewGameObjectError.clear();
+		}
+
+		ImGui::InputText("Path", &m_newGameObjectModelPath);
+		ImGui::SameLine();
+		if (ImGui::Button("Browse"))
+		{
+			m_modelBrowser.SetTitle("Select 3D Model");
+			m_modelBrowser.SetDirectory("data/models");
+			m_modelBrowser.SetTypeFilters({ ".glb", ".gltf" });
+			m_modelBrowser.Open();
+
+		}
+
+		m_modelBrowser.Display();
+
+		if(m_modelBrowser.HasSelected())
+		{
+			m_newGameObjectModelPath = std::filesystem::relative(m_modelBrowser.GetSelected(), std::filesystem::current_path()).string();
+			m_modelBrowser.ClearSelected();
+		}
+
+		// If the game object name has any validation errors show them.
+		if (!m_NewGameObjectError.empty())
+		{
+			ImGui::TextColored({ 1.0f, 0.0f, 0.0f, 1.0f }, m_NewGameObjectError.c_str());
+		}
+
+		// Create on Enter or Create button press.
+		if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::Button("Create"))
+		{
+			// Attempt to create the game object.
+			const CraigError err = mp_renderer->newGameObject(m_newGameObjectName, m_newGameObjectModelPath, glm::vec3(0.0f, 0.0f, 0.0f));
+
+			// Handle errors.
+			switch (err)
+			{
+			case CRAIG_NO_NAME:
+				m_NewGameObjectError = "Game object must have a name.";
+				break;
+			case CRAIG_DUPLICATE_NAME:
+				m_NewGameObjectError = "Game object with that name already exists.";
+				break;
+			case CRAIG_FILE_NOT_FOUND:
+				m_NewGameObjectError = "Couldn't find a file under that path";
+				break;
+			default:
+				assert(err == CRAIG_SUCCESS);
+				// Close the window.
+				m_ShowNewGameObjectWindow = false;
+				m_newGameObjectName.clear();
+				m_NewGameObjectError.clear();
+			}
+		}
+
+		// Render the close button.
+		ImGui::SameLine();
+		if (ImGui::Button("Close"))
+		{
+			m_ShowNewGameObjectWindow = false;
+			m_newGameObjectName.clear();
+			m_NewGameObjectError.clear();
+		}
+
+		ImGui::End();
+	}
+
+	if (!m_ShowNewGameObjectWindow)
+	{
+		m_newGameObjectName.clear();
+		m_NewGameObjectError.clear();
+	}
+}
+
 
 void Craig::ImguiEditor::updateImGuizmo()
 {

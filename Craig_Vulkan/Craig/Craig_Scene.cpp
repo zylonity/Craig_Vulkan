@@ -1,6 +1,6 @@
 #include "Craig_Scene.hpp"
-
 #include "Craig_Utilities.hpp"
+#include <filesystem>
 
 CraigError Craig::Scene::init() {
 
@@ -56,13 +56,39 @@ void Craig::Scene::deleteGameObject(GameObject* const pObject)
 	delete pObject;
 }
 
-void Craig::Scene::newGameObject(std::string objectName, std::string modelPath, glm::vec3 position)
+CraigError Craig::Scene::newGameObject(std::string objectName, std::string modelPath, glm::vec3 position)
 {
+
+	CraigError ret = CRAIG_SUCCESS;
+
+	// Check to see if name has been provided.
+	if (objectName.empty())
+	{
+		return CRAIG_NO_NAME;
+	}
+
+	// Check to see if name is already in use.
+	if (findObject(objectName) != nullptr)
+	{
+		return CRAIG_DUPLICATE_NAME;
+	}
+
+	if (std::filesystem::exists(modelPath) == false)
+	{
+		return CRAIG_FILE_NOT_FOUND;
+	}
+
+	// Create the game object in the scene.
 	Craig::GameObject* tempObject = new Craig::GameObject;
 
 	tempObject->init(objectName,modelPath, this);
 	tempObject->setPosition(position);
 	mpv_Gameobjects.push_back(tempObject);
+
+	// Sort the editor game object list by alphabetical order.
+	Utilities::sortGameObjectsByName(mpv_Gameobjects);
+
+	return ret;
 }
 
 CraigError Craig::Scene::update(const float& deltaTime) {

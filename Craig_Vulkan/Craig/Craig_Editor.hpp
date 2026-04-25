@@ -5,6 +5,7 @@
 #include <string>
 
 #include "../External/Imgui/imgui.h"
+#include "../External/Imgui/imfilebrowser.h"
 #include "../External/Imgui/ImGuizmo/ImGuizmo.h"
 
 namespace Craig {
@@ -45,6 +46,13 @@ namespace Craig {
 
 		void showSceneDetails(const float& deltaTime);
 		bool m_ShowSceneDetails = false;
+
+		void renderNewGameObjectWindow();
+		bool m_ShowNewGameObjectWindow = false;
+		std::string m_newGameObjectName;
+		std::string m_newGameObjectModelPath = "data/models/BarramundiFish.glb";
+		std::string m_NewGameObjectError;
+		ImGui::FileBrowser m_modelBrowser;
 
 		Craig::Renderer* mp_renderer;
 		Craig::SceneManager* mp_sceneManager;
