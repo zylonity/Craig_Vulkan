@@ -130,6 +130,11 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	 	if (ImGui::CollapsingHeader("Game Objects", ImGuiTreeNodeFlags_DefaultOpen))
 	 	{
 
+	 		if (ImGui::Button("New Gameobject")) {
+	 			//pSceneManager->getCurrentScene()->newGameobject();
+	 			mp_renderer->newGameObject("testtt", "data/models/BarramundiFish.glb", glm::vec3(10.0f, 0.0f, 0.0f));
+	 		}
+
 	 		// Display all properties of game objects in the scene.
 	 		const std::vector<Craig::GameObject*>& gameOjects = mp_sceneManager->getCurrentScene()->getGameObjects();
 	 		for (Craig::GameObject* pGameObject : gameOjects)

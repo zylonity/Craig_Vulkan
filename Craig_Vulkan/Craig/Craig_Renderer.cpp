@@ -660,8 +660,6 @@ void Craig::Renderer::createDescriptorSets() {
     auto perObjectSets = m_Devices.getLogicalDevice().allocateDescriptorSets(perObjectAllocInfo);
     for (size_t object = 0; object < numObjects; object++)
     {
-        // currentSceneObjects[object]->getDescriptorSet() = perObjectSets[object];
-
         mMap_GameObjectToDescriptorSet.insert({currentSceneObjects[object], perObjectSets[object]});
         vk::DescriptorImageInfo imageInfo{};
         imageInfo
@@ -920,6 +918,43 @@ void Craig::Renderer::deleteGameObject(Craig::GameObject* gameObject)
     mMap_GameObjectToDescriptorSet.erase(mMap_GameObjectToDescriptorSet.find(gameObject));
     // Remove from the scene and delete the object itself.
     mp_SceneManager->getCurrentScene()->deleteGameObject(gameObject);
+
+}
+
+void Craig::Renderer::newGameObject(std::string objectName, std::string modelPath, glm::vec3 position)
+{
+    mp_SceneManager->getCurrentScene()->newGameObject(objectName, modelPath, position);
+
+    Craig::GameObject* newObject = mp_SceneManager->getCurrentScene()->getGameObjects().back();
+    Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
+
+    std::vector<vk::DescriptorSetLayout> objectLayout(1, m_pipeline.getPerObjectDescriptorSetLayout());
+
+    vk::DescriptorSetAllocateInfo newObjectAllocInfo{};
+    newObjectAllocInfo.setDescriptorPool(m_VK_descriptorPool)
+        .setDescriptorSetCount(1)
+        .setSetLayouts(objectLayout);
+
+    std::array<vk::WriteDescriptorSet, 1> perObjectWrites{};
+    auto perObjectSets = m_Devices.getLogicalDevice().allocateDescriptorSets(newObjectAllocInfo);
+
+    mMap_GameObjectToDescriptorSet.insert({newObject, perObjectSets.back()});
+    vk::DescriptorImageInfo imageInfo{};
+    imageInfo
+        .setImageView(resources.getModel(newObject->getModelPath()).m_texture.m_VK_textureImageView)
+        .setSampler(m_VK_textureSampler)
+        .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    perObjectWrites[0]
+        .setDstSet(mMap_GameObjectToDescriptorSet[newObject])
+        .setDstBinding(0)
+        .setDstArrayElement(0)
+        .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+        .setDescriptorCount(1)
+        .setImageInfo(imageInfo);
+
+    m_Devices.getLogicalDevice().updateDescriptorSets(perObjectWrites, nullptr);
+
 
 }
 

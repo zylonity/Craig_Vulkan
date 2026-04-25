@@ -53,6 +53,7 @@ namespace Craig {
 		const glm::vec2 getWindowSize() const;
 
 		void deleteGameObject(Craig::GameObject* gameObject);
+		void newGameObject(std::string objectName, std::string modelPath, glm::vec3 position);
 
 	private:
 		struct PerObjectData {

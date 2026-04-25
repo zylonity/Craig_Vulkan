@@ -56,6 +56,15 @@ void Craig::Scene::deleteGameObject(GameObject* const pObject)
 	delete pObject;
 }
 
+void Craig::Scene::newGameObject(std::string objectName, std::string modelPath, glm::vec3 position)
+{
+	Craig::GameObject* tempObject = new Craig::GameObject;
+
+	tempObject->init(objectName,modelPath, this);
+	tempObject->setPosition(position);
+	mpv_Gameobjects.push_back(tempObject);
+}
+
 CraigError Craig::Scene::update(const float& deltaTime) {
 
 	CraigError ret = CRAIG_SUCCESS;
