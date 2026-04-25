@@ -21,10 +21,12 @@ namespace Craig {
 	struct Vertex {
 		glm::vec3 m_pos;
 		glm::vec3 m_color;
+		glm::vec3 m_normals;
 		glm::vec2 m_texCoord;
 
+
 		static vk::VertexInputBindingDescription getBindingDescription(); //A vertex binding describes at which rate to load data from memory throughout the vertices. It specifies the number of bytes between data entries and whether to move to the next data entry after each vertex or after each instance.
-		static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions(); //We have two attributes, position and color, so we need two attribute description structs.
+		static std::array<vk::VertexInputAttributeDescription, kVertexAttributeDescriptors> getAttributeDescriptions(); //We have two attributes, position and color, so we need two attribute description structs.
 
 	};
 

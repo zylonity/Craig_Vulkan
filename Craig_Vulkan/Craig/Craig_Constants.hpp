@@ -18,6 +18,8 @@ constexpr int kMaxFramesInFlight = 2; //How many frames the GPU should deal with
 constexpr uint32_t kMaxLODForDebugging = 16;
 constexpr uint32_t kMaxNumObjects = 4096;
 
+constexpr uint32_t kVertexAttributeDescriptors = 4;
+
 enum CraigError {
 	CRAIG_SUCCESS = 0,
 	CRAIG_FAIL = 1,

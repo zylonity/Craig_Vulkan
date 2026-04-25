@@ -19,8 +19,8 @@ vk::VertexInputBindingDescription Craig::Vertex::getBindingDescription() {
     return bindingDescription;
 }
 
-std::array<vk::VertexInputAttributeDescription, 3> Craig::Vertex::getAttributeDescriptions() {
-    std::array<vk::VertexInputAttributeDescription, 3> attributeDescriptions;
+std::array<vk::VertexInputAttributeDescription, kVertexAttributeDescriptors> Craig::Vertex::getAttributeDescriptions() {
+    std::array<vk::VertexInputAttributeDescription, kVertexAttributeDescriptors> attributeDescriptions;
 
     attributeDescriptions[0]
         .setBinding(0)
@@ -37,8 +37,16 @@ std::array<vk::VertexInputAttributeDescription, 3> Craig::Vertex::getAttributeDe
     attributeDescriptions[2]
         .setBinding(0)
         .setLocation(2)
+        .setFormat(vk::Format::eR32G32B32Sfloat)
+        .setOffset(offsetof(Craig::Vertex, m_normals));
+
+    attributeDescriptions[3]
+        .setBinding(0)
+        .setLocation(3)
         .setFormat(vk::Format::eR32G32Sfloat)
         .setOffset(offsetof(Craig::Vertex, m_texCoord));
+
+
 
 
     return attributeDescriptions;

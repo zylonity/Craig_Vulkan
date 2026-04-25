@@ -45,7 +45,7 @@ void Craig::Pipeline::createGraphicsPipeline() {
     vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
     vk::VertexInputBindingDescription                   bindingDescription = Vertex::getBindingDescription();
-    std::array<vk::VertexInputAttributeDescription, 3>  attributeDescriptions = Vertex::getAttributeDescriptions();
+    std::array<vk::VertexInputAttributeDescription, kVertexAttributeDescriptors>  attributeDescriptions = Vertex::getAttributeDescriptions();
 
     //No vertex data to load for now since its hardcoded into the shader.
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
