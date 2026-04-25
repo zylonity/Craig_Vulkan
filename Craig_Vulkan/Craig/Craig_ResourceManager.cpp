@@ -161,6 +161,27 @@ void Craig::ResourceManager::loadModel(std::string modelPath) {
                 }
             }
 
+            //NORMALS STUFF
+            const tinygltf::Accessor* normAccessor = nullptr;
+            const tinygltf::BufferView* normBV = nullptr;
+            const tinygltf::Buffer* normBuf = nullptr;
+            const uint8_t* normData = nullptr;
+            size_t normStride = 0;
+
+            auto itNorm = prim.attributes.find("NORMAL");
+            if (itNorm != prim.attributes.end()) {
+                normAccessor = &model.accessors[itNorm->second];
+                normBV = &model.bufferViews[normAccessor->bufferView];
+                normBuf = &model.buffers[normBV->buffer];
+
+                normData = normBuf->data.data() + normBV->byteOffset + normAccessor->byteOffset;
+
+                normStride = tinygltf::GetNumComponentsInType(normAccessor->type) * tinygltf::GetComponentSizeInBytes(normAccessor->componentType);
+                if (normAccessor->ByteStride(*normBV) != 0) {
+                    normStride = normAccessor->ByteStride(*normBV);
+                }
+            }
+
             uint32_t firstVertex = (uint32_t)tempMesh->m_vertices.size();
             uint32_t firstIndex = (uint32_t)tempMesh->m_indices.size();
 
