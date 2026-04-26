@@ -56,7 +56,7 @@ VSOutput main(VSInput input)
 
     output.pos = worldPos;
     output.color = input.color;
-    output.normals = input.normals;
+    output.normals = normalize(mul((float3x3)model, input.normals));
     output.texCoord = input.texCoord;
 
     return output;
