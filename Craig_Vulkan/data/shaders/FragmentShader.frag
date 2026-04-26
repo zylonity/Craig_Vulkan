@@ -7,7 +7,7 @@
 cbuffer LightData{
     float3 lightDir;
     float3 lightColor;
-    float4 ambientColor;
+    float3 ambientColor;
 }
 
 struct PSInput

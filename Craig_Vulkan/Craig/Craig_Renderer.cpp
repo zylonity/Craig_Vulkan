@@ -776,11 +776,11 @@ void Craig::Renderer::createUniformBuffers() {
     mv_lightUboAllocation.resize(kMaxFramesInFlight);
     mv_lightUboMap.resize(kMaxFramesInFlight);
 
-    vk::DeviceSize lightBufferSize = sizeof(CameraData);
+    vk::DeviceSize lightBufferSize = sizeof(LightData);
     for (size_t i = 0; i < kMaxFramesInFlight; i++)
     {
         VmaAllocationInfo info3{};
-        m_Devices.createBufferVMA(viewProjBufferSize, vk::BufferUsageFlagBits::eUniformBuffer, stagingAci, mv_lightUboBuffer[i], mv_lightUboAllocation[i], &info3);
+        m_Devices.createBufferVMA(lightBufferSize, vk::BufferUsageFlagBits::eUniformBuffer, stagingAci, mv_lightUboBuffer[i], mv_lightUboAllocation[i], &info3);
         mv_lightUboMap[i] = info3.pMappedData;
     }
 
@@ -815,6 +815,12 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
     viewProjUbo.view = camera.getView();
     viewProjUbo.proj = camera.getProj();
     memcpy(mv_viewProjUboMap[currentImage], &viewProjUbo, sizeof(viewProjUbo));
+
+    LightData lightData;
+    lightData.lightDir = glm::vec3(0.5f, 1.0f, 0.25f);
+    lightData.lightColour = glm::vec3(1.0f, 0.98f, 0.95f);
+    lightData.ambientColour = glm::vec3(0.05f, 0.05f, 0.08f);
+    memcpy(mv_lightUboMap[currentImage], &lightData, sizeof(lightData));
 
 
 }
