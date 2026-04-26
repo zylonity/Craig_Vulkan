@@ -65,6 +65,13 @@ namespace Craig {
 			glm::mat4 proj;
 		};
 
+		struct LightData
+		{
+			glm::vec3 lightDir;
+			glm::vec3 lightColour;
+			glm::vec3 ambientColour;
+		};
+
 		// struct UniformBufferObject {
 		// 	glm::mat4 model;
 		// 	glm::mat4 view;
@@ -154,6 +161,10 @@ namespace Craig {
 		std::vector<vk::Buffer> mv_viewProjUboBuffer;
 		std::vector<VmaAllocation> mv_viewProjUboAllocation;
 		std::vector<void*> mv_viewProjUboMap;
+
+		std::vector<vk::Buffer> mv_lightUboBuffer;
+		std::vector<VmaAllocation> mv_lightUboAllocation;
+		std::vector<void*> mv_lightUboMap;
 
 		vk::DescriptorPool              m_VK_descriptorPool;
 		std::vector<vk::DescriptorSet>	mv_VK_perFrameDescriptorSet;

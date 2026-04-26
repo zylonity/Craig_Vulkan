@@ -581,7 +581,7 @@ void Craig::Renderer::createIndexBuffer() {
 
 void Craig::Renderer::createDescriptorPool() {
 
-    std::array<vk::DescriptorPoolSize, 3> poolSizes;
+    std::array<vk::DescriptorPoolSize, 4> poolSizes;
     poolSizes[0]
         .setType(vk::DescriptorType::eUniformBuffer)
         .setDescriptorCount(kMaxFramesInFlight);
@@ -589,6 +589,9 @@ void Craig::Renderer::createDescriptorPool() {
         .setType(vk::DescriptorType::eStorageBuffer)
         .setDescriptorCount(kMaxFramesInFlight);
     poolSizes[2]
+        .setType(vk::DescriptorType::eUniformBuffer)
+        .setDescriptorCount(kMaxFramesInFlight);
+    poolSizes[3]
         .setType(vk::DescriptorType::eCombinedImageSampler)
         .setDescriptorCount(kMaxNumObjects);
 
@@ -615,7 +618,7 @@ void Craig::Renderer::createDescriptorSets() {
         .setSetLayouts(perFramelayouts);
 
     mv_VK_perFrameDescriptorSet = m_Devices.getLogicalDevice().allocateDescriptorSets(perFrameAllocInfo);
-    std::array<vk::WriteDescriptorSet, 2> perFrameWrites{};
+    std::array<vk::WriteDescriptorSet, 3> perFrameWrites{};
 
     for (size_t frame = 0; frame < kMaxFramesInFlight; frame++)
     {
@@ -628,6 +631,11 @@ void Craig::Renderer::createDescriptorSets() {
         modelUboBufferInfo.setBuffer(mv_VK_storageBuffers[frame])
             .setOffset(0)
             .setRange(sizeof(PerObjectData) * kMaxNumObjects);
+
+        vk::DescriptorBufferInfo lightBufferInfo{};
+        lightBufferInfo.setBuffer(mv_lightUboBuffer[frame])
+            .setOffset(0)
+            .setRange(sizeof(LightData));
 
         perFrameWrites[0]
             .setDstSet(mv_VK_perFrameDescriptorSet[frame])
@@ -643,6 +651,13 @@ void Craig::Renderer::createDescriptorSets() {
             .setDescriptorType(vk::DescriptorType::eStorageBuffer)
             .setDescriptorCount(1)
             .setBufferInfo(modelUboBufferInfo);
+        perFrameWrites[2]
+            .setDstSet(mv_VK_perFrameDescriptorSet[frame])
+            .setDstBinding(2)
+            .setDstArrayElement(0)
+            .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+            .setDescriptorCount(1)
+            .setBufferInfo(lightBufferInfo);
 
         m_Devices.getLogicalDevice().updateDescriptorSets(perFrameWrites, nullptr);
     }
@@ -754,6 +769,19 @@ void Craig::Renderer::createUniformBuffers() {
         VmaAllocationInfo info2{};
         m_Devices.createBufferVMA(viewProjBufferSize, vk::BufferUsageFlagBits::eUniformBuffer, stagingAci, mv_viewProjUboBuffer[i], mv_viewProjUboAllocation[i], &info2);
         mv_viewProjUboMap[i] = info2.pMappedData;
+    }
+
+    //Light UBO, practically the same as the camera UBO
+    mv_lightUboBuffer.resize(kMaxFramesInFlight);
+    mv_lightUboAllocation.resize(kMaxFramesInFlight);
+    mv_lightUboMap.resize(kMaxFramesInFlight);
+
+    vk::DeviceSize lightBufferSize = sizeof(CameraData);
+    for (size_t i = 0; i < kMaxFramesInFlight; i++)
+    {
+        VmaAllocationInfo info3{};
+        m_Devices.createBufferVMA(viewProjBufferSize, vk::BufferUsageFlagBits::eUniformBuffer, stagingAci, mv_lightUboBuffer[i], mv_lightUboAllocation[i], &info3);
+        mv_lightUboMap[i] = info3.pMappedData;
     }
 
 

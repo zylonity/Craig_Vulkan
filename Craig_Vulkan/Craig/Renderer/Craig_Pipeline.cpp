@@ -47,7 +47,6 @@ void Craig::Pipeline::createGraphicsPipeline() {
     vk::VertexInputBindingDescription                   bindingDescription = Vertex::getBindingDescription();
     std::array<vk::VertexInputAttributeDescription, kVertexAttributeDescriptors>  attributeDescriptions = Vertex::getAttributeDescriptions();
 
-    //No vertex data to load for now since its hardcoded into the shader.
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo
         .setVertexBindingDescriptionCount(1)
@@ -224,7 +223,14 @@ void Craig::Pipeline::createDescriptorSetLayout() {
         .setDescriptorCount(1)
         .setStageFlags(vk::ShaderStageFlagBits::eVertex);
 
-    std::array<vk::DescriptorSetLayoutBinding, 2> perFrameBindings = { cameraLayoutBinding, storageBufferLayoutBinding };
+    vk::DescriptorSetLayoutBinding lightBinding{};
+    lightBinding
+        .setBinding(2)
+        .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+        .setDescriptorCount(1)
+        .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+
+    std::array<vk::DescriptorSetLayoutBinding, 3> perFrameBindings = { cameraLayoutBinding, storageBufferLayoutBinding, lightBinding };
 
     vk::DescriptorSetLayoutCreateInfo perFrameLayoutInfo{};
     perFrameLayoutInfo
