@@ -1126,6 +1126,10 @@ CraigError Craig::Renderer::terminate() {
         vmaDestroyBuffer(m_Devices.getVmaAllocator(), mv_viewProjUboBuffer[i], mv_viewProjUboAllocation[i]);
     }
 
+    for (size_t i = 0; i < mv_lightUboBuffer.size(); i++) {
+        vmaDestroyBuffer(m_Devices.getVmaAllocator(), mv_lightUboBuffer[i], mv_lightUboAllocation[i]);
+    }
+
     m_Devices.getLogicalDevice().destroyDescriptorPool(m_VK_descriptorPool);
 
     m_pipeline.terminate();
