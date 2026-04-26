@@ -5,6 +5,11 @@
 CraigError Craig::Scene::init() {
 
 	CraigError ret = CRAIG_SUCCESS;
+
+	m_sun.lightDir = glm::vec3(0.5f, 1.0f, 0.25f);
+	m_sun.lightColour = glm::vec3(1.0f, 0.98f, 0.95f);
+	m_sun.ambientColour = glm::vec3(0.05f, 0.05f, 0.08f);
+
 	Craig::GameObject* m_MainObject = new Craig::GameObject;
 	Craig::GameObject* m_secondObject= new Craig::GameObject;
 
@@ -15,12 +20,8 @@ CraigError Craig::Scene::init() {
 	m_secondObject->init("fuck","data/models/Duck.glb", this);
 	m_secondObject->setScale(glm::vec3(0.01f));
 	mpv_Gameobjects.push_back(m_secondObject);
-	//mv_Gameobjects.push_back(m_MainObject);
-	// for (size_t i = 0; i < mv_Gameobjects.size(); i++)
-	// {
-	// 	mv_Gameobjects[i].init();
-	// 	mv_Gameobjects[i].setPosition({mv_Gameobjects[i].getPosition().x + 10, mv_Gameobjects[i].getPosition().y, mv_Gameobjects[i].getPosition().z});
-	// }
+
+
 	return ret;
 }
 

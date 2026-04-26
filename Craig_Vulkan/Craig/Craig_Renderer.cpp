@@ -817,9 +817,9 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
     memcpy(mv_viewProjUboMap[currentImage], &viewProjUbo, sizeof(viewProjUbo));
 
     LightData lightData;
-    lightData.lightDir = glm::vec3(0.5f, 1.0f, 0.25f);
-    lightData.lightColour = glm::vec3(1.0f, 0.98f, 0.95f);
-    lightData.ambientColour = glm::vec3(0.05f, 0.05f, 0.08f);
+    lightData.lightDir = mp_SceneManager->getCurrentScene()->getSun().lightDir;
+    lightData.lightColour = mp_SceneManager->getCurrentScene()->getSun().lightColour;
+    lightData.ambientColour = mp_SceneManager->getCurrentScene()->getSun().ambientColour;
     memcpy(mv_lightUboMap[currentImage], &lightData, sizeof(lightData));
 
 

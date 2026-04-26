@@ -9,6 +9,13 @@
 namespace Craig {
 
 	class Scene {
+		struct Sun
+		{
+			alignas(16) glm::vec3 lightDir;
+			alignas(16) glm::vec3 lightColour;
+			alignas(16) glm::vec3 ambientColour;
+		};
+
 
 	public:
 		CraigError init();
@@ -19,6 +26,7 @@ namespace Craig {
 		Craig::GameObject* findObject(const std::string& objectName) const;
 
 		Craig::Camera& getCamera() { return m_camera; }
+		Sun& getSun() { return m_sun; }
 		void deleteGameObject(Craig::GameObject* gameObject);
 		CraigError newGameObject(std::string objectName, std::string modelPath, glm::vec3 position);
 	private:
@@ -26,6 +34,7 @@ namespace Craig {
 		std::vector<Craig::GameObject*> mpv_Gameobjects;
 
 		Craig::Camera m_camera = Craig::Camera(); //Virtual camera for the scene
+		Sun m_sun = Sun();
 	};
 
 
