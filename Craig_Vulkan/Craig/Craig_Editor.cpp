@@ -283,6 +283,7 @@ void Craig::ImguiEditor::renderNewGameObjectWindow()
 				m_ShowNewGameObjectWindow = false;
 				m_newGameObjectName.clear();
 				m_NewGameObjectError.clear();
+				break;
 			}
 		}
 

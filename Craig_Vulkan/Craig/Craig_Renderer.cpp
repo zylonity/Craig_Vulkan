@@ -17,6 +17,9 @@
 #endif
 
 #include "Craig_Renderer.hpp"
+
+#include <sys/stat.h>
+
 #include "Craig_Window.hpp"
 #include "Craig_ShaderCompilation.hpp"
 #include "Craig_Editor.hpp"
@@ -925,9 +928,6 @@ CraigError Craig::Renderer::newGameObject(std::string objectName, std::string mo
 {
     CraigError ret = CRAIG_SUCCESS;
 
-    //gotta wait for the object to leave the command buffer or vulkan cries with validation error
-    m_Devices.getLogicalDevice().waitIdle();
-
     ret = mp_SceneManager->getCurrentScene()->newGameObject(objectName, modelPath, position);
 
     if (ret != CRAIG_SUCCESS)
@@ -935,7 +935,7 @@ CraigError Craig::Renderer::newGameObject(std::string objectName, std::string mo
         return ret;
     }
 
-    Craig::GameObject* newObject = mp_SceneManager->getCurrentScene()->getGameObjects().back();
+    Craig::GameObject* newObject = mp_SceneManager->getCurrentScene()->findObject(objectName);
     Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
     std::vector<vk::DescriptorSetLayout> objectLayout(1, m_pipeline.getPerObjectDescriptorSetLayout());
@@ -948,7 +948,8 @@ CraigError Craig::Renderer::newGameObject(std::string objectName, std::string mo
     std::array<vk::WriteDescriptorSet, 1> perObjectWrites{};
     auto perObjectSets = m_Devices.getLogicalDevice().allocateDescriptorSets(newObjectAllocInfo);
 
-    mMap_GameObjectToDescriptorSet.insert({newObject, perObjectSets.back()});
+    assert(perObjectSets.size() >= 1 && "Less than 1 descriptor set was allocated");
+
     vk::DescriptorImageInfo imageInfo{};
     imageInfo
         .setImageView(resources.getModel(newObject->getModelPath()).m_texture.m_VK_textureImageView)
@@ -956,13 +957,14 @@ CraigError Craig::Renderer::newGameObject(std::string objectName, std::string mo
         .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 
     perObjectWrites[0]
-        .setDstSet(mMap_GameObjectToDescriptorSet[newObject])
+        .setDstSet(perObjectSets[0])
         .setDstBinding(0)
         .setDstArrayElement(0)
         .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
         .setDescriptorCount(1)
         .setImageInfo(imageInfo);
 
+    mMap_GameObjectToDescriptorSet.insert({newObject, perObjectSets[0]});
     m_Devices.getLogicalDevice().updateDescriptorSets(perObjectWrites, nullptr);
 
     return ret;
