@@ -67,9 +67,9 @@ namespace Craig {
 
 		struct LightData
 		{
-			glm::vec3 lightDir;
-			glm::vec3 lightColour;
-			glm::vec3 ambientColour;
+			alignas(16) glm::vec3 lightDir;
+			alignas(16) glm::vec3 lightColour;
+			alignas(16) glm::vec3 ambientColour;
 		};
 
 		// struct UniformBufferObject {
