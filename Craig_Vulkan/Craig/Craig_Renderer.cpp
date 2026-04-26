@@ -925,6 +925,9 @@ CraigError Craig::Renderer::newGameObject(std::string objectName, std::string mo
 {
     CraigError ret = CRAIG_SUCCESS;
 
+    //gotta wait for the object to leave the command buffer or vulkan cries with validation error
+    m_Devices.getLogicalDevice().waitIdle();
+
     ret = mp_SceneManager->getCurrentScene()->newGameObject(objectName, modelPath, position);
 
     if (ret != CRAIG_SUCCESS)

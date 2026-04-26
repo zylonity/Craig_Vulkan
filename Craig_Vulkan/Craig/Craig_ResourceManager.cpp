@@ -200,6 +200,14 @@ void Craig::ResourceManager::loadModel(std::string modelPath) {
                     v.m_texCoord = glm::vec2(0.0f);
                 }
 
+                if (normAccessor) {
+                    const float* n = reinterpret_cast<const float*>(normData + i * normStride);
+                    v.m_normals = glm::vec3(n[0], n[1], n[2]);
+                }
+                else {
+                    v.m_normals = glm::vec3(0.0f);
+                }
+
                 v.m_color = glm::vec3(1.0f);
 
                 tempMesh->m_vertices.push_back(v);
