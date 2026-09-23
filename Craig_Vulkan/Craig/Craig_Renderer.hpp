@@ -55,6 +55,14 @@ namespace Craig {
 		void deleteGameObject(Craig::GameObject* gameObject);
 		CraigError newGameObject(std::string objectName, std::string modelPath, glm::vec3 position);
 
+		struct FrameStats {
+			uint32_t drawCalls = 0;
+			uint32_t indexCount = 0;
+			uint32_t triangleCount = 0;
+			uint32_t objectCount = 0;
+		};
+		const FrameStats& getFrameStats() const { return m_frameStats; };
+
 	private:
 		struct PerObjectData {
 			glm::mat4 model;
@@ -174,6 +182,8 @@ namespace Craig {
 		uint32_t m_minLODLevel = 0;        // User-selected min LOD clamp
 
 		RenderingAttachments m_renderingAttachments; //Contains stuff for MSAA, vsync and mipmap levels
+
+		FrameStats m_frameStats;
 		
 		// Texture
 		vk::Sampler   m_VK_textureSampler;

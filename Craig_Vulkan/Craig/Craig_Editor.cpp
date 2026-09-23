@@ -18,6 +18,8 @@
 #include "Craig_GameObject.hpp"
 #include "Craig_Scene.hpp"
 
+#include <cfloat>
+
 CraigError Craig::ImguiEditor::editorInit() {
 
 	CraigError ret = CRAIG_SUCCESS;
@@ -36,11 +38,15 @@ CraigError Craig::ImguiEditor::editorInit() {
 
 		ImGui::DockBuilderDockWindow("###RenderingSettings", dock_id_right);
 		ImGui::DockBuilderDockWindow("###SceneDetails", dock_id_left);
+		ImGui::DockBuilderDockWindow("###Performance", dock_id_bottom);
 		ImGui::DockBuilderFinish(dockspace_id);
 
 		//Default windows to open
 		m_ShowRendererProperties = true;
 		m_ShowSceneDetails = true;
+		m_ShowPerformanceWindow = true;
+
+		mv_fpsHistory.resize(120, 0.0f);
 
 		//When we initialise the renderer we have the max sampling level set, so for now this is good enough since we change it in both places at once
 		//TODO: Keep track of the current level in the renderer, not both there and here
@@ -65,6 +71,7 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 
 	showRenderProperties(deltaTime);
 	showSceneDetails(deltaTime);
+	showPerformanceWindow(deltaTime);
 	updateImGuizmo();
 
 	renderNewGameObjectWindow();
@@ -88,11 +95,6 @@ void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
 
 		ImGui::SeparatorText("ImGui Info");
 		ImGui::Text("Imgui Version: %s", ImGui::GetVersion());
-
-		ImGui::SeparatorText("FPS Details");
-		//ImGui::Text("Frame Time: %f", ImGui::GetIO().Framerate);
-		ImGui::Text("FPS: % .2f", ImGui::GetIO().Framerate);
-		ImGui::Text("Delta Time: %f", deltaTime);
 
 		ImGui::SeparatorText("Video Settings");
 		if (ImGui::Checkbox("VSYNC", &mp_renderer->getVSyncState())) {
@@ -209,6 +211,38 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	 			ImGui::PopID();
 			}
 		}
+
+		ImGui::End();
+	}
+}
+
+void Craig::ImguiEditor::showPerformanceWindow(const float& deltaTime)
+{
+	if (m_ShowPerformanceWindow)
+	{
+		// The ### is for a unique ID, otherwsise the window doesn't stay docked otherwise since the name/id changes
+		ImGui::Begin("Performance###Performance", &m_ShowPerformanceWindow);
+
+		const float fps = ImGui::GetIO().Framerate;
+
+		if (!mv_fpsHistory.empty())
+		{
+			mv_fpsHistory[m_fpsHistoryOffset] = fps;
+			m_fpsHistoryOffset = (m_fpsHistoryOffset + 1) % mv_fpsHistory.size();
+		}
+
+		ImGui::SeparatorText("Frame Timing");
+		ImGui::Text("FPS: % .2f", fps);
+		ImGui::Text("Delta Time: %f", deltaTime);
+		ImGui::PlotLines("##FPSHistory", mv_fpsHistory.data(), (int)mv_fpsHistory.size(), m_fpsHistoryOffset, nullptr, 0.0f, FLT_MAX, ImVec2(0, 60));
+
+		const Craig::Renderer::FrameStats& stats = mp_renderer->getFrameStats();
+
+		ImGui::SeparatorText("Draw Stats");
+		ImGui::Text("Objects: %u", stats.objectCount);
+		ImGui::Text("Draw Calls: %u", stats.drawCalls);
+		ImGui::Text("Triangles: %u", stats.triangleCount);
+		ImGui::Text("Vertices: %u", stats.indexCount);
 
 		ImGui::End();
 	}

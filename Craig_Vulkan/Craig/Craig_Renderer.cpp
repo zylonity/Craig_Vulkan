@@ -353,6 +353,9 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
     Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
 
+    m_frameStats = FrameStats{};
+    m_frameStats.objectCount = static_cast<uint32_t>(currentSceneObjects.size());
+
     // Per-frame set (camera UBO + transforms SSBO) only needs binding once per frame, it stays bound for every draw after.
     commandBuffer.bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
@@ -394,6 +397,10 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
                 submesh->indexOffset,
                 submesh->vertexOffset,
                 0);
+
+            m_frameStats.drawCalls++;
+            m_frameStats.indexCount += submesh->indexCount;
+            m_frameStats.triangleCount += submesh->indexCount / 3;
         }
     }
 

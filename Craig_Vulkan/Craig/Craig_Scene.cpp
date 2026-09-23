@@ -10,16 +10,38 @@ CraigError Craig::Scene::init() {
 	m_sun.lightColour = glm::vec3(1.0f, 0.98f, 0.95f);
 	m_sun.ambientColour = glm::vec3(0.05f, 0.05f, 0.08f);
 
-	Craig::GameObject* m_MainObject = new Craig::GameObject;
-	Craig::GameObject* m_secondObject= new Craig::GameObject;
+	// Build a 10 x 10 x 10 cube of evenly spaced ducks.
+	const int cubeDimension = 10;
+	const float duckScale = 0.01f;
+	const float spacing = duckScale * 200.0f; // Gap between ducks.
 
-	m_MainObject->init("phish","data/models/BarramundiFish.glb", this);
-	m_MainObject->setPosition({m_MainObject->getPosition().x, m_MainObject->getPosition().y - 15, m_MainObject->getPosition().z});
-	mpv_Gameobjects.push_back(m_MainObject);
+	for (int x = 0; x < cubeDimension; x++)
+	{
+		for (int y = 0; y < cubeDimension; y++)
+		{
+			for (int z = 0; z < cubeDimension; z++)
+			{
+				Craig::GameObject* duck = new Craig::GameObject;
 
-	m_secondObject->init("fuck","data/models/Duck.glb", this);
-	m_secondObject->setScale(glm::vec3(0.01f));
-	mpv_Gameobjects.push_back(m_secondObject);
+				const int index = x + (y * cubeDimension) + (z * cubeDimension * cubeDimension);
+
+				duck->init("duck" + std::to_string(index), "data/models/Duck.glb", this);
+				duck->setScale(glm::vec3(duckScale));
+				duck->setPosition(glm::vec3(
+					static_cast<float>(x) * spacing,
+					static_cast<float>(y) * spacing,
+					static_cast<float>(z) * spacing));
+				mpv_Gameobjects.push_back(duck);
+			}
+		}
+	}
+
+	// Craig::GameObject* duck = new Craig::GameObject;
+	//
+	// duck->init("duck", "data/models/Duck.glb", this);
+	// duck->setScale(glm::vec3(0.01f));
+	//
+	// mpv_Gameobjects.push_back(duck);
 
 
 	return ret;

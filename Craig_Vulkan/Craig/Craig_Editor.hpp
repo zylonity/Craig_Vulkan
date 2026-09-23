@@ -47,6 +47,11 @@ namespace Craig {
 		void showSceneDetails(const float& deltaTime);
 		bool m_ShowSceneDetails = false;
 
+		void showPerformanceWindow(const float& deltaTime);
+		bool m_ShowPerformanceWindow = false;
+		std::vector<float> mv_fpsHistory;
+		int m_fpsHistoryOffset = 0;
+
 		void renderNewGameObjectWindow();
 		bool m_ShowNewGameObjectWindow = false;
 		std::string m_newGameObjectName;
