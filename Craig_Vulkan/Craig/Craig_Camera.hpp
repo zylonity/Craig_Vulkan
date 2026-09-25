@@ -3,7 +3,7 @@
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 
 #include "Craig_Constants.hpp"
 
@@ -15,7 +15,7 @@ namespace Craig {
         Camera(glm::vec3 pos = glm::vec3(0.0f));
 
         void update(const float& deltaTime);
-        void processSDLEvent(SDL_Event& e);
+        void processSDLEvent(SDL_Event& e, SDL_Window* mp_SDL_Window );
 
         void panTilt(float pan, float tilt);
         void slew(const glm::vec3& v);

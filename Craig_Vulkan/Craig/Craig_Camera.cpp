@@ -8,6 +8,7 @@
 
 #include <glm/gtx/transform.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include <SDL3/SDL_mouse.h>
 
 Craig::Camera::Camera(glm::vec3 pos)
     : m_position(pos)
@@ -99,25 +100,26 @@ glm::mat4 Craig::Camera::getRotationMatrix()
 
 }
 
-void Craig::Camera::processSDLEvent(SDL_Event& e) {
+void Craig::Camera::processSDLEvent(SDL_Event& e, SDL_Window* SDL_Window ) {
 
 
-    if (SDL_GetRelativeMouseMode() == SDL_TRUE) {
-        if (e.type == SDL_KEYDOWN) {
-            if (e.key.keysym.sym == SDLK_w) { m_velocity.z = -1; }
-            if (e.key.keysym.sym == SDLK_s) { m_velocity.z = 1; }
-            if (e.key.keysym.sym == SDLK_a) { m_velocity.x = -1; }
-            if (e.key.keysym.sym == SDLK_d) { m_velocity.x = 1; }
+    if (SDL_GetWindowRelativeMouseMode(SDL_Window) == true) {
+        if (e.type == SDL_EVENT_KEY_DOWN) {
+
+            if (e.key.key == SDLK_W) { m_velocity.z = -1;}
+            if (e.key.key == SDLK_S) { m_velocity.z = 1; }
+            if (e.key.key == SDLK_A) { m_velocity.x = -1; }
+            if (e.key.key == SDLK_D) { m_velocity.x = 1; }
         }
 
-        if (e.type == SDL_KEYUP) {
-            if (e.key.keysym.sym == SDLK_w) { m_velocity.z = 0; }
-            if (e.key.keysym.sym == SDLK_s) { m_velocity.z = 0; }
-            if (e.key.keysym.sym == SDLK_a) { m_velocity.x = 0; }
-            if (e.key.keysym.sym == SDLK_d) { m_velocity.x = 0; }
+        if (e.type == SDL_EVENT_KEY_UP) {
+            if (e.key.key == SDLK_W) { m_velocity.z = 0; }
+            if (e.key.key == SDLK_S) { m_velocity.z = 0; }
+            if (e.key.key == SDLK_A) { m_velocity.x = 0; }
+            if (e.key.key == SDLK_D) { m_velocity.x = 0; }
         }
 
-        if (e.type == SDL_MOUSEMOTION) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
             m_pitchYaw[1] -= ((float)e.motion.xrel / 200.f) * m_rotSpeed;
             m_pitchYaw[0] -= ((float)e.motion.yrel / 200.f) * m_rotSpeed;
         }

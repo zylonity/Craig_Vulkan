@@ -32,7 +32,6 @@
 #include <cassert>
 
 #include "Craig/Craig_Framework.hpp"
-
 //===============================================================================
 // Framework is constructed as Global
 Craig::Framework g_framework;

@@ -5,7 +5,7 @@ project(Craig_Vulkan)
 #on mac, installed with homebrew
 #on linux, installed with the package manager (dnf in my case)
 find_package(Vulkan REQUIRED)
-find_package(SDL2 REQUIRED)
+find_package(SDL3 REQUIRED)
 find_package(glm REQUIRED)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -50,7 +50,7 @@ target_compile_definitions(Craig_Vulkan PUBLIC
 # Link against Vulkan
 target_link_libraries(Craig_Vulkan PUBLIC
         Vulkan::Vulkan
-        SDL2::SDL2
+        SDL3::SDL3
         glm::glm
 )
 

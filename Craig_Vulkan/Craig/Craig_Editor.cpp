@@ -341,17 +341,16 @@ void Craig::ImguiEditor::updateImGuizmo()
 			* glm::mat4_cast(mp_selectedGameObject->getRotationQuat())
 			* glm::scale(glm::mat4(1.0f), mp_selectedGameObject->getScale());
 
-		// ImGuizmo expects the opposite handedness from what we render with. Our scene renders
-		// with a right-handed view/projection (GLM default) plus a Vulkan Y-flip, so we hand
-		// ImGuizmo left-handed equivalents: a perspectiveLH proj and the view with its Z axis flipped.
+		// ImGuizmo handles right-handed matrices now, so no LH hack needed
+		// Proj rebuilt without the Vulkan Y-flip, ImGuizmo wants Y up
 		const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
-		const glm::mat4 projLH = glm::perspectiveLH(
+		const glm::mat4 proj = glm::perspective(
 			glm::radians(camera.m_fov), camera.m_aspect, camera.m_nearPlane, camera.m_farPlane);
-		const glm::mat4 viewLH = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, -1.0f)) * camera.getView();
+		const glm::mat4 view = camera.getView();
 
 		ImGuizmo::Manipulate(
-			glm::value_ptr(viewLH),
-			glm::value_ptr(projLH),
+			glm::value_ptr(view),
+			glm::value_ptr(proj),
 			m_CurrentOperation,
 			ImGuizmo::MODE::LOCAL,
 			glm::value_ptr(transform)

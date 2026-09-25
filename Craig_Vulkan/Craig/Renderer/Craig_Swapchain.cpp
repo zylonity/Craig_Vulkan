@@ -1,5 +1,5 @@
 #include "Craig_Swapchain.hpp"
-#include <SDL_vulkan.h>
+#include <SDL3/SDL_vulkan.h>
 
 CraigError Craig::Swapchain::init(const SwapchainInitInfo& info) {
 
@@ -145,7 +145,7 @@ vk::Extent2D Craig::Swapchain::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR
     else {
         //Rendering resolution, basically.
         int width, height;
-        SDL_Vulkan_GetDrawableSize(mp_Window->getSDLWindow(), &width, &height);
+        SDL_GetWindowSizeInPixels(mp_Window->getSDLWindow(), &width, &height);
 
         vk::Extent2D actualExtent;
         actualExtent.width = std::clamp(static_cast<uint32_t>(width), capabilities.minImageExtent.width, capabilities.maxImageExtent.width);

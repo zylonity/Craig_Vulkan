@@ -1,4 +1,4 @@
-#include <SDL2/SDL_vulkan.h>
+#include <SDL3/SDL_vulkan.h>
 
 #include "Craig_Instance.hpp"
 #include "../Craig_Window.hpp"
@@ -47,7 +47,7 @@ CraigError Craig::Instance::init(const InstanceInitInfo& info) {
 
 	// Create a Vulkan surface for rendering
 	VkSurfaceKHR cSurface; // Vulkan surface for rendering
-	bool sdlRetBool = SDL_Vulkan_CreateSurface(mp_CurrentWindow->getSDLWindow(), static_cast<VkInstance>(m_VK_instance), &cSurface);
+	bool sdlRetBool = SDL_Vulkan_CreateSurface(mp_CurrentWindow->getSDLWindow(), static_cast<VkInstance>(m_VK_instance), nullptr, &cSurface);
 	assert(sdlRetBool && "Could not create a Vulkan surface.");
 
 	m_VK_surface = vk::SurfaceKHR(cSurface);

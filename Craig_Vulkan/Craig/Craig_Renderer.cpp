@@ -12,7 +12,7 @@
 #if defined(IMGUI_ENABLED)
 #include "../External/Imgui/imgui.h"
 #include "../External/Imgui/imgui_impl_vulkan.h"
-#include "../External/Imgui/imgui_impl_sdl2.h"
+#include "../External/Imgui/imgui_impl_sdl3.h"
 #include "../External/Imgui/ImGuizmo/ImGuizmo.h"
 #endif
 
@@ -97,16 +97,16 @@ void Craig::Renderer::InitImgui() {
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // IF using Docking Branch
 
     // Setup Platform/Renderer backends
-    ImGui_ImplSDL2_InitForVulkan(mp_CurrentWindow->getSDLWindow());
+    ImGui_ImplSDL3_InitForVulkan(mp_CurrentWindow->getSDLWindow());
     ImGui_ImplVulkan_InitInfo init_info = {};
     init_info.Instance = m_instance.getVkInstance();
     init_info.PhysicalDevice = m_Devices.getPhysicalDevice();
     init_info.Device = m_Devices.getLogicalDevice();
+    init_info.DescriptorPoolSize = IMGUI_IMPL_VULKAN_MINIMUM_SAMPLED_IMAGE_POOL_SIZE;
 
     Craig::Device::QueueFamilyIndices indices = Craig::Device::findQueueFamilies(m_Devices.getPhysicalDevice(), m_instance.getVkSurface());
     init_info.QueueFamily = indices.graphicsFamily.value();
     init_info.Queue = m_Devices.getGraphicsQueue();
-    init_info.DescriptorPool = m_VK_imguiDescriptorPool;
     init_info.MinImageCount = 2;
     init_info.ImageCount = kMaxFramesInFlight;
     init_info.CheckVkResultFn = check_vk_result;
@@ -131,7 +131,7 @@ CraigError Craig::Renderer::update(const float& deltaTime) {
 #if defined(IMGUI_ENABLED)
     if (m_swapChain.getExtent().width > 0 && m_swapChain.getExtent().height > 0) {
         ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplSDL2_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
         ImGuizmo::BeginFrame();
         Craig::ImguiEditor::getInstance().editorMain(deltaTime);
@@ -206,7 +206,6 @@ void Craig::Renderer::InitVulkan() {
     mp_CurrentWindow->setCameraRef(&mp_SceneManager->getCurrentScene()->getCamera());
 
 #if defined(IMGUI_ENABLED)
-    createImguiDescriptorPool();
     Craig::ImguiEditor::getInstance().setCamera(&mp_SceneManager->getCurrentScene()->getCamera());
 #endif
 
@@ -1068,26 +1067,6 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
 
 }
 
-
-#if defined(IMGUI_ENABLED)
-void Craig::Renderer::createImguiDescriptorPool() {
-
-    vk::DescriptorPoolSize poolSize = {
-    vk::DescriptorType::eCombinedImageSampler,
-    IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE
-    };
-
-    vk::DescriptorPoolCreateInfo poolInfo;
-    poolInfo.setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet)
-        .setMaxSets(poolSize.descriptorCount)
-        .setPoolSizeCount(1)
-        .setPoolSizes(poolSize);
-
-    vk::Result result = m_Devices.getLogicalDevice().createDescriptorPool(&poolInfo, nullptr, &m_VK_imguiDescriptorPool);
-    check_vk_result(static_cast<VkResult>(result));
-}
-#endif
-
 CraigError Craig::Renderer::terminate() {
 
     CraigError ret = CRAIG_SUCCESS;
@@ -1096,9 +1075,8 @@ CraigError Craig::Renderer::terminate() {
 
 #if defined(IMGUI_ENABLED)
     ImGui_ImplVulkan_Shutdown();
-    ImGui_ImplSDL2_Shutdown();
+    ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
-    m_Devices.getLogicalDevice().destroyDescriptorPool(m_VK_imguiDescriptorPool);
 #endif
     vmaDestroyBuffer(m_Devices.getVmaAllocator(), m_VK_indexBuffer, m_VMA_indexAllocation);
 
