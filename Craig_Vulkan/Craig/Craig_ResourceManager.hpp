@@ -71,10 +71,11 @@ namespace Craig {
 		CraigError init(Craig::Renderer* rendererToSet);
 		CraigError terminate();
 
-		void loadModel(std::string modelPath);
+		bool loadModel(std::string modelPath);
 		void terminateModels(const vk::Device& device, const VmaAllocator& memoryAllocator);
 
 		Craig::Model& getModel(std::string modelPath) { return m_loadedModels[modelPath]; };
+		bool isModelLoaded(const std::string& modelPath) { return m_loadedModels.contains(modelPath); };
 
 		//===============================================================================
 		// Singleton Implementations

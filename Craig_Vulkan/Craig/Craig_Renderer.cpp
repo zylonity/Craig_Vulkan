@@ -578,6 +578,25 @@ void Craig::Renderer::createIndexBuffer() {
     vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
 }
 
+// TODO: sub-allocate instead of full rebuild
+void Craig::Renderer::rebuildGeometryBuffers() {
+
+    // GPU might still be drawing with the old buffers
+    m_Devices.getLogicalDevice().waitIdle();
+
+    vmaDestroyBuffer(m_Devices.getVmaAllocator(), m_VK_vertexBuffer, m_VMA_vertexAllocation);
+    vmaDestroyBuffer(m_Devices.getVmaAllocator(), m_VK_indexBuffer, m_VMA_indexAllocation);
+
+    // Null them in case the create functions bail early with nothing to upload
+    m_VK_vertexBuffer = nullptr;
+    m_VMA_vertexAllocation = nullptr;
+    m_VK_indexBuffer = nullptr;
+    m_VMA_indexAllocation = nullptr;
+
+    createVertexBuffer();
+    createIndexBuffer();
+}
+
 void Craig::Renderer::createDescriptorPool() {
 
     std::array<vk::DescriptorPoolSize, 4> poolSizes;
@@ -961,11 +980,20 @@ CraigError Craig::Renderer::newGameObject(std::string objectName, std::string mo
 {
     CraigError ret = CRAIG_SUCCESS;
 
+    // Check before the scene loads it, so we know if it's a brand new model
+    const bool isNewModel = !Craig::ResourceManager::getInstance().isModelLoaded(modelPath);
+
     ret = mp_SceneManager->getCurrentScene()->newGameObject(objectName, modelPath, position);
 
     if (ret != CRAIG_SUCCESS)
     {
         return ret;
+    }
+
+    // New models aren't in the vertex/index buffers yet
+    if (isNewModel)
+    {
+        rebuildGeometryBuffers();
     }
 
     Craig::GameObject* newObject = mp_SceneManager->getCurrentScene()->findObject(objectName);

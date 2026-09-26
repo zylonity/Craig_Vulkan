@@ -93,6 +93,7 @@ namespace Craig {
 		// Buffers / per-frame data
 		void createVertexBuffer();
 		void createIndexBuffer();
+		void rebuildGeometryBuffers();
 		//void createUniformBuffers();
 		void createUniformBuffers();
 		void updateUniformBuffer(uint32_t currentImage, const float& deltaTime);

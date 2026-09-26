@@ -70,12 +70,12 @@ CraigError Craig::ResourceManager::terminate() {
     return ret;
 }
 
-void Craig::ResourceManager::loadModel(std::string modelPath) {
+bool Craig::ResourceManager::loadModel(std::string modelPath) {
     // If this model has already been loaded (e.g. a second GameObject using the
     // same glb), don't re-upload it. Doing so leaks the GPU texture and SubMesh
     // pointers because unordered_map::insert silently drops the duplicate key.
     if (m_loadedModels.find(modelPath) != m_loadedModels.end()) {
-        return;
+        return false;
     }
 
     tinygltf::Model model;
@@ -276,6 +276,8 @@ void Craig::ResourceManager::loadModel(std::string modelPath) {
     tempModel.subMeshesCount = i;
 
     m_loadedModels.insert({modelPath, tempModel});
+
+    return true;
 }
 
 void Craig::ResourceManager::terminateModels(const vk::Device& device, const VmaAllocator& memoryAllocator) {
