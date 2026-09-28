@@ -1,42 +1,40 @@
+#version 450
+
 // Set 1, binding 0 - per-object texture. Rebinds each draw.
-[[vk::binding(0, 1)]] Texture2D texSampler;
-[[vk::binding(0, 1)]] SamplerState texSamplerState;
+layout(set = 1, binding = 0) uniform sampler2D texSampler;
 
 // Push constants, has to match the vertex shader + PushConstantData in Craig_ResourceManager.hpp
-struct PushConstants
+layout(push_constant) uniform PushConstants
 {
-    float4x4 nodeMatrix;
-    float4 baseColorFactor; // Material colour
+    mat4 nodeMatrix;
+    vec4 baseColorFactor; // Material colour
     uint objectIndex;
-};
-[[vk::push_constant]] PushConstants pc;
+} pc;
 
-//set 0, binding 1 - light shit
-[[vk::binding(2, 0)]]
-cbuffer LightData{
-    float3 lightDir;
-    float3 lightColor;
-    float3 ambientColor;
-}
-
-struct PSInput
+// Set 0, binding 2 - light data. std140 pads each vec3 to 16 bytes, matches the alignas(16) in Craig_Renderer.hpp
+layout(set = 0, binding = 2) uniform LightData
 {
-    float4 pos : SV_Position; // Comes from vertex shader
-    float3 color : COLOR0; // Interpolated
-    float3 normals : NORMAL1;
-    float2 texCoord : TEXCOORD2;
+    vec3 lightDir;
+    vec3 lightColor;
+    vec3 ambientColor;
 };
 
-float4 main(PSInput input) : SV_Target
+layout(location = 0) in vec3 inColor;
+layout(location = 1) in vec3 inNormal;
+layout(location = 2) in vec2 inTexCoord;
+
+layout(location = 0) out vec4 outColor;
+
+void main()
 {
     // Sample the texture using interpolated UVs
     // Tinted by the material colour, white if the material doesn't set one
-    float4 texColor = texSampler.Sample(texSamplerState, input.texCoord) * pc.baseColorFactor;
+    vec4 texColor = texture(texSampler, inTexCoord) * pc.baseColorFactor;
 
-    float3 N = normalize(input.normals);
-    float3 L = normalize(lightDir.xyz);
+    vec3 N = normalize(inNormal);
+    vec3 L = normalize(lightDir);
     float NdotL = max(dot(N, L), 0.0);
-    float3 lit = ambientColor.rgb + lightColor.rgb * NdotL;
+    vec3 lit = ambientColor + lightColor * NdotL;
 
-    return float4(lit * texColor.rgb, texColor.a);
+    outColor = vec4(lit * texColor.rgb, texColor.a);
 }

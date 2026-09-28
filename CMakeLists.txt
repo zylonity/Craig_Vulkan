@@ -55,18 +55,16 @@ target_link_libraries(Craig_Vulkan PUBLIC
 )
 
 
-# on windows, we do this at runtime, but on mac/linux we're missing a ton of windows only libraries for hsls
-# so we compile it with dxc before building
-function(compile_hlsl OUTPUT INPUT PROFILE)
-    message(STATUS "Shader: ${INPUT} -> ${OUTPUT} (${PROFILE})")
+# GLSL shaders get compiled to SPIR-V with glslc (ships with the Vulkan SDK) before building
+# glslc picks the shader stage from the file extension (.vert / .frag)
+find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/bin $ENV{VULKAN_SDK}/Bin REQUIRED)
+
+function(compile_glsl OUTPUT INPUT)
+    message(STATUS "Shader: ${INPUT} -> ${OUTPUT}")
     add_custom_command(
             OUTPUT ${OUTPUT}
-            COMMAND ${CMAKE_COMMAND} -E echo "Compiling shader: ${INPUT} -> ${OUTPUT}"
-            COMMAND dxc
-            -spirv
-            -T ${PROFILE}
-            -E main
-            -Fo ${OUTPUT}
+            COMMAND ${GLSLC}
+            -o ${OUTPUT}
             ${INPUT}
             DEPENDS ${INPUT}
             COMMENT "Compiling ${INPUT}"
@@ -76,8 +74,8 @@ endfunction()
 
 set(SHADER_DIR ${CMAKE_SOURCE_DIR}/Craig_Vulkan/data/shaders)
 
-compile_hlsl(${SHADER_DIR}/vert.spv ${SHADER_DIR}/VertexShader.vert vs_6_4)
-compile_hlsl(${SHADER_DIR}/frag.spv ${SHADER_DIR}/FragmentShader.frag ps_6_4)
+compile_glsl(${SHADER_DIR}/vert.spv ${SHADER_DIR}/VertexShader.vert)
+compile_glsl(${SHADER_DIR}/frag.spv ${SHADER_DIR}/FragmentShader.frag)
 
 add_custom_target(Shaders ALL
         DEPENDS

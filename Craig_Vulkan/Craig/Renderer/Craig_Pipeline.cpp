@@ -17,16 +17,9 @@ CraigError Craig::Pipeline::init(const PipelineInitInfo& info) {
 
 void Craig::Pipeline::createGraphicsPipeline() {
 
-    // Compile HLSL shaders to SPIR-V shader modules
-#if defined(_WIN32)
-    m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(mPipe_device, L"data/shaders/VertexShader.vert");
-    m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(mPipe_device, L"data/shaders/FragmentShader.frag");
-#elif defined(__APPLE__) || defined(__linux__)
-
-    m_VK_vertShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(mPipe_device, L"data/shaders/vert.spv");
-    m_VK_fragShaderModule = Craig::ShaderCompilation::CompileHLSLToShaderModule(mPipe_device, L"data/shaders/frag.spv");
-#endif
-
+    // Load the SPIR-V that glslc compiled from the GLSL at build time
+    m_VK_vertShaderModule = Craig::ShaderCompilation::LoadShaderModule(mPipe_device, "data/shaders/vert.spv");
+    m_VK_fragShaderModule = Craig::ShaderCompilation::LoadShaderModule(mPipe_device, "data/shaders/frag.spv");
 
 
     // Set up shader stages for the pipeline

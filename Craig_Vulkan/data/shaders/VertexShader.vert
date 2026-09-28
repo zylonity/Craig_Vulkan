@@ -1,65 +1,51 @@
+#version 450
+
 // Set 0, binding 0 - per-frame camera data (view + proj). Same for every object this frame.
-[[vk::binding(0, 0)]]
-cbuffer CameraData
+layout(set = 0, binding = 0) uniform CameraData
 {
-    float4x4 view;
-    float4x4 proj;
+    mat4 view;
+    mat4 proj;
 };
 
 // Set 0, binding 1 - big array of per-object transforms. We index into it using the push constant.
 struct PerObjectData
 {
-    float4x4 model;
+    mat4 model;
 };
 
-[[vk::binding(1, 0)]]
-StructuredBuffer<PerObjectData> transforms;
+layout(std430, set = 0, binding = 1) readonly buffer TransformBuffer
+{
+    PerObjectData transforms[];
+};
 
 // Push constants, sent per draw. Has to match PushConstantData in Craig_ResourceManager.hpp
-struct PushConstants
+layout(push_constant) uniform PushConstants
 {
-    float4x4 nodeMatrix;      // The glTF node's transform inside the model
-    float4 baseColorFactor;   // Material colour, only the fragment shader uses it
-    uint objectIndex;         // Which slot of the transforms array to read for this draw
-};
-[[vk::push_constant]] PushConstants pc;
+    mat4 nodeMatrix;      // The glTF node's transform inside the model
+    vec4 baseColorFactor; // Material colour, only the fragment shader uses it
+    uint objectIndex;     // Which slot of the transforms array to read for this draw
+} pc;
 
-struct VSInput
+// Locations have to match the attribute descriptions in Craig_ResourceManager.cpp
+layout(location = 0) in vec3 inPos;
+layout(location = 1) in vec3 inColor;
+layout(location = 2) in vec3 inNormal;
+layout(location = 3) in vec2 inTexCoord;
+
+// Passed to the fragment shader, locations have to match its inputs
+layout(location = 0) out vec3 outColor;
+layout(location = 1) out vec3 outNormal;
+layout(location = 2) out vec2 outTexCoord;
+
+void main()
 {
-    float3 pos : POSITION0; // so a float2 is 32bits, which means it only uses 1 location slot, which is why it's COLOR1 after
-    float3 color : COLOR1; // If the position was a double2, it would use 2 location slots, so COLOR1 would become COLOR2
-    float3 normals : NORMAL2;
-    float2 texCoord : TEXCOORD3;
-};
-
-
-struct VSOutput
-{
-    float4 pos : SV_Position; // Output to rasterizer
-    float3 color : COLOR0; // Passed to fragment shader
-    float3 normals : NORMAL1;
-    float2 texCoord : TEXCOORD2; // UVs to fragment
-};
-
-
-VSOutput main(VSInput input)
-{
-    VSOutput output;
-
-    float4 worldPos = float4(input.pos, 1.0);
-
     // Grab this object's model matrix from the SSBO using the push-constant index, then put the node inside it
-    float4x4 model = mul(transforms[pc.objectIndex].model, pc.nodeMatrix);
+    mat4 model = transforms[pc.objectIndex].model * pc.nodeMatrix;
 
-    //Apply MVP
-    worldPos = mul(model, worldPos); //Apply model matrix
-    worldPos = mul(view, worldPos); //Apply view matrix
-    worldPos = mul(proj, worldPos); //Apply projection matrix
+    // Apply MVP
+    gl_Position = proj * view * model * vec4(inPos, 1.0);
 
-    output.pos = worldPos;
-    output.color = input.color;
-    output.normals = normalize(mul((float3x3)model, input.normals));
-    output.texCoord = input.texCoord;
-
-    return output;
+    outColor = inColor;
+    outNormal = normalize(mat3(model) * inNormal);
+    outTexCoord = inTexCoord;
 }
