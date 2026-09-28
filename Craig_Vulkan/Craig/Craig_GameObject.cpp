@@ -5,20 +5,19 @@
 #include <glm/gtx/euler_angles.hpp>
 
 #include "Craig_GameObject.hpp"
-#include "Craig_ResourceManager.hpp"
 #include "Craig_Scene.hpp"
+#include "Components/Craig_Model.hpp"
+#include "Components/Craig_Sun.hpp"
 #include "Craig_Utilities.hpp"
 #include "imgui.h"
 #include "imgui_stdlib.h"
 
-CraigError Craig::GameObject::init(std::string name, std::string modelPath, Craig::Scene* scenePtr) {
+CraigError Craig::GameObject::init(std::string name, Craig::Scene* scenePtr) {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-	m_modelPath = modelPath;
 	m_name = name;
 	mp_scene = scenePtr;
-	Craig::ResourceManager::getInstance().loadModel(m_modelPath);
 
 	mv3_position = { 0.0f, 0.0f, 0.0f };
 	mv3_rotation = { 0.0f, 0.0f, 0.0f };
@@ -43,6 +42,11 @@ CraigError Craig::GameObject::update() {
 
 	updateModelMatrix();
 
+	for (const std::unique_ptr<Components::Component>& pComponent : mv_components)
+	{
+		pComponent->update();
+	}
+
 	return ret;
 }
 
@@ -60,7 +64,23 @@ CraigError Craig::GameObject::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+	for (const std::unique_ptr<Components::Component>& pComponent : mv_components)
+	{
+		pComponent->terminate();
+	}
+	mv_components.clear();
+
 	return ret;
+}
+
+void Craig::GameObject::removeComponent(Components::Component* pComponent)
+{
+	assert(pComponent != nullptr);
+
+	pComponent->terminate();
+
+	// unique_ptr frees it once it's out of the vector
+	std::erase_if(mv_components, [pComponent](const std::unique_ptr<Components::Component>& pOwned) { return pOwned.get() == pComponent; });
 }
 
 void Craig::GameObject::displayImGuiAttributes()
@@ -108,6 +128,61 @@ void Craig::GameObject::displayImGuiAttributes()
 		ImGui::TreePop();
 	};
 
+	displayComponents();
+}
+
+void Craig::GameObject::displayComponents()
+{
+	// Can't remove mid-loop or we'd invalidate the iterator, so remember it and do it after
+	Components::Component* pComponentToRemove = nullptr;
+
+	for (const std::unique_ptr<Components::Component>& pComponent : mv_components)
+	{
+		ImGui::PushID(pComponent.get());
+		if (ImGui::TreeNodeEx("##Component", ImGuiTreeNodeFlags_DefaultOpen, "%s", pComponent->getTypeName()))
+		{
+			pComponent->displayImGuiAttributes();
+
+			if (ImGui::Button("Remove Component"))
+			{
+				pComponentToRemove = pComponent.get();
+			}
+			ImGui::TreePop();
+		}
+		ImGui::PopID();
+	}
+
+	if (pComponentToRemove != nullptr)
+	{
+		removeComponent(pComponentToRemove);
+	}
+
+	if (ImGui::Button("Add Component"))
+	{
+		ImGui::OpenPopup("AddComponentPopup");
+	}
+
+	if (ImGui::BeginPopup("AddComponentPopup"))
+	{
+		// items are greyed out if this object already has one
+		if (ImGui::MenuItem("Model", nullptr, false, getComponent<Components::Model>() == nullptr))
+		{
+			addComponent<Components::Model>();
+		}
+
+		// only one sun per scene
+		const bool sceneHasSun = mp_scene->getSun() != nullptr;
+		if (ImGui::MenuItem("Sun", nullptr, false, !sceneHasSun))
+		{
+			addComponent<Components::Sun>();
+		}
+		if (sceneHasSun)
+		{
+			ImGui::SetItemTooltip("The scene already has a sun (%s)", mp_scene->getSun()->getOwner()->getName().c_str());
+		}
+
+		ImGui::EndPopup();
+	}
 }
 
 

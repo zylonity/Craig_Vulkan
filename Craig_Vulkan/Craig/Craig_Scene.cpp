@@ -1,5 +1,7 @@
 #include "Craig_Scene.hpp"
 #include "Craig_Utilities.hpp"
+#include "Components/Craig_Model.hpp"
+#include "Components/Craig_Sun.hpp"
 #include "../External/json.hpp"
 #include <filesystem>
 #include <fstream>
@@ -27,12 +29,6 @@ CraigError Craig::Scene::init(const std::string& scenePath) {
 	m_scenePath = scenePath;
 	m_name = sceneJson.value("name", std::filesystem::path(scenePath).stem().string());
 
-	// sun, falls back to the old hardcoded values
-	const nlohmann::json sunJson = sceneJson.value("sun", nlohmann::json::object());
-	m_sun.lightDir = Utilities::readJsonVec3(sunJson, "direction", glm::vec3(0.5f, 1.0f, 0.25f));
-	m_sun.lightColour = Utilities::readJsonVec3(sunJson, "colour", glm::vec3(1.0f, 0.98f, 0.95f));
-	m_sun.ambientColour = Utilities::readJsonVec3(sunJson, "ambient", glm::vec3(0.05f, 0.05f, 0.08f));
-
 	// camera start position + pitch/yaw
 	const nlohmann::json cameraJson = sceneJson.value("camera", nlohmann::json::object());
 	m_camera.setPosition(Utilities::readJsonVec3(cameraJson, "position", glm::vec3(0.0f)));
@@ -42,27 +38,133 @@ CraigError Craig::Scene::init(const std::string& scenePath) {
 	for (const nlohmann::json& objectJson : sceneJson.value("gameObjects", nlohmann::json::array()))
 	{
 		const std::string objectName = objectJson.value("name", "");
-		const std::string modelPath = objectJson.value("model", "");
 
 		// skip anything broken instead of crashing the whole scene
-		if (objectName.empty() || findObject(objectName) != nullptr || !std::filesystem::exists(modelPath))
+		if (objectName.empty() || findObject(objectName) != nullptr)
 		{
-			std::cerr << "Skipping game object '" << objectName << "' in " << scenePath << " (no name, duplicate name or missing model)" << std::endl;
+			std::cerr << "Skipping game object '" << objectName << "' in " << scenePath << " (no name or duplicate name)" << std::endl;
 			continue;
 		}
 
 		Craig::GameObject* pObject = new Craig::GameObject;
-		pObject->init(objectName, modelPath, this);
+		pObject->init(objectName, this);
 		pObject->setPosition(Utilities::readJsonVec3(objectJson, "position", glm::vec3(0.0f)));
 		pObject->setRotation(Utilities::readJsonVec3(objectJson, "rotation", glm::vec3(0.0f))); // in degrees
 		pObject->setScale(Utilities::readJsonVec3(objectJson, "scale", glm::vec3(1.0f)));
 		mpv_Gameobjects.push_back(pObject);
+
+		loadComponentsFromJson(pObject, objectJson.value("components", nlohmann::json::object()));
 	}
 
 	// Sort the editor game object list by alphabetical order.
 	Utilities::sortGameObjectsByName(mpv_Gameobjects);
 
+	// whoever loads the scene builds the buffers for it, so nothing's dirty yet
+	m_geometryDirty = false;
+
 	return ret;
+}
+
+CraigError Craig::Scene::save() {
+
+	CraigError ret = CRAIG_SUCCESS;
+
+	// same layout init() reads
+	nlohmann::json sceneJson;
+	sceneJson["name"] = m_name;
+
+	nlohmann::json cameraJson = nlohmann::json::object();
+	Utilities::writeJsonVec3(cameraJson, "position", m_camera.getPosition());
+	Utilities::writeJsonVec2(cameraJson, "rotation", m_camera.getRotation());
+	sceneJson["camera"] = cameraJson;
+
+	sceneJson["gameObjects"] = nlohmann::json::array();
+	for (const Craig::GameObject* pObject : mpv_Gameobjects)
+	{
+		nlohmann::json objectJson;
+		objectJson["name"] = pObject->getName();
+		Utilities::writeJsonVec3(objectJson, "position", pObject->getPosition());
+		Utilities::writeJsonVec3(objectJson, "rotation", pObject->getRotation()); // in degrees
+		Utilities::writeJsonVec3(objectJson, "scale", pObject->getScale());
+
+		objectJson["components"] = nlohmann::json::object();
+		for (const std::unique_ptr<Components::Component>& pComponent : pObject->getComponents())
+		{
+			nlohmann::json componentJson = nlohmann::json::object();
+			pComponent->saveToJson(componentJson);
+			objectJson["components"][pComponent->getJsonKey()] = componentJson;
+		}
+
+		sceneJson["gameObjects"].push_back(objectJson);
+	}
+
+	// Write to a temp file first and swap it in, so a failed write can't wipe the old scene
+	const std::filesystem::path scenePath = m_scenePath;
+	std::filesystem::path tempPath = scenePath;
+	tempPath += ".tmp";
+
+	std::ofstream sceneFile(tempPath);
+	if (!sceneFile.is_open())
+	{
+		std::cerr << "Couldn't open " << tempPath << " for writing" << std::endl;
+		return CRAIG_FAIL;
+	}
+	sceneFile << sceneJson.dump(2) << std::endl;
+	sceneFile.close();
+	if (sceneFile.fail())
+	{
+		std::cerr << "Couldn't write " << tempPath << std::endl;
+		return CRAIG_FAIL;
+	}
+
+	std::error_code error;
+	std::filesystem::rename(tempPath, scenePath, error);
+	if (error)
+	{
+		std::cerr << "Couldn't replace " << scenePath << ": " << error.message() << std::endl;
+		return CRAIG_FAIL;
+	}
+
+	return ret;
+}
+
+// Components are keyed by type, e.g. "components": { "model": { "path": "..." }, "sun": { ... } }
+void Craig::Scene::loadComponentsFromJson(Craig::GameObject* pObject, const nlohmann::json& componentsJson)
+{
+	if (componentsJson.contains("model"))
+	{
+		Components::Model* pModel = pObject->addComponent<Components::Model>();
+		if (pModel->loadFromJson(componentsJson["model"]) != CRAIG_SUCCESS)
+		{
+			std::cerr << "Couldn't load the model for '" << pObject->getName() << "' in " << m_scenePath << " (missing file or not a .glb)" << std::endl;
+			pObject->removeComponent(pModel);
+		}
+	}
+
+	if (componentsJson.contains("sun"))
+	{
+		// only one sun per scene, first one wins
+		if (getSun() != nullptr)
+		{
+			std::cerr << "Skipping sun on '" << pObject->getName() << "' in " << m_scenePath << ", the scene already has one" << std::endl;
+		}
+		else
+		{
+			pObject->addComponent<Components::Sun>()->loadFromJson(componentsJson["sun"]);
+		}
+	}
+}
+
+Craig::Components::Sun* Craig::Scene::getSun() const
+{
+	for (const Craig::GameObject* pObject : mpv_Gameobjects)
+	{
+		if (Components::Sun* pSun = pObject->getComponent<Components::Sun>())
+		{
+			return pSun;
+		}
+	}
+	return nullptr;
 }
 
 Craig::GameObject* Craig::Scene::findObject(const std::string& objectName) const
@@ -114,15 +216,22 @@ CraigError Craig::Scene::newGameObject(std::string objectName, std::string model
 		return CRAIG_DUPLICATE_NAME;
 	}
 
-	if (std::filesystem::exists(modelPath) == false)
-	{
-		return CRAIG_FILE_NOT_FOUND;
-	}
-
 	// Create the game object in the scene.
 	Craig::GameObject* tempObject = new Craig::GameObject;
+	tempObject->init(objectName, this);
 
-	tempObject->init(objectName,modelPath, this);
+	// an empty path makes an empty game object, otherwise it gets a model component
+	if (!modelPath.empty())
+	{
+		ret = tempObject->addComponent<Components::Model>()->setModelPath(modelPath);
+		if (ret != CRAIG_SUCCESS)
+		{
+			tempObject->terminate();
+			delete tempObject;
+			return ret;
+		}
+	}
+
 	tempObject->setPosition(position);
 	mpv_Gameobjects.push_back(tempObject);
 

@@ -24,6 +24,8 @@
 #include "Craig_ShaderCompilation.hpp"
 #include "Craig_Editor.hpp"
 #include "Craig_SceneManager.hpp"
+#include "Components/Craig_Model.hpp"
+#include "Components/Craig_Sun.hpp"
 
 #include "Renderer/Craig_Swapchain.hpp"
 #include "Renderer/Craig_Device.hpp"
@@ -138,6 +140,13 @@ CraigError Craig::Renderer::update(const float& deltaTime) {
     }
 
 #endif
+
+    // a model got added/changed/removed this frame, so the buffers are out of date
+    if (mp_SceneManager->getCurrentScene()->consumeGeometryDirty())
+    {
+        rebuildGeometryBuffers();
+        createModelDescriptorSets();
+    }
 
     drawFrame(deltaTime);
 
@@ -320,8 +329,12 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_pipeline.getGraphicsPipeline());
     vk::Buffer vertexBuffers[] = { m_VK_vertexBuffer };
     vk::DeviceSize offsets[] = { 0 };
-    commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
-    commandBuffer.bindIndexBuffer(m_VK_indexBuffer, 0, vk::IndexType::eUint32);
+    // Buffers are null if nothing in the scene has a model, binding a null buffer is invalid (nothing gets drawn anyway)
+    if (m_VK_vertexBuffer && m_VK_indexBuffer)
+    {
+        commandBuffer.bindVertexBuffers(0, vertexBuffers, offsets);
+        commandBuffer.bindIndexBuffer(m_VK_indexBuffer, 0, vk::IndexType::eUint32);
+    }
 
     // Set the dynamic viewport (covers the whole framebuffer)
     vk::Viewport viewport;
@@ -362,8 +375,15 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
 
     for (size_t objectIdx = 0; objectIdx < currentSceneObjects.size(); objectIdx++)
     {
-        Craig::GameObject* gameObject = currentSceneObjects[objectIdx];
-        Craig::Model& model = resources.getModel(gameObject->getModelPath());
+        // objects without a model component (e.g. just a sun) have nothing to draw
+        const Craig::Components::Model* pModelComponent = currentSceneObjects[objectIdx]->getComponent<Craig::Components::Model>();
+        if (pModelComponent == nullptr || !pModelComponent->hasModel())
+        {
+            continue;
+        }
+
+        // objectIdx still lines up with the SSBO, every object gets a slot whether it draws or not
+        Craig::Model& model = resources.getModel(pModelComponent->getModelPath());
 
         // draw the model's node tree, children get drawn recursively
         for (const Craig::Node* node : model.nodes)
@@ -467,7 +487,10 @@ void Craig::Renderer::createVertexBuffer() {
     uint32_t totalVertexCount = 0;
     for (Craig::GameObject* gameObject : currentSceneObjects)
     {
-        Craig::Model& model = resources.getModel(gameObject->getModelPath());
+        const Craig::Components::Model* pModelComponent = gameObject->getComponent<Craig::Components::Model>();
+        if (pModelComponent == nullptr || !pModelComponent->hasModel()) continue;
+
+        Craig::Model& model = resources.getModel(pModelComponent->getModelPath());
         for (size_t i = 0; i < model.subMeshesCount; i++)
         {
             Craig::SubMesh* submesh = model.subMeshes[i];
@@ -502,7 +525,10 @@ void Craig::Renderer::createVertexBuffer() {
     std::unordered_set<std::string> copiedModels;
     for (Craig::GameObject* gameObject : currentSceneObjects)
     {
-        const std::string& path = gameObject->getModelPath();
+        const Craig::Components::Model* pModelComponent = gameObject->getComponent<Craig::Components::Model>();
+        if (pModelComponent == nullptr || !pModelComponent->hasModel()) continue;
+
+        const std::string& path = pModelComponent->getModelPath();
         if (!copiedModels.insert(path).second) continue;
 
         Craig::Model& model = resources.getModel(path);
@@ -539,7 +565,10 @@ void Craig::Renderer::createIndexBuffer() {
     uint32_t totalIndexCount = 0;
     for (Craig::GameObject* gameObject : currentSceneObjects)
     {
-        Craig::Model& model = resources.getModel(gameObject->getModelPath());
+        const Craig::Components::Model* pModelComponent = gameObject->getComponent<Craig::Components::Model>();
+        if (pModelComponent == nullptr || !pModelComponent->hasModel()) continue;
+
+        Craig::Model& model = resources.getModel(pModelComponent->getModelPath());
         for (size_t i = 0; i < model.subMeshesCount; ++i) {
             Craig::SubMesh* submesh = model.subMeshes[i];
             submesh->indexOffset = totalIndexCount;
@@ -573,7 +602,10 @@ void Craig::Renderer::createIndexBuffer() {
     std::unordered_set<std::string> copiedModels;
     for (Craig::GameObject* gameObject : currentSceneObjects)
     {
-        const std::string& path = gameObject->getModelPath();
+        const Craig::Components::Model* pModelComponent = gameObject->getComponent<Craig::Components::Model>();
+        if (pModelComponent == nullptr || !pModelComponent->hasModel()) continue;
+
+        const std::string& path = pModelComponent->getModelPath();
         if (!copiedModels.insert(path).second) continue;
 
         Craig::Model& model = resources.getModel(path);
@@ -856,9 +888,20 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
     memcpy(mv_viewProjUboMap[currentImage], &viewProjUbo, sizeof(viewProjUbo));
 
     LightData lightData;
-    lightData.lightDir = mp_SceneManager->getCurrentScene()->getSun().lightDir;
-    lightData.lightColour = mp_SceneManager->getCurrentScene()->getSun().lightColour;
-    lightData.ambientColour = mp_SceneManager->getCurrentScene()->getSun().ambientColour;
+    const Craig::Components::Sun* pSun = mp_SceneManager->getCurrentScene()->getSun();
+    if (pSun != nullptr)
+    {
+        lightData.lightDir = pSun->getLightDir();
+        lightData.lightColour = pSun->getLightColour();
+        lightData.ambientColour = pSun->getAmbientColour();
+    }
+    else
+    {
+        // No sun means no directional light, keep a bit of ambient so the scene isn't pitch black
+        lightData.lightDir = glm::vec3(0.0f, 1.0f, 0.0f);
+        lightData.lightColour = glm::vec3(0.0f);
+        lightData.ambientColour = glm::vec3(0.05f, 0.05f, 0.08f);
+    }
     memcpy(mv_lightUboMap[currentImage], &lightData, sizeof(lightData));
 
 
@@ -998,22 +1041,8 @@ CraigError Craig::Renderer::newGameObject(std::string objectName, std::string mo
 {
     CraigError ret = CRAIG_SUCCESS;
 
-    // Check before the scene loads it, so we know if it's a brand new model
-    const bool isNewModel = !Craig::ResourceManager::getInstance().isModelLoaded(modelPath);
-
+    // The model component marks the scene's geometry dirty, update() rebuilds the buffers before the next draw
     ret = mp_SceneManager->getCurrentScene()->newGameObject(objectName, modelPath, position);
-
-    if (ret != CRAIG_SUCCESS)
-    {
-        return ret;
-    }
-
-    // New models aren't in the vertex/index buffers yet, and their images need sets
-    if (isNewModel)
-    {
-        rebuildGeometryBuffers();
-        createModelDescriptorSets();
-    }
 
     return ret;
 }

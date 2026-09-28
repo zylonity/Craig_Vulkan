@@ -17,8 +17,11 @@
 #include "Craig_SceneManager.hpp"
 #include "Craig_GameObject.hpp"
 #include "Craig_Scene.hpp"
+#include "Craig_Utilities.hpp"
+#include "../External/json.hpp"
 
 #include <filesystem>
+#include <fstream>
 
 CraigError Craig::ImguiEditor::editorInit() {
 
@@ -72,6 +75,7 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 	updateImGuizmo();
 
 	renderNewGameObjectWindow();
+	renderNewSceneWindow();
 
 	return ret;
 }
@@ -86,13 +90,31 @@ CraigError Craig::ImguiEditor::terminate() {
 
 void Craig::ImguiEditor::showMainMenuBar()
 {
+	// global route so it works no matter which window has focus
+	if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
+	{
+		saveCurrentScene();
+	}
+
 	if (ImGui::BeginMainMenuBar())
 	{
+		if (ImGui::BeginMenu("New"))
+		{
+			ImGui::MenuItem("New Scene", nullptr, &m_ShowNewSceneWindow);
+			ImGui::EndMenu();
+		}
+
 		// lists every .json in the scenes folder, the current one gets a tick
 		if (ImGui::BeginMenu("Scenes"))
 		{
 			// copy, not a reference, since loading a scene deletes the old one mid-loop
 			const std::string currentScenePath = mp_sceneManager->getCurrentScene()->getScenePath();
+
+			if (ImGui::MenuItem("Save Scene", "Ctrl+S"))
+			{
+				saveCurrentScene();
+			}
+			ImGui::Separator();
 
 			// error_code version so a missing folder doesn't throw
 			std::error_code error;
@@ -139,8 +161,34 @@ void Craig::ImguiEditor::showMainMenuBar()
 			ImGui::EndMenu();
 		}
 
+		// show the last save result for a few seconds
+		constexpr double kSaveStatusDuration = 3.0;
+		if (!m_saveStatus.empty() && ImGui::GetTime() - m_saveStatusTime < kSaveStatusDuration)
+		{
+			ImGui::Separator();
+			ImGui::TextColored(m_saveStatusColour, "%s", m_saveStatus.c_str());
+		}
+
 		ImGui::EndMainMenuBar();
 	}
+}
+
+void Craig::ImguiEditor::saveCurrentScene()
+{
+	const Craig::Scene* pScene = mp_sceneManager->getCurrentScene();
+	const std::string fileName = std::filesystem::path(pScene->getScenePath()).filename().string();
+
+	if (mp_sceneManager->getCurrentScene()->save() == CRAIG_SUCCESS)
+	{
+		m_saveStatus = "Saved " + fileName;
+		m_saveStatusColour = { 0.4f, 1.0f, 0.4f, 1.0f };
+	}
+	else
+	{
+		m_saveStatus = "Couldn't save " + fileName;
+		m_saveStatusColour = { 1.0f, 0.0f, 0.0f, 1.0f };
+	}
+	m_saveStatusTime = ImGui::GetTime();
 }
 
 void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
@@ -277,13 +325,109 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	}
 }
 
+void Craig::ImguiEditor::renderNewSceneWindow()
+{
+	if (m_ShowNewSceneWindow)
+	{
+		// same centering as the new game object window
+		const ImVec2 windowSize(500, 100);
+		ImGui::SetNextWindowSize(windowSize, ImGuiCond_Appearing);
+		const ImVec2 windowPos = ImVec2((mp_renderer->getWindowSize().x - windowSize.x) * 0.5f, (mp_renderer->getWindowSize().y - windowSize.y) * 0.5f);
+		ImGui::SetNextWindowPos(windowPos, ImGuiCond_Appearing);
+
+		ImGui::Begin("New Scene", &m_ShowNewSceneWindow);
+
+		if (ImGui::InputText("Name", &m_newSceneName))
+		{
+			m_newSceneError.clear();
+		}
+
+		if (!m_newSceneError.empty())
+		{
+			ImGui::TextColored({ 1.0f, 0.0f, 0.0f, 1.0f }, "%s", m_newSceneError.c_str());
+		}
+
+		if (ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::Button("Create"))
+		{
+			// The name doubles as the file name, so keep it to a single plain file
+			const std::filesystem::path scenePath = std::filesystem::path(kScenesDirectory) / (m_newSceneName + ".json");
+
+			if (m_newSceneName.empty())
+			{
+				m_newSceneError = "Scene must have a name.";
+			}
+			else if (m_newSceneName.find_first_of("/\\:*?\"<>|.") != std::string::npos)
+			{
+				m_newSceneError = "Name can't contain / \\ : * ? \" < > | or .";
+			}
+			else if (std::filesystem::exists(scenePath))
+			{
+				m_newSceneError = "A scene with that name already exists.";
+			}
+			else
+			{
+				// empty scene, just a camera at the origin and a sun so it isn't dark
+				nlohmann::json sceneJson;
+				sceneJson["name"] = m_newSceneName;
+
+				nlohmann::json cameraJson = nlohmann::json::object();
+				Utilities::writeJsonVec3(cameraJson, "position", glm::vec3(0.0f));
+				Utilities::writeJsonVec2(cameraJson, "rotation", glm::vec2(0.0f));
+				sceneJson["camera"] = cameraJson;
+
+				nlohmann::json sunObjectJson;
+				sunObjectJson["name"] = "Sun";
+				sunObjectJson["components"]["sun"] = nlohmann::json::object(); // sun component fills in its defaults
+				sceneJson["gameObjects"] = nlohmann::json::array({ sunObjectJson });
+
+				std::ofstream sceneFile(scenePath);
+				if (!sceneFile.is_open())
+				{
+					m_newSceneError = "Couldn't create " + scenePath.string();
+				}
+				else
+				{
+					sceneFile << sceneJson.dump(2) << std::endl;
+					sceneFile.close();
+
+					// Selected object belongs to the old scene, drop it before it's deleted
+					mp_selectedGameObject = nullptr;
+
+					if (mp_renderer->loadScene(scenePath.string()) != CRAIG_SUCCESS)
+					{
+						m_newSceneError = "Created the scene but couldn't load it.";
+					}
+					else
+					{
+						m_ShowNewSceneWindow = false;
+					}
+				}
+			}
+		}
+
+		ImGui::SameLine();
+		if (ImGui::Button("Close"))
+		{
+			m_ShowNewSceneWindow = false;
+		}
+
+		ImGui::End();
+	}
+
+	if (!m_ShowNewSceneWindow)
+	{
+		m_newSceneName.clear();
+		m_newSceneError.clear();
+	}
+}
+
 void Craig::ImguiEditor::renderNewGameObjectWindow()
 {
 	if (m_ShowNewGameObjectWindow)
 	{
 
 		// Parameters for centering the window.
-		const ImVec2 windowSize(500, 100);
+		const ImVec2 windowSize(500, 120);
 		ImGui::SetNextWindowSize(windowSize, ImGuiCond_Appearing);
 		const ImVec2 windowPos = ImVec2((mp_renderer->getWindowSize().x - windowSize.x) * 0.5f, (mp_renderer->getWindowSize().y - windowSize.y) * 0.5f);
 		ImGui::SetNextWindowPos(windowPos, ImGuiCond_Appearing);
@@ -303,10 +447,12 @@ void Craig::ImguiEditor::renderNewGameObjectWindow()
 		{
 			m_modelBrowser.SetTitle("Select 3D Model");
 			m_modelBrowser.SetDirectory("data/models");
-			m_modelBrowser.SetTypeFilters({ ".glb", ".gltf" });
+			m_modelBrowser.SetTypeFilters({ ".glb" });
 			m_modelBrowser.Open();
 
 		}
+
+		ImGui::TextDisabled("Leave the path empty for an empty game object");
 
 		m_modelBrowser.Display();
 
@@ -339,6 +485,9 @@ void Craig::ImguiEditor::renderNewGameObjectWindow()
 				break;
 			case CRAIG_FILE_NOT_FOUND:
 				m_NewGameObjectError = "Couldn't find a file under that path";
+				break;
+			case CRAIG_FAIL:
+				m_NewGameObjectError = "Only .glb models are supported";
 				break;
 			default:
 				assert(err == CRAIG_SUCCESS);

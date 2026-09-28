@@ -44,11 +44,21 @@ namespace Craig {
 		void showMainMenuBar();
 		std::string m_sceneLoadError;
 
+		void saveCurrentScene();
+		std::string m_saveStatus;
+		ImVec4 m_saveStatusColour;
+		double m_saveStatusTime = 0.0; // When the status was set, so it can fade out
+
 		void showRenderProperties(const float& deltaTime);
 		bool m_ShowRendererProperties = false;
 
 		void showSceneDetails(const float& deltaTime);
 		bool m_ShowSceneDetails = false;
+
+		void renderNewSceneWindow();
+		bool m_ShowNewSceneWindow = false;
+		std::string m_newSceneName;
+		std::string m_newSceneError;
 
 		void renderNewGameObjectWindow();
 		bool m_ShowNewGameObjectWindow = false;

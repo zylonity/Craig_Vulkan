@@ -6,11 +6,13 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <memory>
 #include <string>
 #include <vector>
 #include <vulkan/vulkan.hpp>
 
 #include "Craig_Constants.hpp"
+#include "Components/Craig_Component.hpp"
 
 
 namespace Craig {
@@ -19,7 +21,7 @@ namespace Craig {
 	class GameObject {
 
 	public:
-		CraigError init(std::string name, std::string modelPath, Craig::Scene* scenePtr);
+		CraigError init(std::string name, Craig::Scene* scenePtr);
 		CraigError update();
 		CraigError terminate();
 
@@ -35,11 +37,47 @@ namespace Craig {
 		void setScale(glm::vec3 scale)		 { mv3_scale = scale; };
 		void setRotationQuat(const glm::quat& q);
 
-		const std::string& getModelPath() const { return m_modelPath; }
 		const std::string& getName() const { return m_name; }
+		Craig::Scene* getScene() const { return mp_scene; }
+
+		// Returns the component of type T, or nullptr if this object doesn't have one
+		template<typename T>
+		T* getComponent() const
+		{
+			for (const std::unique_ptr<Components::Component>& pComponent : mv_components)
+			{
+				if (T* pFound = dynamic_cast<T*>(pComponent.get()))
+				{
+					return pFound;
+				}
+			}
+			return nullptr;
+		}
+
+		// Only one of each component type per object, returns nullptr if it already has one
+		template<typename T>
+		T* addComponent()
+		{
+			if (getComponent<T>() != nullptr)
+			{
+				return nullptr;
+			}
+
+			std::unique_ptr<T> pComponent = std::make_unique<T>();
+			T* pRaw = pComponent.get();
+			pRaw->setOwner(this);
+			pRaw->init();
+			mv_components.push_back(std::move(pComponent));
+			return pRaw;
+		}
+
+		void removeComponent(Components::Component* pComponent);
+		const std::vector<std::unique_ptr<Components::Component>>& getComponents() const { return mv_components; }
 
 		void displayImGuiAttributes();
 	private:
+		void displayComponents();
+
 		void updateModelMatrix();
 
 		glm::vec3 mv3_position{};
@@ -50,10 +88,11 @@ namespace Craig {
 		glm::mat4 m_modelMatrix = glm::mat4(1);
 		glm::mat4 m_inverseModelMatrix{};
 
-		std::string m_modelPath;
 		std::string m_name;
 
-		Craig::Scene* mp_scene;
+		std::vector<std::unique_ptr<Components::Component>> mv_components;
+
+		Craig::Scene* mp_scene = nullptr;
 
 		//TODO: Maybe some sort of UUID system? Currently relying on either the name or the pointer, either of which could easily mess up
 
