@@ -11,9 +11,11 @@ namespace Craig {
 		CraigError update(const float& deltaTime);
 		CraigError terminate();
 
+		CraigError loadScene(const std::string& scenePath);
+
 		Craig::Scene* getCurrentScene() { return mp_CurrentScene; };
 	private:
-		Craig::Scene* mp_CurrentScene;
+		Craig::Scene* mp_CurrentScene = nullptr;
 
 
 	};

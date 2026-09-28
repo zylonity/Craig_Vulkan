@@ -4,6 +4,38 @@
 #include "imgui.h"
 #include <algorithm>
 
+// Shared by all the json vector overloads, L = component count, T = float/int, Q = glm precision
+template<glm::length_t L, typename T, glm::qualifier Q>
+static glm::vec<L, T, Q> readJsonVec(const nlohmann::json& json, const char* key, const glm::vec<L, T, Q>& fallback)
+{
+	if (!json.contains(key) || !json[key].is_array() || json[key].size() != L)
+	{
+		return fallback;
+	}
+
+	glm::vec<L, T, Q> result;
+	for (glm::length_t i = 0; i < L; i++)
+	{
+		// bail on anything that isn't a number, e.g. ["a", 1, 2]
+		if (!json[key][i].is_number())
+		{
+			return fallback;
+		}
+		result[i] = json[key][i].get<T>();
+	}
+	return result;
+}
+
+template<glm::length_t L, typename T, glm::qualifier Q>
+static void writeJsonVec(nlohmann::json& json, const char* key, const glm::vec<L, T, Q>& value)
+{
+	json[key] = nlohmann::json::array();
+	for (glm::length_t i = 0; i < L; i++)
+	{
+		json[key].push_back(value[i]);
+	}
+}
+
 //Vector3
 bool Craig::Utilities::displayVectorAttribute(const std::string& inputName, glm::vec3& attribute)
 {
@@ -43,4 +75,12 @@ bool Craig::Utilities::compareStringsCaseInsensitive(std::string str1, std::stri
 	return str1 < str2;
 }
 
+glm::vec2 Craig::Utilities::readJsonVec2(const nlohmann::json& json, const char* key, const glm::vec2& fallback) { return readJsonVec(json, key, fallback); }
+glm::ivec2 Craig::Utilities::readJsonVec2(const nlohmann::json& json, const char* key, const glm::ivec2& fallback) { return readJsonVec(json, key, fallback); }
+glm::vec3 Craig::Utilities::readJsonVec3(const nlohmann::json& json, const char* key, const glm::vec3& fallback) { return readJsonVec(json, key, fallback); }
+glm::ivec3 Craig::Utilities::readJsonVec3(const nlohmann::json& json, const char* key, const glm::ivec3& fallback) { return readJsonVec(json, key, fallback); }
 
+void Craig::Utilities::writeJsonVec2(nlohmann::json& json, const char* key, const glm::vec2& value) { writeJsonVec(json, key, value); }
+void Craig::Utilities::writeJsonVec2(nlohmann::json& json, const char* key, const glm::ivec2& value) { writeJsonVec(json, key, value); }
+void Craig::Utilities::writeJsonVec3(nlohmann::json& json, const char* key, const glm::vec3& value) { writeJsonVec(json, key, value); }
+void Craig::Utilities::writeJsonVec3(nlohmann::json& json, const char* key, const glm::ivec3& value) { writeJsonVec(json, key, value); }

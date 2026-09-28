@@ -18,6 +18,8 @@
 #include "Craig_GameObject.hpp"
 #include "Craig_Scene.hpp"
 
+#include <filesystem>
+
 CraigError Craig::ImguiEditor::editorInit() {
 
 	CraigError ret = CRAIG_SUCCESS;
@@ -61,6 +63,8 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+	// menu bar goes first so the dockspace fits underneath it
+	showMainMenuBar();
 	editorInit();
 
 	showRenderProperties(deltaTime);
@@ -78,6 +82,65 @@ CraigError Craig::ImguiEditor::terminate() {
 	CraigError ret = CRAIG_SUCCESS;
 
 	return ret;
+}
+
+void Craig::ImguiEditor::showMainMenuBar()
+{
+	if (ImGui::BeginMainMenuBar())
+	{
+		// lists every .json in the scenes folder, the current one gets a tick
+		if (ImGui::BeginMenu("Scenes"))
+		{
+			// copy, not a reference, since loading a scene deletes the old one mid-loop
+			const std::string currentScenePath = mp_sceneManager->getCurrentScene()->getScenePath();
+
+			// error_code version so a missing folder doesn't throw
+			std::error_code error;
+			for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(kScenesDirectory, error))
+			{
+				if (entry.path().extension() != ".json")
+				{
+					continue;
+				}
+
+				const bool isCurrentScene = entry.path() == std::filesystem::path(currentScenePath);
+				if (ImGui::MenuItem(entry.path().stem().string().c_str(), nullptr, isCurrentScene) && !isCurrentScene)
+				{
+					// Selected object belongs to the old scene, drop it before it's deleted
+					mp_selectedGameObject = nullptr;
+
+					if (mp_renderer->loadScene(entry.path().string()) != CRAIG_SUCCESS)
+					{
+						m_sceneLoadError = "Couldn't load " + entry.path().filename().string();
+					}
+					else
+					{
+						m_sceneLoadError.clear();
+					}
+				}
+			}
+
+			// show why the last load failed, if it did
+			if (!m_sceneLoadError.empty())
+			{
+				ImGui::Separator();
+				ImGui::TextColored({ 1.0f, 0.0f, 0.0f, 1.0f }, "%s", m_sceneLoadError.c_str());
+			}
+
+			ImGui::EndMenu();
+		}
+
+		// toggle which editor windows are open
+		if (ImGui::BeginMenu("Windows"))
+		{
+			ImGui::MenuItem("Rendering Properties", nullptr, &m_ShowRendererProperties);
+			ImGui::MenuItem("Scene Details", nullptr, &m_ShowSceneDetails);
+			ImGui::MenuItem("New Game Object", nullptr, &m_ShowNewGameObjectWindow);
+			ImGui::EndMenu();
+		}
+
+		ImGui::EndMainMenuBar();
+	}
 }
 
 void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
@@ -129,7 +192,7 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	if (m_ShowSceneDetails)
 	{
 	 	// The ### is for a unique ID, otherwsise the window doesn't stay docked on the right since the name/id changes
-	 	ImGui::Begin("Scene Details###SceneDetails", &m_ShowRendererProperties);
+	 	ImGui::Begin("Scene Details###SceneDetails", &m_ShowSceneDetails);
 
 	 	if (ImGui::CollapsingHeader("Game Objects", ImGuiTreeNodeFlags_DefaultOpen))
 	 	{

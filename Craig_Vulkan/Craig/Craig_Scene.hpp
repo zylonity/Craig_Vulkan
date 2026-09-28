@@ -18,9 +18,12 @@ namespace Craig {
 
 
 	public:
-		CraigError init();
+		CraigError init(const std::string& scenePath);
 		CraigError update(const float& deltaTime);
 		CraigError terminate();
+
+		const std::string& getName() const { return m_name; }
+		const std::string& getScenePath() const { return m_scenePath; }
 
 		std::vector<Craig::GameObject*>& getGameObjects() { return mpv_Gameobjects; }
 		Craig::GameObject* findObject(const std::string& objectName) const;
@@ -30,6 +33,9 @@ namespace Craig {
 		void deleteGameObject(Craig::GameObject* gameObject);
 		CraigError newGameObject(std::string objectName, std::string modelPath, glm::vec3 position);
 	private:
+
+		std::string m_name;
+		std::string m_scenePath; // The .json file this scene was loaded from
 
 		std::vector<Craig::GameObject*> mpv_Gameobjects;
 

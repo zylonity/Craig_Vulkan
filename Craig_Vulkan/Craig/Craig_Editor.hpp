@@ -41,6 +41,9 @@ namespace Craig {
 	private:
 		bool m_initialised = false;
 
+		void showMainMenuBar();
+		std::string m_sceneLoadError;
+
 		void showRenderProperties(const float& deltaTime);
 		bool m_ShowRendererProperties = false;
 
@@ -58,7 +61,7 @@ namespace Craig {
 		Craig::SceneManager* mp_sceneManager;
 		Craig::Camera* mp_camera;
 
-		Craig::GameObject* mp_selectedGameObject;
+		Craig::GameObject* mp_selectedGameObject = nullptr;
 
 		void updateImGuizmo();
 		ImGuizmo::OPERATION m_CurrentOperation = ImGuizmo::OPERATION::TRANSLATE;

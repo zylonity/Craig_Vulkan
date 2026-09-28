@@ -20,6 +20,10 @@ constexpr uint32_t kMaxNumObjects = 4096;
 
 constexpr uint32_t kVertexAttributeDescriptors = 4;
 
+//Scenes
+constexpr char kScenesDirectory[] = "data/scenes";
+constexpr char kDefaultScenePath[] = "data/scenes/TestScene1.json"; // Scene loaded on startup
+
 enum CraigError {
 	CRAIG_SUCCESS = 0,
 	CRAIG_FAIL = 1,

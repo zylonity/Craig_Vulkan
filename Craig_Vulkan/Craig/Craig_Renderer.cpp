@@ -680,9 +680,20 @@ void Craig::Renderer::createDescriptorSets() {
         m_Devices.getLogicalDevice().updateDescriptorSets(perFrameWrites, nullptr);
     }
 
+    createPerObjectDescriptorSets();
+}
+
+// One texture set per game object, split out so scene switching can remake them
+void Craig::Renderer::createPerObjectDescriptorSets() {
+
     std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
     Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
     size_t numObjects = currentSceneObjects.size();
+
+    // Allocating 0 sets is invalid in Vulkan, so bail on empty scenes
+    if (numObjects == 0) {
+        return;
+    }
 
     std::vector<vk::DescriptorSetLayout> perObjectLayouts(numObjects, m_pipeline.getPerObjectDescriptorSetLayout());
 
@@ -1027,6 +1038,44 @@ CraigError Craig::Renderer::newGameObject(std::string objectName, std::string mo
 
     mMap_GameObjectToDescriptorSet.insert({newObject, perObjectSets[0]});
     m_Devices.getLogicalDevice().updateDescriptorSets(perObjectWrites, nullptr);
+
+    return ret;
+}
+
+CraigError Craig::Renderer::loadScene(const std::string& scenePath)
+{
+    CraigError ret = CRAIG_SUCCESS;
+
+    // GPU might still be using the old scene's buffers + sets
+    m_Devices.getLogicalDevice().waitIdle();
+
+    ret = mp_SceneManager->loadScene(scenePath);
+    if (ret != CRAIG_SUCCESS)
+    {
+        return ret;
+    }
+
+    // Old objects are gone, free their sets (only need the handles, not the objects)
+    std::vector<vk::DescriptorSet> oldSets;
+    for (const auto& [gameObject, descriptorSet] : mMap_GameObjectToDescriptorSet)
+    {
+        oldSets.push_back(descriptorSet);
+    }
+    if (!oldSets.empty())
+    {
+        m_Devices.getLogicalDevice().freeDescriptorSets(m_VK_descriptorPool, oldSets);
+    }
+    mMap_GameObjectToDescriptorSet.clear();
+
+    // Buffers are built from the scene's objects, so remake them + the sets
+    rebuildGeometryBuffers();
+    createPerObjectDescriptorSets();
+
+    // camera lives in the scene, so point everyone at the new one
+    mp_CurrentWindow->setCameraRef(&mp_SceneManager->getCurrentScene()->getCamera());
+#if defined(IMGUI_ENABLED)
+    Craig::ImguiEditor::getInstance().setCamera(&mp_SceneManager->getCurrentScene()->getCamera());
+#endif
 
     return ret;
 }

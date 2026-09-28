@@ -54,6 +54,7 @@ namespace Craig {
 
 		void deleteGameObject(Craig::GameObject* gameObject);
 		CraigError newGameObject(std::string objectName, std::string modelPath, glm::vec3 position);
+		CraigError loadScene(const std::string& scenePath);
 
 	private:
 		struct PerObjectData {
@@ -87,6 +88,7 @@ namespace Craig {
 
 		void createDescriptorPool();
 		void createDescriptorSets();
+		void createPerObjectDescriptorSets();
 		void updateDescriptorSets();
 
 		
