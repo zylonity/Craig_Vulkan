@@ -15,10 +15,12 @@ struct PerObjectData
 [[vk::binding(1, 0)]]
 StructuredBuffer<PerObjectData> transforms;
 
-// Push constant, tells the shader which slot of the transforms array to read for this draw.
+// Push constants, sent per draw. Has to match PushConstantData in Craig_ResourceManager.hpp
 struct PushConstants
 {
-    uint objectIndex;
+    float4x4 nodeMatrix;      // The glTF node's transform inside the model
+    float4 baseColorFactor;   // Material colour, only the fragment shader uses it
+    uint objectIndex;         // Which slot of the transforms array to read for this draw
 };
 [[vk::push_constant]] PushConstants pc;
 
@@ -46,8 +48,8 @@ VSOutput main(VSInput input)
 
     float4 worldPos = float4(input.pos, 1.0);
 
-    // Grab this object's model matrix from the SSBO using the push-constant index.
-    float4x4 model = transforms[pc.objectIndex].model;
+    // Grab this object's model matrix from the SSBO using the push-constant index, then put the node inside it
+    float4x4 model = mul(transforms[pc.objectIndex].model, pc.nodeMatrix);
 
     //Apply MVP
     worldPos = mul(model, worldPos); //Apply model matrix

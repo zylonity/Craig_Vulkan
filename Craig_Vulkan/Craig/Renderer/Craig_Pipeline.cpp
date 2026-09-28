@@ -119,9 +119,9 @@ void Craig::Pipeline::createGraphicsPipeline() {
 
     vk::PushConstantRange pushRange{};
     pushRange
-        .setStageFlags(vk::ShaderStageFlagBits::eVertex)
+        .setStageFlags(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment) // fragment reads the material colour
         .setOffset(0)
-        .setSize(sizeof(uint32_t));
+        .setSize(sizeof(Craig::PushConstantData));
 
     std::array setLayouts = { m_VK_perFrameSetLayout, m_VK_perObjectSetLayout };
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};

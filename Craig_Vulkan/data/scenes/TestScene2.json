@@ -15,14 +15,14 @@
       "model": "data/models/Duck.glb",
       "position": [-2.0, 0.0, 0.0],
       "rotation": [0.0, 45.0, 0.0],
-      "scale": [0.01, 0.01, 0.01]
+      "scale": [1.0, 1.0, 1.0]
     },
     {
       "name": "Duck Right",
       "model": "data/models/Duck.glb",
       "position": [2.0, 0.0, 0.0],
       "rotation": [0.0, -45.0, 0.0],
-      "scale": [0.01, 0.01, 0.01]
+      "scale": [1.0, 1.0, 1.0]
     },
     {
       "name": "Alpha Test",

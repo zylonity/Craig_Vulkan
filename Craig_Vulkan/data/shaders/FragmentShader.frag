@@ -2,6 +2,15 @@
 [[vk::binding(0, 1)]] Texture2D texSampler;
 [[vk::binding(0, 1)]] SamplerState texSamplerState;
 
+// Push constants, has to match the vertex shader + PushConstantData in Craig_ResourceManager.hpp
+struct PushConstants
+{
+    float4x4 nodeMatrix;
+    float4 baseColorFactor; // Material colour
+    uint objectIndex;
+};
+[[vk::push_constant]] PushConstants pc;
+
 //set 0, binding 1 - light shit
 [[vk::binding(2, 0)]]
 cbuffer LightData{
@@ -21,7 +30,8 @@ struct PSInput
 float4 main(PSInput input) : SV_Target
 {
     // Sample the texture using interpolated UVs
-    float4 texColor = texSampler.Sample(texSamplerState, input.texCoord);
+    // Tinted by the material colour, white if the material doesn't set one
+    float4 texColor = texSampler.Sample(texSamplerState, input.texCoord) * pc.baseColorFactor;
 
     float3 N = normalize(input.normals);
     float3 L = normalize(lightDir.xyz);

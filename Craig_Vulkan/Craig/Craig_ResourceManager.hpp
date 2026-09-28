@@ -30,6 +30,18 @@ namespace Craig {
 
 	};
 
+	// Sent per draw, has to match PushConstants in both shaders
+	// Order matters, mat4 + vec4 first keeps the offsets the same under any layout rules
+	struct PushConstantData {
+		glm::mat4 nodeMatrix;       // The node's transform inside the model
+		glm::vec4 baseColorFactor;  // Material colour, multiplied into the texture
+		uint32_t  objectIndex;      // Which slot of the transforms SSBO to read
+	};
+
+	// The glTF structure below is adapted from Sascha Willems' gltfloading example (MIT)
+	// https://github.com/SaschaWillems/Vulkan/blob/master/examples/gltfloading/gltfloading.cpp
+
+	// One glTF primitive = one draw call, with its own material
 	struct SubMesh
 	{
 		std::vector<Vertex> m_vertices;
@@ -38,12 +50,11 @@ namespace Craig {
 		uint32_t vertexOffset = 0;
 		uint32_t indexOffset = 0;
 
-		uint32_t firstIndex;
-		uint32_t indexCount;
-		uint32_t firstVertex;
-		int      materialIndex; // prim.material
+		uint32_t indexCount = 0;
+		int32_t  materialIndex = -1; // prim.material, -1 = no material
 	};
 
+	// A GPU texture, one per glTF image (Sascha calls this an "Image")
 	struct Texture
 	{
 		uint32_t      m_VK_mipLevels = 0;
@@ -53,14 +64,47 @@ namespace Craig {
 
 		vk::ImageView m_VK_textureImageView;
 
+		vk::DescriptorSet m_VK_descriptorSet; // Made by the renderer, null until then
+	};
+
+	// A glTF texture just points at an image, images can be shared between textures
+	struct GltfTexture
+	{
+		int32_t imageIndex = -1;
+	};
+
+	struct Material
+	{
+		glm::vec4 baseColorFactor = glm::vec4(1.0f);
+		int32_t baseColorTextureIndex = -1;
+	};
+
+	// An object in the glTF scene graph, its matrix is relative to its parent
+	struct Node
+	{
+		Node* parent = nullptr;
+		std::vector<Node*> children;
+		std::vector<Craig::SubMesh*> subMeshes; // not owned, they live in Model::subMeshes
+		glm::mat4 matrix = glm::mat4(1.0f);
+
+		glm::mat4 getWorldMatrix() const; // Walks up the parents
+		~Node() { for (Node* child : children) delete child; }
 	};
 
 	struct Model {
-		std::vector<Craig::SubMesh*> subMeshes;
+		std::vector<Craig::SubMesh*> subMeshes; // every primitive, flat, for building the vertex/index buffers
 		uint32_t subMeshesCount;
 		std::string modelPath;
-		Craig::Texture m_texture;
 
+		std::vector<Craig::Node*> nodes; // top level nodes only
+		std::vector<Craig::Texture> images; // every glTF image + a 1x1 white fallback at the end
+		std::vector<Craig::GltfTexture> textures;
+		std::vector<Craig::Material> materials;
+
+		// Falls back to a plain white material if the index is -1 or out of range
+		const Craig::Material& getMaterial(int32_t materialIndex) const;
+		// Follows texture -> image, gives the white fallback if there isn't one
+		Craig::Texture& getMaterialImage(const Craig::Material& material);
 	};
 
 	
@@ -76,6 +120,7 @@ namespace Craig {
 
 		Craig::Model& getModel(std::string modelPath) { return m_loadedModels[modelPath]; };
 		bool isModelLoaded(const std::string& modelPath) { return m_loadedModels.contains(modelPath); };
+		std::unordered_map<std::string, Craig::Model>& getLoadedModels() { return m_loadedModels; };
 
 		//===============================================================================
 		// Singleton Implementations

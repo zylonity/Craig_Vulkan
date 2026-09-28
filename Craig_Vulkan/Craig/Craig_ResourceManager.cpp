@@ -5,6 +5,7 @@
 #include "Craig_ResourceManager.hpp"
 #include "Craig_Renderer.hpp"
 #include "../External/tiny_gltf.h"
+#include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 
 vk::VertexInputBindingDescription Craig::Vertex::getBindingDescription() {
@@ -70,6 +71,230 @@ CraigError Craig::ResourceManager::terminate() {
     return ret;
 }
 
+// The glTF loading below is adapted from Sascha Willems' gltfloading example (MIT)
+// https://github.com/SaschaWillems/Vulkan/blob/master/examples/gltfloading/gltfloading.cpp
+// Copyright (C) 2020-2026 by Sascha Willems - www.saschawillems.de, license in External/SaschaWillems_LICENSE.md
+
+glm::mat4 Craig::Node::getWorldMatrix() const {
+    // Walk up to the top-most parent to get the final matrix
+    glm::mat4 worldMatrix = matrix;
+    const Node* currentParent = parent;
+    while (currentParent) {
+        worldMatrix = currentParent->matrix * worldMatrix;
+        currentParent = currentParent->parent;
+    }
+    return worldMatrix;
+}
+
+const Craig::Material& Craig::Model::getMaterial(int32_t materialIndex) const {
+    static const Craig::Material kDefaultMaterial{}; // White, no texture
+    if (materialIndex < 0 || materialIndex >= (int32_t)materials.size()) {
+        return kDefaultMaterial;
+    }
+    return materials[materialIndex];
+}
+
+Craig::Texture& Craig::Model::getMaterialImage(const Craig::Material& material) {
+    // The fallback is always last, so the real images are 0 -> size - 2
+    const int32_t textureIndex = material.baseColorTextureIndex;
+    if (textureIndex >= 0 && textureIndex < (int32_t)textures.size()) {
+        const int32_t imageIndex = textures[textureIndex].imageIndex;
+        if (imageIndex >= 0 && imageIndex < (int32_t)images.size() - 1) {
+            return images[imageIndex];
+        }
+    }
+    return images.back();
+}
+
+// images can be stored inside the glTF, so we grab them from tinygltf and upload them
+static void loadImages(const tinygltf::Model& input, Craig::Model& outModel, Craig::Renderer* renderer) {
+    static const uint8_t kWhitePixel[4] = { 255, 255, 255, 255 };
+
+    outModel.images.resize(input.images.size() + 1);
+    for (size_t i = 0; i < input.images.size(); i++) {
+        const tinygltf::Image& glTFImage = input.images[i];
+
+        // tinygltf gives us 8 bit RGBA by default, anything else gets the white pixel instead
+        if (glTFImage.image.empty() || glTFImage.bits != 8 || glTFImage.component != 4) {
+            std::cerr << "Unsupported image " << i << " in " << outModel.modelPath << ", using white instead" << std::endl;
+            renderer->createTextureImage2(kWhitePixel, 1, 1, 4, &outModel.images[i]);
+            continue;
+        }
+        renderer->createTextureImage2(glTFImage.image.data(), glTFImage.width, glTFImage.height, glTFImage.component, &outModel.images[i]);
+    }
+
+    // fallback for primitives with no texture, so they don't bind garbage
+    renderer->createTextureImage2(kWhitePixel, 1, 1, 4, &outModel.images.back());
+}
+
+static void loadTextures(const tinygltf::Model& input, Craig::Model& outModel) {
+    outModel.textures.resize(input.textures.size());
+    for (size_t i = 0; i < input.textures.size(); i++) {
+        outModel.textures[i].imageIndex = input.textures[i].source;
+    }
+}
+
+static void loadMaterials(const tinygltf::Model& input, Craig::Model& outModel) {
+    outModel.materials.resize(input.materials.size());
+    for (size_t i = 0; i < input.materials.size(); i++) {
+        // Sascha reads these through material.values, newer tinygltf has them on pbrMetallicRoughness
+        const tinygltf::PbrMetallicRoughness& pbr = input.materials[i].pbrMetallicRoughness;
+        if (pbr.baseColorFactor.size() == 4) {
+            outModel.materials[i].baseColorFactor = glm::vec4(glm::make_vec4(pbr.baseColorFactor.data()));
+        }
+        outModel.materials[i].baseColorTextureIndex = pbr.baseColorTexture.index;
+    }
+}
+
+// pointer to where an accessor's data starts + how far to step per element
+static const uint8_t* getAccessorData(const tinygltf::Model& input, const tinygltf::Accessor& accessor, size_t& outStride) {
+    const tinygltf::BufferView& bufferView = input.bufferViews[accessor.bufferView];
+    const tinygltf::Buffer& buffer = input.buffers[bufferView.buffer];
+
+    // stride - From what I understand, it's how much forward in memory (how many bits) we need to move before finding the next vertex
+    // oxford dictionary: Stride - walk with long, decisive steps in a specified direction.
+    outStride = tinygltf::GetNumComponentsInType(accessor.type) * tinygltf::GetComponentSizeInBytes(accessor.componentType);
+    if (accessor.ByteStride(bufferView) != 0) {
+        outStride = accessor.ByteStride(bufferView);
+    }
+    return buffer.data.data() + bufferView.byteOffset + accessor.byteOffset;
+}
+
+// one primitive = one draw call, returns nullptr if we can't draw it
+static Craig::SubMesh* loadPrimitive(const tinygltf::Model& input, const tinygltf::Primitive& prim) {
+
+    //INDICES STUFF
+    if (prim.indices < 0) {
+        // you *can* support non-indexed later, skip for now
+        return nullptr;
+    }
+
+    //POSITION STUFF
+    auto itPos = prim.attributes.find("POSITION");
+    if (itPos == prim.attributes.end()) {
+        return nullptr; // no positions mean we can skip the primitive
+    }
+
+    const tinygltf::Accessor& posAccessor = input.accessors[itPos->second];
+    size_t posStride = 0;
+    const uint8_t* posData = getAccessorData(input, posAccessor, posStride);
+
+    //TEXCOORD STUFF
+    const uint8_t* texData = nullptr;
+    size_t texStride = 0;
+    auto itUv = prim.attributes.find("TEXCOORD_0");
+    if (itUv != prim.attributes.end()) {
+        texData = getAccessorData(input, input.accessors[itUv->second], texStride);
+    }
+
+    //NORMALS STUFF
+    const uint8_t* normData = nullptr;
+    size_t normStride = 0;
+    auto itNorm = prim.attributes.find("NORMAL");
+    if (itNorm != prim.attributes.end()) {
+        normData = getAccessorData(input, input.accessors[itNorm->second], normStride);
+    }
+
+    Craig::SubMesh* subMesh = new Craig::SubMesh();
+
+    //GET VERTICES
+    for (size_t i = 0; i < posAccessor.count; ++i) {
+        Craig::Vertex v{};
+
+        const float* p = reinterpret_cast<const float*>(posData + i * posStride);
+        v.m_pos = glm::vec3(p[0], p[1], p[2]);
+
+        if (texData) {
+            const float* t = reinterpret_cast<const float*>(texData + i * texStride);
+            v.m_texCoord = glm::vec2(t[0], t[1]);
+        }
+
+        if (normData) {
+            const float* n = reinterpret_cast<const float*>(normData + i * normStride);
+            v.m_normals = glm::vec3(n[0], n[1], n[2]);
+        }
+
+        v.m_color = glm::vec3(1.0f);
+
+        subMesh->m_vertices.push_back(v);
+    }
+
+    //GET INDICES
+    const tinygltf::Accessor& indexAccessor = input.accessors[prim.indices];
+    size_t indexStride = 0;
+    const uint8_t* indexData = getAccessorData(input, indexAccessor, indexStride);
+
+    for (size_t i = 0; i < indexAccessor.count; ++i) {
+        uint32_t index = 0;
+
+        switch (indexAccessor.componentType) {
+        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+            index = reinterpret_cast<const uint16_t*>(indexData)[i];
+            break;
+        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
+            index = reinterpret_cast<const uint32_t*>(indexData)[i];
+            break;
+        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+            index = reinterpret_cast<const uint8_t*>(indexData)[i];
+            break;
+        default:
+            // unsupported index type for now
+            break;
+        }
+
+        subMesh->m_indices.push_back(index);
+    }
+
+    subMesh->indexCount = (uint32_t)subMesh->m_indices.size();
+    subMesh->materialIndex = prim.material;
+
+    return subMesh;
+}
+
+static void loadNode(const tinygltf::Node& inputNode, const tinygltf::Model& input, Craig::Node* parent, Craig::Model& outModel) {
+    Craig::Node* node = new Craig::Node{};
+    node->parent = parent;
+
+    // Get the local node matrix
+    // It's either made up from translation, rotation, scale or a 4x4 matrix
+    if (inputNode.translation.size() == 3) {
+        node->matrix = glm::translate(node->matrix, glm::vec3(glm::make_vec3(inputNode.translation.data())));
+    }
+    if (inputNode.rotation.size() == 4) {
+        glm::quat q = glm::quat(glm::make_quat(inputNode.rotation.data()));
+        node->matrix *= glm::mat4_cast(q);
+    }
+    if (inputNode.scale.size() == 3) {
+        node->matrix = glm::scale(node->matrix, glm::vec3(glm::make_vec3(inputNode.scale.data())));
+    }
+    if (inputNode.matrix.size() == 16) {
+        node->matrix = glm::mat4(glm::make_mat4x4(inputNode.matrix.data()));
+    }
+
+    // Load node's children
+    for (int childIndex : inputNode.children) {
+        loadNode(input.nodes[childIndex], input, node, outModel);
+    }
+
+    // If the node has a mesh, load each of its primitives
+    if (inputNode.mesh > -1) {
+        for (const tinygltf::Primitive& prim : input.meshes[inputNode.mesh].primitives) {
+            Craig::SubMesh* subMesh = loadPrimitive(input, prim);
+            if (subMesh) {
+                outModel.subMeshes.push_back(subMesh);
+                node->subMeshes.push_back(subMesh);
+            }
+        }
+    }
+
+    if (parent) {
+        parent->children.push_back(node);
+    }
+    else {
+        outModel.nodes.push_back(node);
+    }
+}
+
 bool Craig::ResourceManager::loadModel(std::string modelPath) {
     // If this model has already been loaded (e.g. a second GameObject using the
     // same glb), don't re-upload it. Doing so leaks the GPU texture and SubMesh
@@ -98,184 +323,26 @@ bool Craig::ResourceManager::loadModel(std::string modelPath) {
         printf("model found \n");
     }
 
-    Craig::Model tempModel;
+    // Insert first and fill it in place, saves copying all the vectors after
+    Craig::Model& newModel = m_loadedModels[modelPath];
+    newModel.modelPath = modelPath;
 
-    int i = 0;
-    // iterate all meshes / primitives, no scene graph yet
-    for (const auto& mesh : model.meshes) {
-        SubMesh* tempMesh = new SubMesh();
-        i++;
+    loadImages(model, newModel, m_renderer);
+    loadTextures(model, newModel);
+    loadMaterials(model, newModel);
 
-        for (const auto& prim : mesh.primitives) { //in gltf a primitive is a draw call, we can have multiple draw calls for like different layer textures
-
-            //INDICES STUFF
-            if (prim.indices < 0) {
-                // you *can* support non-indexed later, skip for now
-                continue;
-            }
-
-            const tinygltf::Accessor& indexAccessor = model.accessors[prim.indices];
-            const tinygltf::BufferView& indexBV = model.bufferViews[indexAccessor.bufferView];
-            const tinygltf::Buffer& indexBuf = model.buffers[indexBV.buffer];
-
-            const uint8_t* indexData = indexBuf.data.data() + indexBV.byteOffset + indexAccessor.byteOffset; //pointer to where the index data starts, offset by the other things
-
-
-            //POSITION STUFF
-            auto itPos = prim.attributes.find("POSITION");
-            if (itPos == prim.attributes.end()) {
-                continue; // no positions mean we can skip the primitive
-            }
-
-            const tinygltf::Accessor& posAccessor = model.accessors[itPos->second];
-            const tinygltf::BufferView& posBV = model.bufferViews[posAccessor.bufferView];
-            const tinygltf::Buffer& posBuf = model.buffers[posBV.buffer];
-
-            const uint8_t* posData = posBuf.data.data() + posBV.byteOffset + posAccessor.byteOffset; //pointer to where the position data starts, offset by the other things
-
-            // position stride - From what I understand, it's how much forward in memory (how many bits) we need to move before finding the next vertex
-            // oxford dictionary: Stride - walk with long, decisive steps in a specified direction.
-            size_t posStride = tinygltf::GetNumComponentsInType(posAccessor.type) * tinygltf::GetComponentSizeInBytes(posAccessor.componentType);
-            if (posAccessor.ByteStride(posBV) != 0) {
-                posStride = posAccessor.ByteStride(posBV);
-            }
-
-            //TEXCOORD STUFF
-            const tinygltf::Accessor* texAccessor = nullptr;
-            const tinygltf::BufferView* texBV = nullptr;
-            const tinygltf::Buffer* texBuf = nullptr;
-            const uint8_t* texData = nullptr;
-            size_t texStride = 0;
-
-            auto itUv = prim.attributes.find("TEXCOORD_0");
-            if (itUv != prim.attributes.end()) {
-                texAccessor = &model.accessors[itUv->second];
-                texBV = &model.bufferViews[texAccessor->bufferView];
-                texBuf = &model.buffers[texBV->buffer];
-
-                texData = texBuf->data.data() + texBV->byteOffset + texAccessor->byteOffset;
-
-                texStride = tinygltf::GetNumComponentsInType(texAccessor->type) * tinygltf::GetComponentSizeInBytes(texAccessor->componentType);
-                if (texAccessor->ByteStride(*texBV) != 0) {
-                    texStride = texAccessor->ByteStride(*texBV);
-                }
-            }
-
-            //NORMALS STUFF
-            const tinygltf::Accessor* normAccessor = nullptr;
-            const tinygltf::BufferView* normBV = nullptr;
-            const tinygltf::Buffer* normBuf = nullptr;
-            const uint8_t* normData = nullptr;
-            size_t normStride = 0;
-
-            auto itNorm = prim.attributes.find("NORMAL");
-            if (itNorm != prim.attributes.end()) {
-                normAccessor = &model.accessors[itNorm->second];
-                normBV = &model.bufferViews[normAccessor->bufferView];
-                normBuf = &model.buffers[normBV->buffer];
-
-                normData = normBuf->data.data() + normBV->byteOffset + normAccessor->byteOffset;
-
-                normStride = tinygltf::GetNumComponentsInType(normAccessor->type) * tinygltf::GetComponentSizeInBytes(normAccessor->componentType);
-                if (normAccessor->ByteStride(*normBV) != 0) {
-                    normStride = normAccessor->ByteStride(*normBV);
-                }
-            }
-
-            uint32_t firstVertex = (uint32_t)tempMesh->m_vertices.size();
-            uint32_t firstIndex = (uint32_t)tempMesh->m_indices.size();
-
-            //GET VERTICES
-            for (size_t i = 0; i < posAccessor.count; ++i) {
-                Vertex v{};
-
-                const float* p = reinterpret_cast<const float*>(posData + i * posStride);
-                v.m_pos = glm::vec3(p[0], p[1], p[2]);
-
-                if (texAccessor) {
-                    const float* t = reinterpret_cast<const float*>(texData + i * texStride);
-                    v.m_texCoord = glm::vec2(t[0], t[1]);
-                }
-                else {
-                    v.m_texCoord = glm::vec2(0.0f);
-                }
-
-                if (normAccessor) {
-                    const float* n = reinterpret_cast<const float*>(normData + i * normStride);
-                    v.m_normals = glm::vec3(n[0], n[1], n[2]);
-                }
-                else {
-                    v.m_normals = glm::vec3(0.0f);
-                }
-
-                v.m_color = glm::vec3(1.0f);
-
-                tempMesh->m_vertices.push_back(v);
-            }
-
-            //GET INDICES
-            for (size_t i = 0; i < indexAccessor.count; ++i) {
-                uint32_t index = 0;
-
-                switch (indexAccessor.componentType) {
-                case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
-                    index = reinterpret_cast<const uint16_t*>(indexData)[i];
-                    break;
-                case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
-                    index = reinterpret_cast<const uint32_t*>(indexData)[i];
-                    break;
-                case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
-                    index = reinterpret_cast<const uint8_t*>(indexData)[i];
-                    break;
-                default:
-                    // unsupported index type for now
-                    break;
-                }
-
-                tempMesh->m_indices.push_back(firstVertex + index);
-            }
-
-            uint32_t indexCount = (uint32_t)tempMesh->m_indices.size() - firstIndex;
-
-            tempMesh->firstVertex = firstVertex;
-            tempMesh->firstIndex = firstIndex;
-            tempMesh->indexCount = indexCount;
-            tempMesh->materialIndex = prim.material;
-
-
-            //GET TEXTURE
-            int materialIndex = prim.material; //find the material
-            if (materialIndex >= 0 && materialIndex < model.materials.size()) { //if we actually have a texutre
-                const tinygltf::Material& mat = model.materials[materialIndex];
-
-                // Base color texture (what you usually think of as albedo/diffuse)
-                int baseColorTexIndex = mat.pbrMetallicRoughness.baseColorTexture.index;
-                if (baseColorTexIndex >= 0 && baseColorTexIndex < model.textures.size()) {
-                    const tinygltf::Texture& tex = model.textures[baseColorTexIndex];
-
-                    int imageIndex = tex.source;
-                    if (imageIndex >= 0 && imageIndex < model.images.size()) {
-                        const tinygltf::Image& img = model.images[imageIndex];
-
-                        const uint8_t* pixels = img.image.data();
-                        int width = img.width;
-                        int height = img.height;
-                        int comp = img.component; // usually 4 (RGBA)
-
-                        // createVulkanTextureFromPixels(pixels, width, height, comp);
-                        m_renderer->createTextureImage2(pixels, width, height, comp, &tempModel.m_texture);
-                    }
-                }
-            }
-
+    // Load the default scene's top level nodes, their children get loaded recursively
+    if (!model.scenes.empty()) {
+        const tinygltf::Scene& scene = model.scenes[model.defaultScene > -1 ? model.defaultScene : 0];
+        for (int nodeIndex : scene.nodes) {
+            loadNode(model.nodes[nodeIndex], model, nullptr, newModel);
         }
-
-        tempModel.subMeshes.push_back(tempMesh);
+    }
+    else {
+        std::cerr << modelPath << " has no scenes, nothing to draw" << std::endl;
     }
 
-    tempModel.subMeshesCount = i;
-
-    m_loadedModels.insert({modelPath, tempModel});
+    newModel.subMeshesCount = (uint32_t)newModel.subMeshes.size();
 
     return true;
 }
@@ -292,10 +359,20 @@ void Craig::ResourceManager::terminateModels(const vk::Device& device, const Vma
         }
         model.subMeshes.clear();
 
-        device.destroyImageView(model.m_texture.m_VK_textureImageView);
-        vmaDestroyImage(memoryAllocator, model.m_texture.m_VK_textureImage, model.m_texture.m_VMA_textureImageAllocation);
+        // nodes delete their own children
+        for (Craig::Node* node : model.nodes)
+        {
+            delete node;
+        }
+        model.nodes.clear();
+
+        // descriptor sets get freed with the pool, just the images here
+        for (Craig::Texture& image : model.images)
+        {
+            device.destroyImageView(image.m_VK_textureImageView);
+            vmaDestroyImage(memoryAllocator, image.m_VK_textureImage, image.m_VMA_textureImageAllocation);
+        }
+        model.images.clear();
     }
-
-
 
 }

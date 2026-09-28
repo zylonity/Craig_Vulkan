@@ -363,36 +363,12 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     for (size_t objectIdx = 0; objectIdx < currentSceneObjects.size(); objectIdx++)
     {
         Craig::GameObject* gameObject = currentSceneObjects[objectIdx];
-
-        // Per-object set (just the texture) goes into set 1, rebinds each draw since the texture differs.
-        commandBuffer.bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics,
-            m_pipeline.getPipelineLayout(),
-            1, // set 1
-            //gameObject->getDescriptorSet(),
-            mMap_GameObjectToDescriptorSet[gameObject],
-            nullptr);
-
-        // Tell the vertex shader which slot of the SSBO to read for this object's model matrix.
-        uint32_t objectIndex = static_cast<uint32_t>(objectIdx);
-        commandBuffer.pushConstants(
-            m_pipeline.getPipelineLayout(),
-            vk::ShaderStageFlagBits::eVertex,
-            0,
-            sizeof(uint32_t),
-            &objectIndex);
-
         Craig::Model& model = resources.getModel(gameObject->getModelPath());
-        for (size_t i = 0; i < model.subMeshesCount; i++)
-        {
-            Craig::SubMesh* submesh = model.subMeshes[i];
 
-            commandBuffer.drawIndexed(
-                submesh->indexCount,
-                1,
-                submesh->indexOffset,
-                submesh->vertexOffset,
-                0);
+        // draw the model's node tree, children get drawn recursively
+        for (const Craig::Node* node : model.nodes)
+        {
+            drawNode(commandBuffer, model, node, static_cast<uint32_t>(objectIdx));
         }
     }
 
@@ -432,6 +408,53 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     }
 
 
+}
+
+// Adapted from drawNode in Sascha Willems' gltfloading example (MIT), see Craig_ResourceManager.cpp
+void Craig::Renderer::drawNode(vk::CommandBuffer commandBuffer, Craig::Model& model, const Craig::Node* node, uint32_t objectIndex) {
+
+    if (!node->subMeshes.empty())
+    {
+        Craig::PushConstantData pushData{};
+        pushData.nodeMatrix = node->getWorldMatrix();
+        pushData.objectIndex = objectIndex; // Which slot of the SSBO has this object's model matrix
+
+        for (const Craig::SubMesh* submesh : node->subMeshes)
+        {
+            if (submesh->indexCount == 0) continue;
+
+            // Each primitive can have its own material, so push its colour + bind its texture
+            const Craig::Material& material = model.getMaterial(submesh->materialIndex);
+            pushData.baseColorFactor = material.baseColorFactor;
+
+            commandBuffer.pushConstants(
+                m_pipeline.getPipelineLayout(),
+                vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+                0,
+                sizeof(Craig::PushConstantData),
+                &pushData);
+
+            // texture set goes into set 1
+            commandBuffer.bindDescriptorSets(
+                vk::PipelineBindPoint::eGraphics,
+                m_pipeline.getPipelineLayout(),
+                1, // set 1
+                model.getMaterialImage(material).m_VK_descriptorSet,
+                nullptr);
+
+            commandBuffer.drawIndexed(
+                submesh->indexCount,
+                1,
+                submesh->indexOffset,
+                submesh->vertexOffset,
+                0);
+        }
+    }
+
+    for (const Craig::Node* child : node->children)
+    {
+        drawNode(commandBuffer, model, child, objectIndex);
+    }
 }
 
 void Craig::Renderer::createVertexBuffer() {
@@ -680,82 +703,69 @@ void Craig::Renderer::createDescriptorSets() {
         m_Devices.getLogicalDevice().updateDescriptorSets(perFrameWrites, nullptr);
     }
 
-    createPerObjectDescriptorSets();
+    createModelDescriptorSets();
 }
 
-// One texture set per game object, split out so scene switching can remake them
-void Craig::Renderer::createPerObjectDescriptorSets() {
+// One texture set per model image, only makes sets for images that don't have one yet
+void Craig::Renderer::createModelDescriptorSets() {
 
-    std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
-    Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
-    size_t numObjects = currentSceneObjects.size();
+    std::vector<Craig::Texture*> newImages;
+    for (auto& [modelPath, model] : Craig::ResourceManager::getInstance().getLoadedModels())
+    {
+        for (Craig::Texture& image : model.images)
+        {
+            if (!image.m_VK_descriptorSet)
+            {
+                newImages.push_back(&image);
+            }
+        }
+    }
 
-    // Allocating 0 sets is invalid in Vulkan, so bail on empty scenes
-    if (numObjects == 0) {
+    // allocating 0 sets is invalid in Vulkan
+    if (newImages.empty()) {
         return;
     }
 
-    std::vector<vk::DescriptorSetLayout> perObjectLayouts(numObjects, m_pipeline.getPerObjectDescriptorSetLayout());
+    std::vector<vk::DescriptorSetLayout> imageLayouts(newImages.size(), m_pipeline.getPerObjectDescriptorSetLayout());
 
-    vk::DescriptorSetAllocateInfo perObjectAllocInfo{};
-    perObjectAllocInfo.setDescriptorPool(m_VK_descriptorPool)
-        .setDescriptorSetCount(numObjects)
-        .setSetLayouts(perObjectLayouts);
+    vk::DescriptorSetAllocateInfo imageAllocInfo{};
+    imageAllocInfo.setDescriptorPool(m_VK_descriptorPool)
+        .setSetLayouts(imageLayouts);
 
-
-    std::array<vk::WriteDescriptorSet, 1> perObjectWrites{};
-    auto perObjectSets = m_Devices.getLogicalDevice().allocateDescriptorSets(perObjectAllocInfo);
-    for (size_t object = 0; object < numObjects; object++)
+    std::vector<vk::DescriptorSet> imageSets = m_Devices.getLogicalDevice().allocateDescriptorSets(imageAllocInfo);
+    for (size_t i = 0; i < newImages.size(); i++)
     {
-        mMap_GameObjectToDescriptorSet.insert({currentSceneObjects[object], perObjectSets[object]});
-        vk::DescriptorImageInfo imageInfo{};
-        imageInfo
-            .setImageView(resources.getModel(currentSceneObjects[object]->getModelPath()).m_texture.m_VK_textureImageView)
-            .setSampler(m_VK_textureSampler)
-            .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
-
-        perObjectWrites[0]
-            //.setDstSet(currentSceneObjects[object]->getDescriptorSet())
-            .setDstSet(mMap_GameObjectToDescriptorSet[currentSceneObjects[object]])
-            .setDstBinding(0)
-            .setDstArrayElement(0)
-            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-            .setDescriptorCount(1)
-            .setImageInfo(imageInfo);
-
-        m_Devices.getLogicalDevice().updateDescriptorSets(perObjectWrites, nullptr);
+        newImages[i]->m_VK_descriptorSet = imageSets[i];
     }
 
-
-
+    updateDescriptorSets();
 }
 
 void Craig::Renderer::updateDescriptorSets() {
 
-    // Called when the sampler is recreated (e.g. LOD change). Per-object sets aren't duplicated per
-    // frame, so one pass over the gameobjects rewriting their sampler binding is enough.
-    std::vector<Craig::GameObject*>& currentSceneObjects = mp_SceneManager->getCurrentScene()->getGameObjects();
-    Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
-
-    for (Craig::GameObject* gameObject : currentSceneObjects)
+    // called when sets are made or the sampler is recreated (e.g. LOD change)
+    // Sets aren't duplicated per frame, so one pass rewriting every image's set is enough
+    for (auto& [modelPath, model] : Craig::ResourceManager::getInstance().getLoadedModels())
     {
-        vk::DescriptorImageInfo imageInfo{};
-        imageInfo
-            .setImageView(resources.getModel(gameObject->getModelPath()).m_texture.m_VK_textureImageView)
-            .setSampler(m_VK_textureSampler)
-            .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+        for (Craig::Texture& image : model.images)
+        {
+            vk::DescriptorImageInfo imageInfo{};
+            imageInfo
+                .setImageView(image.m_VK_textureImageView)
+                .setSampler(m_VK_textureSampler)
+                .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 
-        vk::WriteDescriptorSet descriptorWrite{};
-        descriptorWrite
-            //.setDstSet(gameObject->getDescriptorSet())
-            .setDstSet(mMap_GameObjectToDescriptorSet[gameObject])
-            .setDstBinding(0)
-            .setDstArrayElement(0)
-            .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-            .setDescriptorCount(1)
-            .setImageInfo(imageInfo);
+            vk::WriteDescriptorSet descriptorWrite{};
+            descriptorWrite
+                .setDstSet(image.m_VK_descriptorSet)
+                .setDstBinding(0)
+                .setDstArrayElement(0)
+                .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+                .setDescriptorCount(1)
+                .setImageInfo(imageInfo);
 
-        m_Devices.getLogicalDevice().updateDescriptorSets(descriptorWrite, nullptr);
+            m_Devices.getLogicalDevice().updateDescriptorSets(descriptorWrite, nullptr);
+        }
     }
 
 }
@@ -978,10 +988,7 @@ void Craig::Renderer::deleteGameObject(Craig::GameObject* gameObject)
 {
     //gotta wait for the object to leave the command buffer or vulkan cries with validation error
     m_Devices.getLogicalDevice().waitIdle();
-    //free the set from the pool
-    m_Devices.getLogicalDevice().freeDescriptorSets(m_VK_descriptorPool, mMap_GameObjectToDescriptorSet[gameObject]);
-    //remove it from the map
-    mMap_GameObjectToDescriptorSet.erase(mMap_GameObjectToDescriptorSet.find(gameObject));
+    // texture sets belong to the model now, so nothing to free here
     // Remove from the scene and delete the object itself.
     mp_SceneManager->getCurrentScene()->deleteGameObject(gameObject);
 
@@ -1001,43 +1008,12 @@ CraigError Craig::Renderer::newGameObject(std::string objectName, std::string mo
         return ret;
     }
 
-    // New models aren't in the vertex/index buffers yet
+    // New models aren't in the vertex/index buffers yet, and their images need sets
     if (isNewModel)
     {
         rebuildGeometryBuffers();
+        createModelDescriptorSets();
     }
-
-    Craig::GameObject* newObject = mp_SceneManager->getCurrentScene()->findObject(objectName);
-    Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
-
-    std::vector<vk::DescriptorSetLayout> objectLayout(1, m_pipeline.getPerObjectDescriptorSetLayout());
-
-    vk::DescriptorSetAllocateInfo newObjectAllocInfo{};
-    newObjectAllocInfo.setDescriptorPool(m_VK_descriptorPool)
-        .setDescriptorSetCount(1)
-        .setSetLayouts(objectLayout);
-
-    std::array<vk::WriteDescriptorSet, 1> perObjectWrites{};
-    auto perObjectSets = m_Devices.getLogicalDevice().allocateDescriptorSets(newObjectAllocInfo);
-
-    assert(perObjectSets.size() >= 1 && "Less than 1 descriptor set was allocated");
-
-    vk::DescriptorImageInfo imageInfo{};
-    imageInfo
-        .setImageView(resources.getModel(newObject->getModelPath()).m_texture.m_VK_textureImageView)
-        .setSampler(m_VK_textureSampler)
-        .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
-
-    perObjectWrites[0]
-        .setDstSet(perObjectSets[0])
-        .setDstBinding(0)
-        .setDstArrayElement(0)
-        .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-        .setDescriptorCount(1)
-        .setImageInfo(imageInfo);
-
-    mMap_GameObjectToDescriptorSet.insert({newObject, perObjectSets[0]});
-    m_Devices.getLogicalDevice().updateDescriptorSets(perObjectWrites, nullptr);
 
     return ret;
 }
@@ -1055,21 +1031,9 @@ CraigError Craig::Renderer::loadScene(const std::string& scenePath)
         return ret;
     }
 
-    // Old objects are gone, free their sets (only need the handles, not the objects)
-    std::vector<vk::DescriptorSet> oldSets;
-    for (const auto& [gameObject, descriptorSet] : mMap_GameObjectToDescriptorSet)
-    {
-        oldSets.push_back(descriptorSet);
-    }
-    if (!oldSets.empty())
-    {
-        m_Devices.getLogicalDevice().freeDescriptorSets(m_VK_descriptorPool, oldSets);
-    }
-    mMap_GameObjectToDescriptorSet.clear();
-
-    // Buffers are built from the scene's objects, so remake them + the sets
+    // Buffers are built from the scene's objects, so remake them + sets for any new models
     rebuildGeometryBuffers();
-    createPerObjectDescriptorSets();
+    createModelDescriptorSets();
 
     // camera lives in the scene, so point everyone at the new one
     mp_CurrentWindow->setCameraRef(&mp_SceneManager->getCurrentScene()->getCamera());

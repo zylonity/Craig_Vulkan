@@ -88,7 +88,7 @@ namespace Craig {
 
 		void createDescriptorPool();
 		void createDescriptorSets();
-		void createPerObjectDescriptorSets();
+		void createModelDescriptorSets();
 		void updateDescriptorSets();
 
 		
@@ -105,6 +105,7 @@ namespace Craig {
 		//void createSyncObjects();
 
 		void recordCommandBuffer(vk::CommandBuffer commandBuffer, uint32_t imageIndex);
+		void drawNode(vk::CommandBuffer commandBuffer, Craig::Model& model, const Craig::Node* node, uint32_t objectIndex);
 		void drawFrame(const float& deltaTime);
 
 		
@@ -172,7 +173,6 @@ namespace Craig {
 		vk::DescriptorPool              m_VK_descriptorPool;
 		std::vector<vk::DescriptorSet>	mv_VK_perFrameDescriptorSet;
 
-		std::unordered_map<GameObject*, vk::DescriptorSet>  mMap_GameObjectToDescriptorSet;
 
 		uint32_t m_minLODLevel = 0;        // User-selected min LOD clamp
 
