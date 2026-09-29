@@ -15,6 +15,7 @@ namespace Craig {
 	class SceneManager;
 	class Renderer;
 	class Camera;
+	class PhysicsEngine;
 
 	class ImguiEditor {
 
@@ -26,6 +27,7 @@ namespace Craig {
 		void setRenderer(Craig::Renderer* pRenderer) { mp_renderer = pRenderer; };
 		void setSceneManager(Craig::SceneManager* pSceneManager) { mp_sceneManager = pSceneManager; };
 		void setCamera(Craig::Camera* pCamera) { mp_camera = pCamera; };
+		void setPhysicsEngine(Craig::PhysicsEngine* pPhysicsEngine) { mp_physicsEngine = pPhysicsEngine; };
 
 		//===============================================================================
 		// Singleton Implementations
@@ -70,6 +72,7 @@ namespace Craig {
 		Craig::Renderer* mp_renderer;
 		Craig::SceneManager* mp_sceneManager;
 		Craig::Camera* mp_camera;
+		Craig::PhysicsEngine* mp_physicsEngine;
 
 		Craig::GameObject* mp_selectedGameObject = nullptr;
 

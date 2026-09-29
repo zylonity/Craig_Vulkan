@@ -51,6 +51,9 @@ namespace Craig {
 		CraigError init();
 		CraigError update(const float& deltaTime);
 		CraigError terminate();
+
+		float getFixedTimeStep() const { return fixed_time_step; }
+		void setFixedTimeStep(float timeStep); // clamped between 10Hz and 1000Hz
 	private:
 
 		static void TraceImpl(const char *inFMT, ...);
@@ -180,6 +183,13 @@ namespace Craig {
 
 
 		JPH::uint step = 0;
+
+		// Physics runs at a fixed rate, frame delta time is added to the accumulator and consumed in fixed_time_step sized chunks
+		float fixed_time_step = 1.0f / 60.0f;
+		float time_accumulator = 0.0f;
+
+		// Caps the steps taken in one frame, so a long frame (hitch, window drag) can't snowball into more and more catch-up steps
+		int max_steps_per_frame = 5;
 
 
 	};

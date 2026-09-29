@@ -35,6 +35,7 @@ CraigError Craig::Framework::init() {
 
 	Craig::ImguiEditor::getInstance().setRenderer(mp_Renderer);
 	Craig::ImguiEditor::getInstance().setSceneManager(mp_SceneManager);
+	Craig::ImguiEditor::getInstance().setPhysicsEngine(mp_PhysicsEngine);
 	Craig::ResourceManager::getInstance().init(mp_Renderer); // Initialize the Resource Manager Singleton, this needs to be done before the renderer
 
 	ret = mp_Renderer->init(mp_Window, mp_SceneManager);

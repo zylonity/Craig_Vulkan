@@ -1,6 +1,7 @@
 #include "Craig_Editor.hpp"
 #include "Craig_Renderer.hpp"
 #include "Craig_Camera.hpp"
+#include "Craig_PhysicsEngine.hpp"
 
 #include "../External/Imgui/imgui.h"
 #include "../External/Imgui/imfilebrowser.h"
@@ -204,6 +205,13 @@ void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
 		//ImGui::Text("Frame Time: %f", ImGui::GetIO().Framerate);
 		ImGui::Text("FPS: % .2f", ImGui::GetIO().Framerate);
 		ImGui::Text("Delta Time: %f", deltaTime);
+
+		ImGui::SeparatorText("Physics");
+		// Shown in Hz since that's easier to reason about, the physics engine stores it as seconds per step
+		float physicsRate = 1.0f / mp_physicsEngine->getFixedTimeStep();
+		if (ImGui::SliderFloat("Physics Rate", &physicsRate, 10.0f, 1000.0f, "%.0f Hz", ImGuiSliderFlags_AlwaysClamp)) {
+			mp_physicsEngine->setFixedTimeStep(1.0f / physicsRate);
+		}
 
 		ImGui::SeparatorText("Video Settings");
 		if (ImGui::Checkbox("VSYNC", &mp_renderer->getVSyncState())) {

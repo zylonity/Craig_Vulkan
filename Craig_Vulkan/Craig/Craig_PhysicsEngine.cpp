@@ -4,6 +4,8 @@
 #include <iostream>
 #include <cstdarg>
 #include <thread>
+#include <algorithm>
+#include <cmath>
 
 //This is using the hello world example from Jolt's library
 
@@ -203,21 +205,42 @@ CraigError Craig::PhysicsEngine::update(const float& deltaTime) {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-	// Next step
-	++step;
-
-	// Output current position and velocity of the sphere
-	JPH::RVec3 position = body_interface->GetCenterOfMassPosition(sphere_id);
-	JPH::Vec3 velocity = body_interface->GetLinearVelocity(sphere_id);
-	std::cout << "Step " << step << ": Position = (" << position.GetX() << ", " << position.GetY() << ", " << position.GetZ() << "), Velocity = (" << velocity.GetX() << ", " << velocity.GetY() << ", " << velocity.GetZ() << ")" << std::endl;
+	time_accumulator += deltaTime;
 
 	// If you take larger steps than 1 / 60th of a second you need to do multiple collision steps in order to keep the simulation stable. Do 1 collision step per 1 / 60th of a second (round up).
-	const int cCollisionSteps = 1;
+	const int cCollisionSteps = std::max(1, static_cast<int>(std::ceil(fixed_time_step * 60.0f)));
 
-	// Step the world
-	physics_system.Update(deltaTime, cCollisionSteps, temp_allocator, job_system);
+	int steps_this_frame = 0;
+	while (time_accumulator >= fixed_time_step && steps_this_frame < max_steps_per_frame)
+	{
+		// Next step
+		++step;
+
+		// Output current position and velocity of the sphere
+		JPH::RVec3 position = body_interface->GetCenterOfMassPosition(sphere_id);
+		JPH::Vec3 velocity = body_interface->GetLinearVelocity(sphere_id);
+		std::cout << "Step " << step << ": Position = (" << position.GetX() << ", " << position.GetY() << ", " << position.GetZ() << "), Velocity = (" << velocity.GetX() << ", " << velocity.GetY() << ", " << velocity.GetZ() << ")" << std::endl;
+
+		// Step the world
+		physics_system.Update(fixed_time_step, cCollisionSteps, temp_allocator, job_system);
+
+		time_accumulator -= fixed_time_step;
+		++steps_this_frame;
+	}
+
+	// Hit the step cap and still behind, drop the leftover time instead of carrying it into the next frame
+	if (time_accumulator >= fixed_time_step)
+	{
+		time_accumulator = 0.0f;
+	}
 
 	return ret;
+}
+
+void Craig::PhysicsEngine::setFixedTimeStep(float timeStep)
+{
+	// a step of 0 would make the accumulator loop in update() never end
+	fixed_time_step = std::clamp(timeStep, 1.0f / 1000.0f, 1.0f / 10.0f);
 }
 
 
