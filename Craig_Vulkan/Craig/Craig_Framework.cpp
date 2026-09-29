@@ -72,14 +72,16 @@ CraigError Craig::Framework::update() {
 		return CRAIG_CLOSED; // If the window is closed, we return that code
 	}
 
+	// physics steps, then the scene copies the results onto the objects, then it gets drawn
+	// otherwise every frame shows the step before
+	ret = mp_PhysicsEngine->update(elapsed);
+	assert(ret == CRAIG_SUCCESS && "mp_PhysicsEngine failed to update");
+
 	ret = mp_SceneManager->update(elapsed);
 	assert(ret == CRAIG_SUCCESS && "mp_SceneManager failed to update");
 
 	ret = mp_Renderer->update(elapsed);
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer failed to update");
-
-	ret = mp_PhysicsEngine->update(elapsed);
-	assert(ret == CRAIG_SUCCESS && "mp_PhysicsEngine failed to update");
 
 	return ret;
 }
