@@ -149,7 +149,8 @@ void Craig::GameObject::displayComponents()
 	for (const std::unique_ptr<Components::Component>& pComponent : mv_components)
 	{
 		ImGui::PushID(pComponent.get());
-		if (ImGui::TreeNodeEx("##Component", ImGuiTreeNodeFlags_DefaultOpen, "%s", pComponent->getTypeName()))
+		// starts closed, ImGui remembers it once you open one
+		if (ImGui::TreeNodeEx("##Component", ImGuiTreeNodeFlags_None, "%s", pComponent->getTypeName()))
 		{
 			pComponent->displayImGuiAttributes();
 
