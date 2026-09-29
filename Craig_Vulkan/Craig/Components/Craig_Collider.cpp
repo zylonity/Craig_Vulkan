@@ -78,9 +78,10 @@ void Craig::Components::Collider::savePositionToJson(nlohmann::json& json) const
 void Craig::Components::Collider::displayImGuiAttributes()
 {
 	// Allow the user to select the collider.
+	// Goes through the editor so whatever else was selected (object or collider) gets deselected
 	if (m_itemSelected == false && ImGui::Button("Select"))
 	{
-		m_itemSelected = true;
+		Craig::ImguiEditor::getInstance().selectCollider(this);
 	}
 	if (m_itemSelected == true)
 	{

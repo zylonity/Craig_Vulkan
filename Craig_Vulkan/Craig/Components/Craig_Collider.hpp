@@ -44,7 +44,7 @@ namespace Craig {
 			virtual glm::quat getLocalRotation() const { return glm::quat(1.0f, 0.0f, 0.0f, 0.0f); }
 
 			// the shape centred on the origin with the owner's scale baked in (Jolt shapes can't be scaled on the body)
-			// the rigid body puts it at the collider's position/rotation
+			// The rigid body puts it at the collider's position/rotation. nullptr if it can't make one yet.
 			virtual JPH::Ref<JPH::ShapeSettings> createShapeSettings(const glm::vec3& ownerScale) const = 0;
 
 			// editor stuff

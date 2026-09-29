@@ -276,7 +276,7 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	 				// Allow the user to select the game object.
 	 				if ((pGameObject == nullptr || pGameObject != mp_selectedGameObject) && ImGui::Button("Select"))
 	 				{
-	 					mp_selectedGameObject = pGameObject;
+	 					selectGameObject(pGameObject);
 	 				}
 
 	 				if (mp_selectedGameObject != nullptr && pGameObject == mp_selectedGameObject)
@@ -615,10 +615,35 @@ void Craig::ImguiEditor::updateImGuizmo()
 	}
 }
 
+void Craig::ImguiEditor::selectGameObject(Craig::GameObject* pGameObject)
+{
+	deselectAllColliders();
+	mp_selectedGameObject = pGameObject;
+}
+
+void Craig::ImguiEditor::selectCollider(Craig::Components::Collider* pCollider)
+{
+	mp_selectedGameObject = nullptr;
+	deselectAllColliders();
+	pCollider->setSelected(true);
+}
+
+void Craig::ImguiEditor::deselectAllColliders()
+{
+	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
+	{
+		for (Craig::Components::Collider* pCollider : pGameObject->getComponents<Craig::Components::Collider>())
+		{
+			pCollider->setSelected(false);
+		}
+	}
+	mp_selectedCollider = nullptr;
+}
+
 void Craig::ImguiEditor::updateImGuizmoCollider()
 {
 	// Looked up fresh every frame instead of keeping the pointer around, so it can't dangle when the
-	// collider/object gets removed or the scene changes. If more than one is selected the first one wins.
+	// collider/object gets removed or the scene changes. selectCollider makes sure there's only ever one.
 	mp_selectedCollider = nullptr;
 	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
 	{
@@ -640,9 +665,6 @@ void Craig::ImguiEditor::updateImGuizmoCollider()
 	{
 		return;
 	}
-
-	// only one gizmo at a time, otherwise the object's and the collider's fight over the mouse
-	mp_selectedGameObject = nullptr;
 
 	// Use hotkeys to update the current transformation.
 	if (ImGui::IsKeyPressed(ImGuiKey_T))

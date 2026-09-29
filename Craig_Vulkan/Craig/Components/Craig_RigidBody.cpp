@@ -45,16 +45,25 @@ void Craig::Components::RigidBody::createPhysicsBody()
 {
 	m_shapeDirty = false;
 
-	const std::vector<Collider*> colliders = mp_owner->getComponents<Collider>();
-	if (colliders.empty())
-	{
-		return; // nothing to collide with yet, try again next update
-	}
-
 	// collider values are in the object's space so its scale has to be baked in
 	// Jolt can't scale a body, only a shape
 	const glm::vec3& ownerScale = mp_owner->getScale();
 	mv3_builtScale = ownerScale;
+
+	// Colliders can have no shape yet (a convex one without a model), those get skipped
+	std::vector<std::pair<const Collider*, JPH::Ref<JPH::ShapeSettings>>> colliders;
+	for (const Collider* pCollider : mp_owner->getComponents<Collider>())
+	{
+		JPH::Ref<JPH::ShapeSettings> colliderShape = pCollider->createShapeSettings(ownerScale);
+		if (colliderShape != nullptr)
+		{
+			colliders.emplace_back(pCollider, colliderShape);
+		}
+	}
+	if (colliders.empty())
+	{
+		return; // nothing to collide with yet, try again next update
+	}
 
 	// Shapes are always centred on the body, so each one gets wrapped with its collider's offset/rotation.
 	// One collider only needs a RotatedTranslatedShape, more than one get put together in a compound shape
@@ -62,21 +71,21 @@ void Craig::Components::RigidBody::createPhysicsBody()
 	JPH::Ref<JPH::ShapeSettings> shapeSettings;
 	if (colliders.size() == 1)
 	{
-		const Collider* pCollider = colliders[0];
+		const auto& [pCollider, colliderShape] = colliders[0];
 		shapeSettings = new JPH::RotatedTranslatedShapeSettings(
 			toJolt(ownerScale * pCollider->getPosition()),
 			toJolt(pCollider->getLocalRotation()),
-			pCollider->createShapeSettings(ownerScale));
+			colliderShape);
 	}
 	else
 	{
 		JPH::StaticCompoundShapeSettings* pCompound = new JPH::StaticCompoundShapeSettings;
-		for (const Collider* pCollider : colliders)
+		for (const auto& [pCollider, colliderShape] : colliders)
 		{
 			pCompound->AddShape(
 				toJolt(ownerScale * pCollider->getPosition()),
 				toJolt(pCollider->getLocalRotation()),
-				pCollider->createShapeSettings(ownerScale));
+				colliderShape);
 		}
 		shapeSettings = pCompound;
 	}

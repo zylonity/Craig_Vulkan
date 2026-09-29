@@ -108,6 +108,8 @@ namespace Craig {
 		// box around every vertex with the node transforms applied, in the model's own space
 		// false if there's no geometry
 		bool calculateBounds(glm::vec3& min, glm::vec3& max) const;
+		// Every vertex position with the node transforms applied, in the model's own space (same as calculateBounds)
+		void collectPoints(std::vector<glm::vec3>& outPoints) const;
 	};
 
 	

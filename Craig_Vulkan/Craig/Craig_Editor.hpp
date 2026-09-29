@@ -32,6 +32,10 @@ namespace Craig {
 		// So components can switch the gizmo between move/rotate/scale from their own UI
 		void setGizmoOperation(ImGuizmo::OPERATION operation) { m_CurrentOperation = operation; };
 
+		// Only one thing (a game object or a collider) can be selected at a time, these deselect everything else first
+		void selectGameObject(Craig::GameObject* pGameObject);
+		void selectCollider(Craig::Components::Collider* pCollider);
+
 		//===============================================================================
 		// Singleton Implementations
 		static ImguiEditor& getInstance()
@@ -81,6 +85,8 @@ namespace Craig {
 		Craig::Components::Collider* mp_selectedCollider = nullptr;
 
 		void updateImGuizmo();
+		void deselectAllColliders();
+
 		// Works for any collider shape, each one handles its own gizmo matrix and outline
 		void updateImGuizmoCollider();
 		void drawColliderOutlines();

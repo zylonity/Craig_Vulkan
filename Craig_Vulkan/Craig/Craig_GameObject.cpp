@@ -14,6 +14,7 @@
 #include "Components/Craig_BoxCollider.hpp"
 #include "Components/Craig_SphereCollider.hpp"
 #include "Components/Craig_CapsuleCollider.hpp"
+#include "Components/Craig_ConvexCollider.hpp"
 #include "Components/Craig_RigidBody.hpp"
 
 CraigError Craig::GameObject::init(std::string name, Craig::Scene* scenePtr) {
@@ -204,6 +205,12 @@ void Craig::GameObject::displayComponents()
 		{
 			addComponent<Components::CapsuleCollider>();
 		}
+
+		if (ImGui::MenuItem("Convex Collider", nullptr, false))
+		{
+			addComponent<Components::ConvexCollider>();
+		}
+		ImGui::SetItemTooltip("Shrink wraps the object's model");
 
 		if (ImGui::MenuItem("Rigid Body", nullptr, false, getComponent<Components::RigidBody>() == nullptr))
 		{

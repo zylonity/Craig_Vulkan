@@ -132,6 +132,25 @@ bool Craig::Model::calculateBounds(glm::vec3& min, glm::vec3& max) const {
     return min.x <= max.x;
 }
 
+// Adds every vertex under this node to the list, then does the same for its children
+static void collectPointsByNode(const Craig::Node* node, std::vector<glm::vec3>& outPoints) {
+    const glm::mat4 nodeMatrix = node->getWorldMatrix();
+    for (const Craig::SubMesh* subMesh : node->subMeshes) {
+        for (const Craig::Vertex& vertex : subMesh->m_vertices) {
+            outPoints.push_back(glm::vec3(nodeMatrix * glm::vec4(vertex.m_pos, 1.0f)));
+        }
+    }
+    for (const Craig::Node* child : node->children) {
+        collectPointsByNode(child, outPoints);
+    }
+}
+
+void Craig::Model::collectPoints(std::vector<glm::vec3>& outPoints) const {
+    for (const Craig::Node* node : nodes) {
+        collectPointsByNode(node, outPoints);
+    }
+}
+
 // images can be stored inside the glTF, so we grab them from tinygltf and upload them
 static void loadImages(const tinygltf::Model& input, Craig::Model& outModel, Craig::Renderer* renderer) {
     static const uint8_t kWhitePixel[4] = { 255, 255, 255, 255 };
