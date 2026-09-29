@@ -1,44 +1,154 @@
 {
-  "name": "Test Scene 1",
   "camera": {
-    "position": [0.0, 0.0, 0.0],
-    "rotation": [0.0, 0.0]
+    "position": [
+      52.402732849121094,
+      15.804110527038574,
+      -18.26215934753418
+    ],
+    "rotation": [
+      -6.050426483154297,
+      101.90133666992188
+    ]
   },
   "gameObjects": [
     {
-      "name": "Sun",
-      "position": [0.0, 0.0, 0.0],
-      "rotation": [0.0, 0.0, 0.0],
-      "scale": [1.0, 1.0, 1.0],
       "components": {
-        "sun": {
-          "direction": [0.5, 1.0, 0.25],
-          "colour": [1.0, 0.98, 0.95],
-          "ambient": [0.05, 0.05, 0.08]
+        "boxCollider": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            2.0,
+            2.0,
+            2.0
+          ]
+        },
+        "model": {
+          "path": "data/models/BlankBox.glb"
+        },
+        "rigidBody": {
+          "layer": "nonMoving"
         }
-      }
+      },
+      "name": "FLOOR",
+      "position": [
+        0.0,
+        -15.552611351013184,
+        0.0
+      ],
+      "rotation": [
+        9.50918960571289,
+        -0.0,
+        0.0
+      ],
+      "scale": [
+        5.85335111618042,
+        0.2345682978630066,
+        6.411280632019043
+      ]
     },
     {
-      "name": "phish",
-      "position": [0.0, -15.0, 0.0],
-      "rotation": [0.0, 0.0, 0.0],
-      "scale": [1.0, 1.0, 1.0],
+      "components": {
+        "model": {
+          "path": "data/models/Duck.glb"
+        },
+        "rigidBody": {
+          "layer": "moving"
+        },
+        "sphereCollider": {
+          "position": [
+            0.13440780341625214,
+            0.7084903717041016,
+            -0.03701552003622055
+          ],
+          "radius": 0.9789999723434448
+        }
+      },
+      "name": "fuck",
+      "position": [
+        -0.13498879969120026,
+        11.20332145690918,
+        -4.108983516693115
+      ],
+      "rotation": [
+        3.258042488596402e-05,
+        -1.801316261291504,
+        5.402933311415836e-06
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    {
       "components": {
         "model": {
           "path": "data/models/BarramundiFish.glb"
         }
-      }
+      },
+      "name": "phish",
+      "position": [
+        0.0,
+        -15.0,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
     },
     {
-      "name": "fuck",
-      "position": [0.0, 0.0, 0.0],
-      "rotation": [0.0, 0.0, 0.0],
-      "scale": [1.0, 1.0, 1.0],
       "components": {
-        "model": {
-          "path": "data/models/Duck.glb"
+        "sun": {
+          "ambient": [
+            0.05000000074505806,
+            0.05000000074505806,
+            0.07999999821186066
+          ],
+          "colour": [
+            1.0,
+            0.9800000190734863,
+            0.949999988079071
+          ],
+          "direction": [
+            0.5,
+            1.0,
+            0.25
+          ]
         }
-      }
+      },
+      "name": "Sun",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "scale": [
+        1.0,
+        1.0,
+        1.0
+      ]
     }
-  ]
+  ],
+  "name": "Test Scene 1"
 }

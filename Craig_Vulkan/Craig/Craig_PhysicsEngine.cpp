@@ -177,20 +177,20 @@ CraigError Craig::PhysicsEngine::init() {
 	// Create the settings for the body itself. Note that here you can also set other properties like the restitution / friction.
 	JPH::BodyCreationSettings floor_settings(floor_shape, JPH::RVec3(0.0f, -1.0f, 0.0f), JPH::Quat::sIdentity(), JPH::EMotionType::Static, Physics::Layers::NON_MOVING);
 
-	// Create the actual rigid body
-	floor = body_interface->CreateBody(floor_settings); // Note that if we run out of bodies this can return nullptr
-
-	// Add it to the world
-	body_interface->AddBody(floor->GetID(), JPH::EActivation::DontActivate);
-
-	// Now create a dynamic body to bounce on the floor
-	// Note that this uses the shorthand version of creating and adding a body to the world
-	JPH::BodyCreationSettings sphere_settings(new JPH::SphereShape(0.5f), JPH::RVec3(0.0f, 2.0f, 0.0f), JPH::Quat::sIdentity(), JPH::EMotionType::Dynamic, Physics::Layers::MOVING);
-	sphere_id = body_interface->CreateAndAddBody(sphere_settings, JPH::EActivation::Activate);
-
-	// Now you can interact with the dynamic body, in this case we're going to give it a velocity.
-	// (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
-	body_interface->SetLinearVelocity(sphere_id, JPH::Vec3(0.0f, -5.0f, 0.0f));
+	// // Create the actual rigid body
+	// floor = body_interface->CreateBody(floor_settings); // Note that if we run out of bodies this can return nullptr
+	//
+	// // Add it to the world
+	// body_interface->AddBody(floor->GetID(), JPH::EActivation::DontActivate);
+	//
+	// // Now create a dynamic body to bounce on the floor
+	// // Note that this uses the shorthand version of creating and adding a body to the world
+	// JPH::BodyCreationSettings sphere_settings(new JPH::SphereShape(0.5f), JPH::RVec3(0.0f, 2.0f, 0.0f), JPH::Quat::sIdentity(), JPH::EMotionType::Dynamic, Physics::Layers::MOVING);
+	// sphere_id = body_interface->CreateAndAddBody(sphere_settings, JPH::EActivation::Activate);
+	//
+	// // Now you can interact with the dynamic body, in this case we're going to give it a velocity.
+	// // (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
+	// body_interface->SetLinearVelocity(sphere_id, JPH::Vec3(0.0f, -5.0f, 0.0f));
 
 
 	// Optional step: Before starting the physics simulation you can optimize the broad phase. This improves collision detection performance (it's pointless here because we only have 2 bodies).
@@ -216,10 +216,10 @@ CraigError Craig::PhysicsEngine::update(const float& deltaTime) {
 		// Next step
 		++step;
 
-		// Output current position and velocity of the sphere
-		JPH::RVec3 position = body_interface->GetCenterOfMassPosition(sphere_id);
-		JPH::Vec3 velocity = body_interface->GetLinearVelocity(sphere_id);
-		std::cout << "Step " << step << ": Position = (" << position.GetX() << ", " << position.GetY() << ", " << position.GetZ() << "), Velocity = (" << velocity.GetX() << ", " << velocity.GetY() << ", " << velocity.GetZ() << ")" << std::endl;
+		// // Output current position and velocity of the sphere
+		// JPH::RVec3 position = body_interface->GetCenterOfMassPosition(sphere_id);
+		// JPH::Vec3 velocity = body_interface->GetLinearVelocity(sphere_id);
+		// std::cout << "Step " << step << ": Position = (" << position.GetX() << ", " << position.GetY() << ", " << position.GetZ() << "), Velocity = (" << velocity.GetX() << ", " << velocity.GetY() << ", " << velocity.GetZ() << ")" << std::endl;
 
 		// Step the world
 		physics_system.Update(fixed_time_step, cCollisionSteps, temp_allocator, job_system);

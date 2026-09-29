@@ -1,6 +1,7 @@
 #pragma once
 #include "Craig/Craig_Constants.hpp"
 #include "Craig_Component.hpp"
+#include "Craig_PhysicsEngine.hpp"
 
 #include <glm/glm.hpp>
 
@@ -13,18 +14,6 @@ namespace Craig {
 
 		public:
 
-			struct Cube
-			{
-				glm::vec3 m_halfExtent = { 2.0f, 2.0f, 2.0f };
-
-			};
-
-			struct Sphere
-			{
-
-
-			};
-
 			CraigError init() override;
 			CraigError update() override;
 			CraigError terminate() override;
@@ -34,17 +23,18 @@ namespace Craig {
 			void displayImGuiAttributes() override;
 
 			const char* getTypeName() const override { return "RigidBody"; }
-			const char* getJsonKey() const override { return "RigidBody"; }
-
-			const glm::vec3& getLightDir() const { return mv3_lightDir; }
-			const glm::vec3& getLightColour() const { return mv3_lightColour; }
-			const glm::vec3& getAmbientColour() const { return mv3_ambientColour; }
+			const char* getJsonKey() const override { return "rigidBody"; }
 
 		private:
-			// defaults are the old hardcoded scene values
-			glm::vec3 mv3_lightDir = { 0.5f, 1.0f, 0.25f };
-			glm::vec3 mv3_lightColour = { 1.0f, 0.98f, 0.95f };
-			glm::vec3 mv3_ambientColour = { 0.05f, 0.05f, 0.08f };
+			// Called from update() until the body exists (rb_id is valid). Done there instead of init() since init()
+			// runs before loadFromJson and possibly before the collider has been added.
+			void createPhysicsBody();
+			void destroyPhysicsBody();
+
+			JPH::BodyID rb_id;
+
+			// NON_MOVING bodies are static, MOVING ones are dynamic
+			JPH::ObjectLayer m_layer = Physics::Layers::MOVING;
 		};
 	}
 

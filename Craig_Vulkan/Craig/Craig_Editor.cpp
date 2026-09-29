@@ -14,6 +14,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/constants.hpp>
 
 #include "Craig_SceneManager.hpp"
 #include "Craig_GameObject.hpp"
@@ -77,7 +78,9 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 	showSceneDetails(deltaTime);
 	updateImGuizmo();
 	updateImGuizmoBoxCollider();
+	updateImGuizmoSphereCollider();
 	drawBoxColliderOutlines();
+	drawSphereColliderOutlines();
 
 	renderNewGameObjectWindow();
 	renderNewSceneWindow();
@@ -722,6 +725,28 @@ static ImVec2 clipToScreen(const glm::vec4& clipPos, const glm::vec2& screenSize
 	);
 }
 
+// Draws a clip space line, cut off where it goes behind the camera
+static void drawClippedLine(ImDrawList* pDrawList, glm::vec4 start, glm::vec4 end, const glm::vec2& screenSize, ImU32 colour)
+{
+	// Anything with w below this is (nearly) behind the camera, dividing by it would flip it across the screen
+	constexpr float kMinW = 0.0001f;
+
+	if (start.w < kMinW && end.w < kMinW)
+	{
+		return;
+	}
+	if (start.w < kMinW)
+	{
+		start = glm::mix(start, end, (kMinW - start.w) / (end.w - start.w));
+	}
+	else if (end.w < kMinW)
+	{
+		end = glm::mix(end, start, (kMinW - end.w) / (start.w - end.w));
+	}
+
+	pDrawList->AddLine(clipToScreen(start, screenSize), clipToScreen(end, screenSize), colour, 2.0f);
+}
+
 void Craig::ImguiEditor::drawBoxColliderOutlines()
 {
 	const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
@@ -732,9 +757,6 @@ void Craig::ImguiEditor::drawBoxColliderOutlines()
 
 	// background list draws over the scene but under the editor windows
 	ImDrawList* pDrawList = ImGui::GetBackgroundDrawList();
-
-	// Anything with w below this is (nearly) behind the camera, dividing by it would flip it across the screen
-	constexpr float kMinW = 0.0001f;
 
 	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
 	{
@@ -770,26 +792,136 @@ void Craig::ImguiEditor::drawBoxColliderOutlines()
 					continue; // Each edge once, from the corner with the bit unset
 				}
 
-				glm::vec4 start = corners[a];
-				glm::vec4 end = corners[b];
-
-				// Clip the edge against the plane just in front of the camera
-				if (start.w < kMinW && end.w < kMinW)
-				{
-					continue;
-				}
-				if (start.w < kMinW)
-				{
-					start = glm::mix(start, end, (kMinW - start.w) / (end.w - start.w));
-				}
-				else if (end.w < kMinW)
-				{
-					end = glm::mix(end, start, (kMinW - end.w) / (start.w - end.w));
-				}
-
-				pDrawList->AddLine(clipToScreen(start, screenSize), clipToScreen(end, screenSize), colour, 2.0f);
+				drawClippedLine(pDrawList, corners[a], corners[b], screenSize, colour);
 			}
 		}
 	}
 }
 
+void Craig::ImguiEditor::updateImGuizmoSphereCollider()
+{
+	// same as the box one, looked up fresh every frame so it can't dangle
+	mp_selectedSphereCollider = nullptr;
+	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
+	{
+		Craig::Components::SphereCollider* pCollider = pGameObject->getComponent<Craig::Components::SphereCollider>();
+		if (pCollider != nullptr && pCollider->getSelected())
+		{
+			mp_selectedSphereCollider = pCollider;
+			break;
+		}
+	}
+
+	// Only one gizmo at a time, a selected box collider already has it
+	if (mp_selectedSphereCollider == nullptr || mp_selectedBoxCollider != nullptr)
+	{
+		return;
+	}
+
+	mp_selectedGameObject = nullptr;
+
+	// no rotate for spheres, it wouldn't do anything
+	if (ImGui::IsKeyPressed(ImGuiKey_T))
+	{
+		m_CurrentOperation = ImGuizmo::TRANSLATE;
+	}
+	if (ImGui::IsKeyPressed(ImGuiKey_E))
+	{
+		m_CurrentOperation = ImGuizmo::SCALE;
+	}
+	const ImGuizmo::OPERATION operation = m_CurrentOperation == ImGuizmo::SCALE ? ImGuizmo::SCALE : ImGuizmo::TRANSLATE;
+
+	ImGuizmo::SetOrthographic(false);
+	const glm::vec2 screenSize = mp_renderer->getWindowSize();
+	ImGuizmo::SetRect(0, 0, screenSize.x, screenSize.y);
+
+	// Built in world space from the centre and radius, with the owner's rotation so the handles line up with the object
+	Craig::GameObject* pOwner = mp_selectedSphereCollider->getOwner();
+	const float worldRadius = mp_selectedSphereCollider->getWorldRadius();
+	glm::mat4 transform = glm::translate(glm::mat4(1.0f), mp_selectedSphereCollider->getWorldCentre())
+		* glm::mat4_cast(pOwner->getRotationQuat())
+		* glm::scale(glm::mat4(1.0f), glm::vec3(worldRadius));
+
+	const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
+	const glm::mat4 proj = glm::perspective(
+		glm::radians(camera.m_fov), camera.m_aspect, camera.m_nearPlane, camera.m_farPlane);
+	const glm::mat4 view = camera.getView();
+
+	ImGuizmo::Manipulate(
+		glm::value_ptr(view),
+		glm::value_ptr(proj),
+		operation,
+		ImGuizmo::MODE::LOCAL,
+		glm::value_ptr(transform)
+	);
+
+	if (!ImGuizmo::IsUsing())
+	{
+		return;
+	}
+
+	if (operation == ImGuizmo::TRANSLATE)
+	{
+		// World -> the owner's space, which is what the collider's position is in
+		const glm::vec3 worldCentre = glm::vec3(transform[3]);
+		mp_selectedSphereCollider->setPosition(glm::vec3(glm::inverse(pOwner->calculateModelMatrix()) * glm::vec4(worldCentre, 1.0f)));
+	}
+	else
+	{
+		// Dragging one axis only scales that axis, so go with whichever one changed the most
+		float bestRatio = 1.0f;
+		for (int axis = 0; axis < 3; axis++)
+		{
+			const float ratio = glm::length(glm::vec3(transform[axis])) / worldRadius;
+			if (glm::abs(ratio - 1.0f) > glm::abs(bestRatio - 1.0f))
+			{
+				bestRatio = ratio;
+			}
+		}
+		mp_selectedSphereCollider->setRadius(mp_selectedSphereCollider->getRadius() * bestRatio);
+	}
+}
+
+void Craig::ImguiEditor::drawSphereColliderOutlines()
+{
+	const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
+	const glm::mat4 proj = glm::perspective(
+		glm::radians(camera.m_fov), camera.m_aspect, camera.m_nearPlane, camera.m_farPlane);
+	const glm::mat4 viewProj = proj * camera.getView();
+	const glm::vec2 screenSize = mp_renderer->getWindowSize();
+
+	ImDrawList* pDrawList = ImGui::GetBackgroundDrawList();
+
+	constexpr int kSegments = 48;
+
+	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
+	{
+		const Craig::Components::SphereCollider* pCollider = pGameObject->getComponent<Craig::Components::SphereCollider>();
+		if (pCollider == nullptr || !pCollider->isOutlineVisible())
+		{
+			continue;
+		}
+
+		const ImU32 colour = pCollider == mp_selectedSphereCollider ? IM_COL32(255, 200, 0, 255) : IM_COL32(0, 255, 0, 255);
+		const glm::vec3 centre = pCollider->getWorldCentre();
+		const float radius = pCollider->getWorldRadius();
+
+		// a circle around each world axis, that's the shape physics actually uses
+		for (int axis = 0; axis < 3; axis++)
+		{
+			// the two axes the circle lies in
+			glm::vec3 u(0.0f), v(0.0f);
+			u[(axis + 1) % 3] = radius;
+			v[(axis + 2) % 3] = radius;
+
+			glm::vec4 previous = viewProj * glm::vec4(centre + u, 1.0f);
+			for (int i = 1; i <= kSegments; i++)
+			{
+				const float angle = glm::two_pi<float>() * static_cast<float>(i) / kSegments;
+				const glm::vec4 current = viewProj * glm::vec4(centre + u * glm::cos(angle) + v * glm::sin(angle), 1.0f);
+				drawClippedLine(pDrawList, previous, current, screenSize, colour);
+				previous = current;
+			}
+		}
+	}
+}

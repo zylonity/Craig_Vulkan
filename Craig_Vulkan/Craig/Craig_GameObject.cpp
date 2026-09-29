@@ -12,6 +12,8 @@
 #include "imgui.h"
 #include "imgui_stdlib.h"
 #include "Components/Craig_BoxCollider.hpp"
+#include "Components/Craig_SphereCollider.hpp"
+#include "Components/Craig_RigidBody.hpp"
 
 CraigError Craig::GameObject::init(std::string name, Craig::Scene* scenePtr) {
 
@@ -41,12 +43,13 @@ CraigError Craig::GameObject::update() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-	updateModelMatrix();
-
 	for (const std::unique_ptr<Components::Component>& pComponent : mv_components)
 	{
 		pComponent->update();
 	}
+
+	// after the components, since some of them (RigidBody) move the object
+	updateModelMatrix();
 
 	return ret;
 }
@@ -189,6 +192,16 @@ void Craig::GameObject::displayComponents()
 		if (ImGui::MenuItem("Box Collider", nullptr, false))
 		{
 			addComponent<Components::BoxCollider>();
+		}
+
+		if (ImGui::MenuItem("Sphere Collider", nullptr, false))
+		{
+			addComponent<Components::SphereCollider>();
+		}
+
+		if (ImGui::MenuItem("Rigid Body", nullptr, false, getComponent<Components::RigidBody>() == nullptr))
+		{
+			addComponent<Components::RigidBody>();
 		}
 
 		ImGui::EndPopup();

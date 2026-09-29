@@ -1,14 +1,17 @@
 #include "Craig_SceneManager.hpp"
 #include <cassert>
 
-CraigError Craig::SceneManager::init() {
+CraigError Craig::SceneManager::init(Craig::PhysicsEngine* pPhysicsEngine) {
 
 	CraigError ret = CRAIG_SUCCESS;
+
+	assert(pPhysicsEngine != nullptr && "SceneManager needs the physics engine");
+	mp_physicsEngine = pPhysicsEngine;
 
 	// Initialize our scene
 	mp_CurrentScene = new Craig::Scene;
 	assert(mp_CurrentScene != nullptr && "mp_CurrentScene failed to allocate memory");
-	ret = mp_CurrentScene->init(kDefaultScenePath);
+	ret = mp_CurrentScene->init(kDefaultScenePath, mp_physicsEngine);
 	assert(ret == CRAIG_SUCCESS && "Default scene failed to load, check the .json");
 
 	return ret;
@@ -20,7 +23,7 @@ CraigError Craig::SceneManager::loadScene(const std::string& scenePath) {
 
 	// load the new scene first, so if it fails we still have the old one
 	Craig::Scene* pNewScene = new Craig::Scene;
-	ret = pNewScene->init(scenePath);
+	ret = pNewScene->init(scenePath, mp_physicsEngine);
 	if (ret != CRAIG_SUCCESS)
 	{
 		pNewScene->terminate();

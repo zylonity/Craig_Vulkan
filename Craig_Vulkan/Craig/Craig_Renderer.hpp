@@ -36,6 +36,7 @@ namespace Craig {
 
 	public:
 		CraigError init(Window* CurrentWindowPtr, SceneManager* sceneManagerPtr);
+		CraigError initSceneResources(); // Needs the scene manager initialised first, see the cpp
 		CraigError update(const float& deltaTime);
 		CraigError terminate();
 

@@ -3,14 +3,19 @@
 #include "Components/Craig_Model.hpp"
 #include "Components/Craig_Sun.hpp"
 #include "Components/Craig_BoxCollider.hpp"
+#include "Components/Craig_SphereCollider.hpp"
+#include "Components/Craig_RigidBody.hpp"
 #include "../External/json.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 
-CraigError Craig::Scene::init(const std::string& scenePath) {
+CraigError Craig::Scene::init(const std::string& scenePath, Craig::PhysicsEngine* pPhysicsEngine) {
 
 	CraigError ret = CRAIG_SUCCESS;
+
+	// set before anything loads so components can reach it
+	mp_physicsEngine = pPhysicsEngine;
 
 	std::ifstream sceneFile(scenePath);
 	if (!sceneFile.is_open())
@@ -158,6 +163,16 @@ void Craig::Scene::loadComponentsFromJson(Craig::GameObject* pObject, const nloh
 	if (componentsJson.contains("boxCollider"))
 	{
 		pObject->addComponent<Components::BoxCollider>()->loadFromJson(componentsJson["boxCollider"]);
+	}
+
+	if (componentsJson.contains("sphereCollider"))
+	{
+		pObject->addComponent<Components::SphereCollider>()->loadFromJson(componentsJson["sphereCollider"]);
+	}
+
+	if (componentsJson.contains("rigidBody"))
+	{
+		pObject->addComponent<Components::RigidBody>()->loadFromJson(componentsJson["rigidBody"]);
 	}
 }
 

@@ -8,6 +8,7 @@
 #include "../External/Imgui/imfilebrowser.h"
 #include "../External/Imgui/ImGuizmo/ImGuizmo.h"
 #include "Components/Craig_BoxCollider.hpp"
+#include "Components/Craig_SphereCollider.hpp"
 
 namespace Craig {
 	class GameObject;
@@ -79,10 +80,13 @@ namespace Craig {
 
 		Craig::GameObject* mp_selectedGameObject = nullptr;
 		Craig::Components::BoxCollider* mp_selectedBoxCollider = nullptr;
+		Craig::Components::SphereCollider* mp_selectedSphereCollider = nullptr;
 
 		void updateImGuizmo();
 		void updateImGuizmoBoxCollider();
+		void updateImGuizmoSphereCollider();
 		void drawBoxColliderOutlines();
+		void drawSphereColliderOutlines();
 		ImGuizmo::OPERATION m_CurrentOperation = ImGuizmo::OPERATION::TRANSLATE;
 
 		int m_currentMipLevel = 0;

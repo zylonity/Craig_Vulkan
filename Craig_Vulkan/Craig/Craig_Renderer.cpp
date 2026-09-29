@@ -196,8 +196,21 @@ void Craig::Renderer::InitVulkan() {
 
     m_commandManager.init(commandManagerInitInfo);
 
+    Craig::SyncManager::SyncManagerInitInfo syncManagerInitInfo;
+    syncManagerInitInfo.logicalDevice = m_Devices.getLogicalDevice();
+    syncManagerInitInfo.swapChainImageCount = m_swapChain.getImages().size();
 
-    mp_SceneManager->init();
+    m_syncManager.init(syncManagerInitInfo);
+
+}
+
+// Second half of the renderer's init. The first scene loads in between (in the framework) since loading models
+// needs the device + command pool to upload textures, and these need the scene's models to build their buffers.
+CraigError Craig::Renderer::initSceneResources() {
+
+    CraigError ret = CRAIG_SUCCESS;
+
+    assert(mp_SceneManager->getCurrentScene() != nullptr && "The scene manager has to be initialised before the renderer's scene resources");
 
     createTextureSampler();
     createVertexBuffer();
@@ -206,18 +219,13 @@ void Craig::Renderer::InitVulkan() {
     createDescriptorPool();
     createDescriptorSets();
 
-    Craig::SyncManager::SyncManagerInitInfo syncManagerInitInfo;
-    syncManagerInitInfo.logicalDevice = m_Devices.getLogicalDevice();
-    syncManagerInitInfo.swapChainImageCount = m_swapChain.getImages().size();
-
-    m_syncManager.init(syncManagerInitInfo);
-
     mp_CurrentWindow->setCameraRef(&mp_SceneManager->getCurrentScene()->getCamera());
 
 #if defined(IMGUI_ENABLED)
     Craig::ImguiEditor::getInstance().setCamera(&mp_SceneManager->getCurrentScene()->getCamera());
 #endif
 
+    return ret;
 }
 
 void Craig::Renderer::recreateSwapChain() {

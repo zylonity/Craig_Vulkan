@@ -9,11 +9,12 @@
 
 namespace Craig {
 	namespace Components { class Sun; }
+	class PhysicsEngine;
 
 	class Scene {
 
 	public:
-		CraigError init(const std::string& scenePath);
+		CraigError init(const std::string& scenePath, Craig::PhysicsEngine* pPhysicsEngine);
 		CraigError update(const float& deltaTime);
 		CraigError terminate();
 
@@ -27,6 +28,7 @@ namespace Craig {
 		Craig::GameObject* findObject(const std::string& objectName) const;
 
 		Craig::Camera& getCamera() { return m_camera; }
+		Craig::PhysicsEngine* getPhysicsEngine() const { return mp_physicsEngine; }
 		// the scene's sun component, nullptr if no game object has one
 		Components::Sun* getSun() const;
 		void deleteGameObject(Craig::GameObject* gameObject);
@@ -45,6 +47,8 @@ namespace Craig {
 
 		Craig::Camera m_camera = Craig::Camera(); //Virtual camera for the scene
 		bool m_geometryDirty = false;
+
+		Craig::PhysicsEngine* mp_physicsEngine = nullptr; // not owned, the framework owns it
 	};
 
 

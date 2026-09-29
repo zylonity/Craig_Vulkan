@@ -46,13 +46,13 @@ namespace Craig {
 
 	public:
 
-
-
 		CraigError init();
 		CraigError update(const float& deltaTime);
 		CraigError terminate();
 
 		float getFixedTimeStep() const { return fixed_time_step; }
+		JPH::BodyInterface* getBodyInterface() const { return body_interface; }
+
 		void setFixedTimeStep(float timeStep); // clamped between 10Hz and 1000Hz
 	private:
 

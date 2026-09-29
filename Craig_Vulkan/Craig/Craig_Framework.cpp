@@ -40,8 +40,17 @@ CraigError Craig::Framework::init() {
 
 	ret = mp_Renderer->init(mp_Window, mp_SceneManager);
 	assert(ret == CRAIG_SUCCESS);
-									
+
+	// before the scene manager so the scenes get a ready physics engine
 	ret = mp_PhysicsEngine->init();
+	assert(ret == CRAIG_SUCCESS);
+
+	// Has to be between the renderer's two inits, loading the scene's models needs the device
+	// and the renderer's buffers need the scene's models
+	ret = mp_SceneManager->init(mp_PhysicsEngine);
+	assert(ret == CRAIG_SUCCESS);
+
+	ret = mp_Renderer->initSceneResources();
 	assert(ret == CRAIG_SUCCESS);
 
 
@@ -79,6 +88,7 @@ CraigError Craig::Framework::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+	// Scenes go before the physics engine, rigid bodies remove themselves from it when they terminate
 	ret = mp_SceneManager->terminate();
 	assert(ret == CRAIG_SUCCESS && "mp_SceneManager didn't terminate properly");
 	delete mp_SceneManager;
