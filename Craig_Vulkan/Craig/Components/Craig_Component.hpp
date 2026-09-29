@@ -9,7 +9,7 @@ namespace Craig {
 	namespace Components
 	{
 		// base class for anything you can stick on a game object
-		// one of each component type per game object
+		// one of each type per game object, unless the type says otherwise (allowMultiple)
 		class Component {
 
 		public:
@@ -26,6 +26,9 @@ namespace Craig {
 
 			// Draws the component's editable properties in the editor
 			virtual void displayImGuiAttributes() {}
+
+			// whether a game object can have more than one of this type (colliders can)
+			virtual bool allowMultiple() const { return false; }
 
 			// shown in the editor
 			virtual const char* getTypeName() const = 0;

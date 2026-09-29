@@ -25,7 +25,7 @@
 #include <filesystem>
 #include <fstream>
 
-#include "Components/Craig_BoxCollider.hpp"
+#include "Components/Craig_Collider.hpp"
 
 CraigError Craig::ImguiEditor::editorInit() {
 
@@ -77,12 +77,8 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 	showRenderProperties(deltaTime);
 	showSceneDetails(deltaTime);
 	updateImGuizmo();
-	updateImGuizmoBoxCollider();
-	updateImGuizmoSphereCollider();
-	updateImGuizmoCapsuleCollider();
-	drawBoxColliderOutlines();
-	drawSphereColliderOutlines();
-	drawCapsuleColliderOutlines();
+	updateImGuizmoCollider();
+	drawColliderOutlines();
 
 	renderNewGameObjectWindow();
 	renderNewSceneWindow();
@@ -619,231 +615,62 @@ void Craig::ImguiEditor::updateImGuizmo()
 	}
 }
 
-void Craig::ImguiEditor::updateImGuizmoBoxCollider()
+void Craig::ImguiEditor::updateImGuizmoCollider()
 {
 	// Looked up fresh every frame instead of keeping the pointer around, so it can't dangle when the
 	// collider/object gets removed or the scene changes. If more than one is selected the first one wins.
-	mp_selectedBoxCollider = nullptr;
+	mp_selectedCollider = nullptr;
 	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
 	{
-		Craig::Components::BoxCollider* pCollider = pGameObject->getComponent<Craig::Components::BoxCollider>();
-		if (pCollider != nullptr && pCollider->getSelected())
+		for (Craig::Components::Collider* pCollider : pGameObject->getComponents<Craig::Components::Collider>())
 		{
-			mp_selectedBoxCollider = pCollider;
+			if (pCollider->getSelected())
+			{
+				mp_selectedCollider = pCollider;
+				break;
+			}
+		}
+		if (mp_selectedCollider != nullptr)
+		{
 			break;
 		}
 	}
 
-	if (mp_selectedBoxCollider != nullptr)
-	{
-		// only one gizmo at a time, otherwise the object's and the collider's fight over the mouse
-		mp_selectedGameObject = nullptr;
-
-		// Use hotkeys to update the current transformation.
-		if (ImGui::IsKeyPressed(ImGuiKey_T))
-		{
-			m_CurrentOperation = ImGuizmo::TRANSLATE;
-		}
-		if (ImGui::IsKeyPressed(ImGuiKey_R))
-		{
-			m_CurrentOperation = ImGuizmo::ROTATE;
-		}
-		if (ImGui::IsKeyPressed(ImGuiKey_E))
-		{
-			m_CurrentOperation = ImGuizmo::SCALE;
-		}
-
-		// Set the screen rect and tell ImGuizmo how to project.
-		ImGuizmo::SetOrthographic(false);
-		const glm::vec2 screenSize = mp_renderer->getWindowSize();
-		ImGuizmo::SetRect(0, 0, screenSize.x, screenSize.y);
-
-		// The collider's values are relative to its game object, but the gizmo works in world space.
-		// So give it owner * local, then take the owner back out afterwards to get local again.
-		const glm::mat4 ownerMatrix = mp_selectedBoxCollider->getOwner()->calculateModelMatrix();
-		glm::mat4 transform = ownerMatrix * mp_selectedBoxCollider->getLocalMatrix();
-
-		// ImGuizmo handles right-handed matrices now, so no LH hack needed
-		// Proj rebuilt without the Vulkan Y-flip, ImGuizmo wants Y up
-		const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
-		const glm::mat4 proj = glm::perspective(
-			glm::radians(camera.m_fov), camera.m_aspect, camera.m_nearPlane, camera.m_farPlane);
-		const glm::mat4 view = camera.getView();
-
-		ImGuizmo::Manipulate(
-			glm::value_ptr(view),
-			glm::value_ptr(proj),
-			m_CurrentOperation,
-			ImGuizmo::MODE::LOCAL,
-			glm::value_ptr(transform)
-		);
-
-		if (ImGuizmo::IsUsing())
-		{
-			// World -> local. If the owner has non-uniform scale and the collider is rotated this has shear in it,
-			// which can't be split back into pos/rot/scale, so it'll come out slightly wrong in that case.
-			const glm::mat4 local = glm::inverse(ownerMatrix) * transform;
-
-			// Decompose the matrix manually so rotation stays as a quaternion (no Euler jumps).
-			glm::vec3 pos = glm::vec3(local[3]);
-			glm::vec3 scale = {
-				glm::length(glm::vec3(local[0])),
-				glm::length(glm::vec3(local[1])),
-				glm::length(glm::vec3(local[2]))
-			};
-			glm::mat3 rotMat(
-				glm::vec3(local[0]) / (scale.x != 0.0f ? scale.x : 1.0f),
-				glm::vec3(local[1]) / (scale.y != 0.0f ? scale.y : 1.0f),
-				glm::vec3(local[2]) / (scale.z != 0.0f ? scale.z : 1.0f)
-			);
-			glm::quat rot = glm::quat_cast(rotMat);
-
-			switch (m_CurrentOperation)
-			{
-			case ImGuizmo::OPERATION::TRANSLATE:
-				mp_selectedBoxCollider->setPosition(pos);
-				break;
-			case ImGuizmo::OPERATION::ROTATE:
-				mp_selectedBoxCollider->setRotationQuat(rot);
-				break;
-			case ImGuizmo::OPERATION::SCALE:
-				mp_selectedBoxCollider->setScale(scale);
-				break;
-			default:
-				break;
-			}
-		}
-	}
-}
-
-// Projects a clip space point to window pixels. Uses the same un-flipped proj as ImGuizmo, so NDC Y points up
-// and has to be flipped since ImGui's screen Y goes down.
-static ImVec2 clipToScreen(const glm::vec4& clipPos, const glm::vec2& screenSize)
-{
-	const glm::vec2 ndc = glm::vec2(clipPos) / clipPos.w;
-	return ImVec2(
-		(ndc.x * 0.5f + 0.5f) * screenSize.x,
-		(1.0f - (ndc.y * 0.5f + 0.5f)) * screenSize.y
-	);
-}
-
-// Draws a clip space line, cut off where it goes behind the camera
-static void drawClippedLine(ImDrawList* pDrawList, glm::vec4 start, glm::vec4 end, const glm::vec2& screenSize, ImU32 colour)
-{
-	// Anything with w below this is (nearly) behind the camera, dividing by it would flip it across the screen
-	constexpr float kMinW = 0.0001f;
-
-	if (start.w < kMinW && end.w < kMinW)
-	{
-		return;
-	}
-	if (start.w < kMinW)
-	{
-		start = glm::mix(start, end, (kMinW - start.w) / (end.w - start.w));
-	}
-	else if (end.w < kMinW)
-	{
-		end = glm::mix(end, start, (kMinW - end.w) / (start.w - end.w));
-	}
-
-	pDrawList->AddLine(clipToScreen(start, screenSize), clipToScreen(end, screenSize), colour, 2.0f);
-}
-
-void Craig::ImguiEditor::drawBoxColliderOutlines()
-{
-	const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
-	const glm::mat4 proj = glm::perspective(
-		glm::radians(camera.m_fov), camera.m_aspect, camera.m_nearPlane, camera.m_farPlane);
-	const glm::mat4 viewProj = proj * camera.getView();
-	const glm::vec2 screenSize = mp_renderer->getWindowSize();
-
-	// background list draws over the scene but under the editor windows
-	ImDrawList* pDrawList = ImGui::GetBackgroundDrawList();
-
-	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
-	{
-		const Craig::Components::BoxCollider* pCollider = pGameObject->getComponent<Craig::Components::BoxCollider>();
-		if (pCollider == nullptr || !pCollider->isOutlineVisible())
-		{
-			continue;
-		}
-
-		const ImU32 colour = pCollider == mp_selectedBoxCollider ? IM_COL32(255, 200, 0, 255) : IM_COL32(0, 255, 0, 255);
-		const glm::mat4 mvp = viewProj * pCollider->getWorldMatrix();
-
-		// Corner i uses bit 0 for x, bit 1 for y, bit 2 for z (0 = -0.5, 1 = +0.5)
-		glm::vec4 corners[8];
-		for (int i = 0; i < 8; i++)
-		{
-			const glm::vec3 localCorner = {
-				(i & 1) ? 0.5f : -0.5f,
-				(i & 2) ? 0.5f : -0.5f,
-				(i & 4) ? 0.5f : -0.5f
-			};
-			corners[i] = mvp * glm::vec4(localCorner, 1.0f);
-		}
-
-		// Two corners share an edge if their indices only differ by one bit
-		for (int a = 0; a < 8; a++)
-		{
-			for (int bit = 1; bit < 8; bit <<= 1)
-			{
-				const int b = a | bit;
-				if (b == a)
-				{
-					continue; // Each edge once, from the corner with the bit unset
-				}
-
-				drawClippedLine(pDrawList, corners[a], corners[b], screenSize, colour);
-			}
-		}
-	}
-}
-
-void Craig::ImguiEditor::updateImGuizmoSphereCollider()
-{
-	// same as the box one, looked up fresh every frame so it can't dangle
-	mp_selectedSphereCollider = nullptr;
-	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
-	{
-		Craig::Components::SphereCollider* pCollider = pGameObject->getComponent<Craig::Components::SphereCollider>();
-		if (pCollider != nullptr && pCollider->getSelected())
-		{
-			mp_selectedSphereCollider = pCollider;
-			break;
-		}
-	}
-
-	// Only one gizmo at a time, a selected box collider already has it
-	if (mp_selectedSphereCollider == nullptr || mp_selectedBoxCollider != nullptr)
+	if (mp_selectedCollider == nullptr)
 	{
 		return;
 	}
 
+	// only one gizmo at a time, otherwise the object's and the collider's fight over the mouse
 	mp_selectedGameObject = nullptr;
 
-	// no rotate for spheres, it wouldn't do anything
+	// Use hotkeys to update the current transformation.
 	if (ImGui::IsKeyPressed(ImGuiKey_T))
 	{
 		m_CurrentOperation = ImGuizmo::TRANSLATE;
+	}
+	if (ImGui::IsKeyPressed(ImGuiKey_R) && mp_selectedCollider->canRotate())
+	{
+		m_CurrentOperation = ImGuizmo::ROTATE;
 	}
 	if (ImGui::IsKeyPressed(ImGuiKey_E))
 	{
 		m_CurrentOperation = ImGuizmo::SCALE;
 	}
-	const ImGuizmo::OPERATION operation = m_CurrentOperation == ImGuizmo::SCALE ? ImGuizmo::SCALE : ImGuizmo::TRANSLATE;
+	// Still in rotate from something else, fall back to move for shapes that can't rotate
+	const ImGuizmo::OPERATION operation = (m_CurrentOperation == ImGuizmo::ROTATE && !mp_selectedCollider->canRotate())
+		? ImGuizmo::TRANSLATE : m_CurrentOperation;
 
+	// Set the screen rect and tell ImGuizmo how to project.
 	ImGuizmo::SetOrthographic(false);
 	const glm::vec2 screenSize = mp_renderer->getWindowSize();
 	ImGuizmo::SetRect(0, 0, screenSize.x, screenSize.y);
 
-	// Built in world space from the centre and radius, with the owner's rotation so the handles line up with the object
-	Craig::GameObject* pOwner = mp_selectedSphereCollider->getOwner();
-	const float worldRadius = mp_selectedSphereCollider->getWorldRadius();
-	glm::mat4 transform = glm::translate(glm::mat4(1.0f), mp_selectedSphereCollider->getWorldCentre())
-		* glm::mat4_cast(pOwner->getRotationQuat())
-		* glm::scale(glm::mat4(1.0f), glm::vec3(worldRadius));
+	// Each collider builds its own world space gizmo matrix and takes it back apart afterwards
+	glm::mat4 transform = mp_selectedCollider->getGizmoMatrix();
 
+	// ImGuizmo handles right-handed matrices now, so no LH hack needed
+	// Proj rebuilt without the Vulkan Y-flip, ImGuizmo wants Y up
 	const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
 	const glm::mat4 proj = glm::perspective(
 		glm::radians(camera.m_fov), camera.m_aspect, camera.m_nearPlane, camera.m_farPlane);
@@ -857,283 +684,37 @@ void Craig::ImguiEditor::updateImGuizmoSphereCollider()
 		glm::value_ptr(transform)
 	);
 
-	if (!ImGuizmo::IsUsing())
+	if (ImGuizmo::IsUsing())
 	{
-		return;
-	}
-
-	if (operation == ImGuizmo::TRANSLATE)
-	{
-		// World -> the owner's space, which is what the collider's position is in
-		const glm::vec3 worldCentre = glm::vec3(transform[3]);
-		mp_selectedSphereCollider->setPosition(glm::vec3(glm::inverse(pOwner->calculateModelMatrix()) * glm::vec4(worldCentre, 1.0f)));
-	}
-	else
-	{
-		// Dragging one axis only scales that axis, so go with whichever one changed the most
-		float bestRatio = 1.0f;
-		for (int axis = 0; axis < 3; axis++)
-		{
-			const float ratio = glm::length(glm::vec3(transform[axis])) / worldRadius;
-			if (glm::abs(ratio - 1.0f) > glm::abs(bestRatio - 1.0f))
-			{
-				bestRatio = ratio;
-			}
-		}
-		mp_selectedSphereCollider->setRadius(mp_selectedSphereCollider->getRadius() * bestRatio);
+		mp_selectedCollider->applyGizmoMatrix(transform, operation);
 	}
 }
 
-void Craig::ImguiEditor::drawSphereColliderOutlines()
+void Craig::ImguiEditor::drawColliderOutlines()
 {
 	const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
 	const glm::mat4 proj = glm::perspective(
 		glm::radians(camera.m_fov), camera.m_aspect, camera.m_nearPlane, camera.m_farPlane);
-	const glm::mat4 viewProj = proj * camera.getView();
-	const glm::vec2 screenSize = mp_renderer->getWindowSize();
 
-	ImDrawList* pDrawList = ImGui::GetBackgroundDrawList();
-
+	Craig::Components::ColliderOutlineContext context;
+	// background list draws over the scene but under the editor windows
+	context.pDrawList = ImGui::GetBackgroundDrawList();
+	context.viewProj = proj * camera.getView();
+	context.screenSize = mp_renderer->getWindowSize();
 	// The camera's position is the inverse view's translation (the camera getter isn't const)
-	const glm::vec3 cameraPos = glm::vec3(glm::inverse(camera.getView())[3]);
-
-	constexpr int kSegments = 48;
+	context.cameraPos = glm::vec3(glm::inverse(camera.getView())[3]);
 
 	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
 	{
-		const Craig::Components::SphereCollider* pCollider = pGameObject->getComponent<Craig::Components::SphereCollider>();
-		if (pCollider == nullptr || !pCollider->isOutlineVisible())
+		for (const Craig::Components::Collider* pCollider : pGameObject->getComponents<Craig::Components::Collider>())
 		{
-			continue;
-		}
-
-		const ImU32 colour = pCollider == mp_selectedSphereCollider ? IM_COL32(255, 200, 0, 255) : IM_COL32(0, 255, 0, 255);
-		const glm::vec3 centre = pCollider->getWorldCentre();
-		const float radius = pCollider->getWorldRadius();
-
-		// Circle around circleCentre in the plane of u and v, u/v's lengths are the radius
-		auto drawCircle = [&](const glm::vec3& circleCentre, const glm::vec3& u, const glm::vec3& v)
-		{
-			glm::vec4 previous = viewProj * glm::vec4(circleCentre + u, 1.0f);
-			for (int i = 1; i <= kSegments; i++)
+			if (!pCollider->isOutlineVisible())
 			{
-				const float angle = glm::two_pi<float>() * static_cast<float>(i) / kSegments;
-				const glm::vec4 current = viewProj * glm::vec4(circleCentre + u * glm::cos(angle) + v * glm::sin(angle), 1.0f);
-				drawClippedLine(pDrawList, previous, current, screenSize, colour);
-				previous = current;
+				continue;
 			}
-		};
 
-		// a circle around each world axis, that's the shape physics actually uses
-		for (int axis = 0; axis < 3; axis++)
-		{
-			// the two axes the circle lies in
-			glm::vec3 u(0.0f), v(0.0f);
-			u[(axis + 1) % 3] = radius;
-			v[(axis + 2) % 3] = radius;
-			drawCircle(centre, u, v);
+			context.colour = pCollider == mp_selectedCollider ? IM_COL32(255, 200, 0, 255) : IM_COL32(0, 255, 0, 255);
+			pCollider->drawOutline(context);
 		}
-
-		// the axis circles squash into ellipses from most angles, so draw the sphere's actual edge too
-		// With perspective that edge isn't a great circle, it's a smaller one pulled towards the camera
-		// (where the lines from the camera just touch the sphere). Nothing to draw if the camera's inside it.
-		const glm::vec3 toCamera = cameraPos - centre;
-		const float distance = glm::length(toCamera);
-		if (distance > radius)
-		{
-			const glm::vec3 n = toCamera / distance;
-			const glm::vec3 edgeCentre = centre + n * (radius * radius / distance);
-			const float edgeRadius = radius * glm::sqrt(1.0f - (radius * radius) / (distance * distance));
-
-			// Any two directions at right angles to n, the reference just can't be parallel to it
-			const glm::vec3 reference = glm::abs(n.y) < 0.99f ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
-			const glm::vec3 u = glm::normalize(glm::cross(n, reference));
-			const glm::vec3 v = glm::cross(n, u);
-			drawCircle(edgeCentre, u * edgeRadius, v * edgeRadius);
-		}
-	}
-}
-
-void Craig::ImguiEditor::updateImGuizmoCapsuleCollider()
-{
-	// same as the others, looked up fresh every frame so it can't dangle
-	mp_selectedCapsuleCollider = nullptr;
-	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
-	{
-		Craig::Components::CapsuleCollider* pCollider = pGameObject->getComponent<Craig::Components::CapsuleCollider>();
-		if (pCollider != nullptr && pCollider->getSelected())
-		{
-			mp_selectedCapsuleCollider = pCollider;
-			break;
-		}
-	}
-
-	// Only one gizmo at a time, a selected box/sphere collider already has it
-	if (mp_selectedCapsuleCollider == nullptr || mp_selectedBoxCollider != nullptr || mp_selectedSphereCollider != nullptr)
-	{
-		return;
-	}
-
-	mp_selectedGameObject = nullptr;
-
-	if (ImGui::IsKeyPressed(ImGuiKey_T))
-	{
-		m_CurrentOperation = ImGuizmo::TRANSLATE;
-	}
-	if (ImGui::IsKeyPressed(ImGuiKey_R))
-	{
-		m_CurrentOperation = ImGuizmo::ROTATE;
-	}
-	if (ImGui::IsKeyPressed(ImGuiKey_E))
-	{
-		m_CurrentOperation = ImGuizmo::SCALE;
-	}
-
-	ImGuizmo::SetOrthographic(false);
-	const glm::vec2 screenSize = mp_renderer->getWindowSize();
-	ImGuizmo::SetRect(0, 0, screenSize.x, screenSize.y);
-
-	// Built in world space. Y is scaled to the full half length (cylinder + cap) so it's never 0,
-	// X/Z are the radius
-	Craig::GameObject* pOwner = mp_selectedCapsuleCollider->getOwner();
-	const float worldRadius = mp_selectedCapsuleCollider->getWorldRadius();
-	const float worldHalfHeight = mp_selectedCapsuleCollider->getWorldHalfHeight();
-	const float worldHalfLength = worldHalfHeight + worldRadius;
-	glm::mat4 transform = glm::translate(glm::mat4(1.0f), mp_selectedCapsuleCollider->getWorldCentre())
-		* glm::mat4_cast(mp_selectedCapsuleCollider->getWorldRotation())
-		* glm::scale(glm::mat4(1.0f), glm::vec3(worldRadius, worldHalfLength, worldRadius));
-
-	const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
-	const glm::mat4 proj = glm::perspective(
-		glm::radians(camera.m_fov), camera.m_aspect, camera.m_nearPlane, camera.m_farPlane);
-	const glm::mat4 view = camera.getView();
-
-	ImGuizmo::Manipulate(
-		glm::value_ptr(view),
-		glm::value_ptr(proj),
-		m_CurrentOperation,
-		ImGuizmo::MODE::LOCAL,
-		glm::value_ptr(transform)
-	);
-
-	if (!ImGuizmo::IsUsing())
-	{
-		return;
-	}
-
-	const glm::vec3 scale = {
-		glm::length(glm::vec3(transform[0])),
-		glm::length(glm::vec3(transform[1])),
-		glm::length(glm::vec3(transform[2]))
-	};
-
-	switch (m_CurrentOperation)
-	{
-	case ImGuizmo::OPERATION::TRANSLATE:
-	{
-		// World -> the owner's space, which is what the collider's position is in
-		const glm::vec3 worldCentre = glm::vec3(transform[3]);
-		mp_selectedCapsuleCollider->setPosition(glm::vec3(glm::inverse(pOwner->calculateModelMatrix()) * glm::vec4(worldCentre, 1.0f)));
-		break;
-	}
-	case ImGuizmo::OPERATION::ROTATE:
-	{
-		// Take the scale back out to get the world rotation, then the owner's rotation to get it relative to the object
-		const glm::mat3 rotMat(
-			glm::vec3(transform[0]) / (scale.x != 0.0f ? scale.x : 1.0f),
-			glm::vec3(transform[1]) / (scale.y != 0.0f ? scale.y : 1.0f),
-			glm::vec3(transform[2]) / (scale.z != 0.0f ? scale.z : 1.0f)
-		);
-		mp_selectedCapsuleCollider->setRotationQuat(glm::inverse(pOwner->getRotationQuat()) * glm::quat_cast(rotMat));
-		break;
-	}
-	case ImGuizmo::OPERATION::SCALE:
-	{
-		// X/Z both change the radius, go with whichever one changed the most
-		const float ratioX = scale.x / worldRadius;
-		const float ratioZ = scale.z / worldRadius;
-		const float radiusRatio = glm::abs(ratioX - 1.0f) > glm::abs(ratioZ - 1.0f) ? ratioX : ratioZ;
-		if (radiusRatio != 1.0f)
-		{
-			mp_selectedCapsuleCollider->setRadius(mp_selectedCapsuleCollider->getRadius() * radiusRatio);
-		}
-
-		// Y stretches the whole half length, the caps stay the same so only the cylinder bit changes
-		const float lengthRatio = scale.y / worldHalfLength;
-		if (lengthRatio != 1.0f)
-		{
-			const float newWorldHalfHeight = worldHalfLength * lengthRatio - worldRadius;
-			mp_selectedCapsuleCollider->setHalfHeight(mp_selectedCapsuleCollider->getHalfHeight() * newWorldHalfHeight / worldHalfHeight);
-		}
-		break;
-	}
-	default:
-		break;
-	}
-}
-
-void Craig::ImguiEditor::drawCapsuleColliderOutlines()
-{
-	const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
-	const glm::mat4 proj = glm::perspective(
-		glm::radians(camera.m_fov), camera.m_aspect, camera.m_nearPlane, camera.m_farPlane);
-	const glm::mat4 viewProj = proj * camera.getView();
-	const glm::vec2 screenSize = mp_renderer->getWindowSize();
-
-	ImDrawList* pDrawList = ImGui::GetBackgroundDrawList();
-
-	constexpr int kSegments = 48; // For a full circle, half circles get half
-
-	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
-	{
-		const Craig::Components::CapsuleCollider* pCollider = pGameObject->getComponent<Craig::Components::CapsuleCollider>();
-		if (pCollider == nullptr || !pCollider->isOutlineVisible())
-		{
-			continue;
-		}
-
-		const ImU32 colour = pCollider == mp_selectedCapsuleCollider ? IM_COL32(255, 200, 0, 255) : IM_COL32(0, 255, 0, 255);
-		const glm::vec3 centre = pCollider->getWorldCentre();
-		const glm::quat rot = pCollider->getWorldRotation();
-		const float radius = pCollider->getWorldRadius();
-		const float halfHeight = pCollider->getWorldHalfHeight();
-
-		// The capsule's own axes, it stands along up
-		const glm::vec3 up = rot * glm::vec3(0.0f, halfHeight, 0.0f);
-		const glm::vec3 u = rot * glm::vec3(radius, 0.0f, 0.0f);
-		const glm::vec3 v = rot * glm::vec3(0.0f, 0.0f, radius);
-		const glm::vec3 top = centre + up;
-		const glm::vec3 bottom = centre - up;
-		const glm::vec3 capDir = rot * glm::vec3(0.0f, radius, 0.0f);
-
-		// Draws the arc a * cos(t) + b * sin(t) around arcCentre, from angle start to end
-		auto drawArc = [&](const glm::vec3& arcCentre, const glm::vec3& a, const glm::vec3& b, float start, float end)
-		{
-			const int segments = glm::max(1, static_cast<int>(kSegments * (end - start) / glm::two_pi<float>()));
-			glm::vec4 previous = viewProj * glm::vec4(arcCentre + a * glm::cos(start) + b * glm::sin(start), 1.0f);
-			for (int i = 1; i <= segments; i++)
-			{
-				const float angle = start + (end - start) * static_cast<float>(i) / segments;
-				const glm::vec4 current = viewProj * glm::vec4(arcCentre + a * glm::cos(angle) + b * glm::sin(angle), 1.0f);
-				drawClippedLine(pDrawList, previous, current, screenSize, colour);
-				previous = current;
-			}
-		};
-
-		// Rings where the cylinder meets the caps
-		drawArc(top, u, v, 0.0f, glm::two_pi<float>());
-		drawArc(bottom, u, v, 0.0f, glm::two_pi<float>());
-
-		// Straight sides
-		for (const glm::vec3& side : { u, -u, v, -v })
-		{
-			drawClippedLine(pDrawList, viewProj * glm::vec4(top + side, 1.0f), viewProj * glm::vec4(bottom + side, 1.0f), screenSize, colour);
-		}
-
-		// half circles over each cap, one each way
-		drawArc(top, u, capDir, 0.0f, glm::pi<float>());
-		drawArc(top, v, capDir, 0.0f, glm::pi<float>());
-		drawArc(bottom, u, -capDir, 0.0f, glm::pi<float>());
-		drawArc(bottom, v, -capDir, 0.0f, glm::pi<float>());
 	}
 }

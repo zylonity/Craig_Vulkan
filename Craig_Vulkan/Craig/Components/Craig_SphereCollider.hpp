@@ -1,54 +1,43 @@
 #pragma once
-#include "Craig/Craig_Constants.hpp"
-#include "Craig_Component.hpp"
-
-#include <glm/glm.hpp>
+#include "Craig_Collider.hpp"
 
 namespace Craig {
 
 	namespace Components
 	{
-		class SphereCollider : public Component {
+		class SphereCollider : public Collider {
 
 		public:
 
-			CraigError init() override;
-			CraigError update() override;
-			CraigError terminate() override;
-
 			CraigError loadFromJson(const nlohmann::json& json) override;
 			void saveToJson(nlohmann::json& json) const override;
-			void displayImGuiAttributes() override;
 
 			const char* getTypeName() const override { return "SphereCollider"; }
 			const char* getJsonKey() const override { return "sphereCollider"; }
 
-			const glm::vec3& getPosition() const { return mv3_spherePos; }
 			float getRadius() const { return m_radius; }
-
-			void setPosition(glm::vec3 position) { mv3_spherePos = position; };
 			void setRadius(float radius);
 
 			// spheres can't be squashed, so it uses the owner's biggest scale axis (same as physics)
 			glm::vec3 getWorldCentre() const;
 			float getWorldRadius() const;
 
-			const bool& getSelected() const { return m_itemSelected; }
-			void setSelected(bool selected) { m_itemSelected = selected; }
+			JPH::Ref<JPH::ShapeSettings> createShapeSettings(const glm::vec3& ownerScale) const override;
 
-			// Editor only, the outline's always drawn while it's selected
-			bool isOutlineVisible() const { return m_showOutline || m_itemSelected; }
+			void drawOutline(const ColliderOutlineContext& context) const override;
+			glm::mat4 getGizmoMatrix() const override;
+			void applyGizmoMatrix(const glm::mat4& worldMatrix, ImGuizmo::OPERATION operation) override;
+			// A sphere looks the same any way round, so no rotation
+			bool canRotate() const override { return false; }
 
-			// wraps the sphere around the owner's model, false if there's no model
-			bool fitToModel();
+		protected:
+			bool displayShapeAttributes() override;
+			void fitToBounds(const glm::vec3& min, const glm::vec3& max) override;
 
 		private:
-			// Both relative to the owning game object, no rotation since a sphere looks the same any way round
-			glm::vec3 mv3_spherePos = { 0.0f, 0.0f, 0.0f };
-			float m_radius = 0.5f;
+			static float biggestScale(const glm::vec3& scale);
 
-			bool m_itemSelected = false;
-			bool m_showOutline = false; // not saved, it's just a view setting
+			float m_radius = 0.5f;
 		};
 	}
 

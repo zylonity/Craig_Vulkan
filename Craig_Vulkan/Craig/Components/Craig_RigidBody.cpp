@@ -1,13 +1,11 @@
 #include "Craig_RigidBody.hpp"
 #include "Craig/Craig_Utilities.hpp"
-#include "Craig_BoxCollider.hpp"
-#include "Craig_SphereCollider.hpp"
-#include "Craig_CapsuleCollider.hpp"
+#include "Craig_Collider.hpp"
 #include "imgui.h"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
-#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 
 #include "Craig_GameObject.hpp"
 #include "Craig_Scene.hpp"
@@ -39,13 +37,16 @@ CraigError Craig::Components::RigidBody::init() {
 	return ret;
 }
 
+// glm::quat is (w, x, y, z) but JPH::Quat is (x, y, z, w), so go by name
+static JPH::Quat toJolt(const glm::quat& q) { return JPH::Quat(q.x, q.y, q.z, q.w); }
+static JPH::Vec3 toJolt(const glm::vec3& v) { return JPH::Vec3(v.x, v.y, v.z); }
+
 void Craig::Components::RigidBody::createPhysicsBody()
 {
-	// if the object has more than one collider, box wins, then sphere, then capsule
-	const Craig::Components::BoxCollider* boxCo = mp_owner->getComponent<BoxCollider>();
-	const Craig::Components::SphereCollider* sphereCo = boxCo == nullptr ? mp_owner->getComponent<SphereCollider>() : nullptr;
-	const Craig::Components::CapsuleCollider* capsuleCo = boxCo == nullptr && sphereCo == nullptr ? mp_owner->getComponent<CapsuleCollider>() : nullptr;
-	if (boxCo == nullptr && sphereCo == nullptr && capsuleCo == nullptr)
+	m_shapeDirty = false;
+
+	const std::vector<Collider*> colliders = mp_owner->getComponents<Collider>();
+	if (colliders.empty())
 	{
 		return; // nothing to collide with yet, try again next update
 	}
@@ -53,51 +54,34 @@ void Craig::Components::RigidBody::createPhysicsBody()
 	// collider values are in the object's space so its scale has to be baked in
 	// Jolt can't scale a body, only a shape
 	const glm::vec3& ownerScale = mp_owner->getScale();
+	mv3_builtScale = ownerScale;
 
-	glm::vec3 colliderPos;
-	// spheres look the same any way round so they don't have a rotation
-	glm::quat colliderRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-
-	// On the heap (ref counted) so it outlives this if/else, the RotatedTranslatedShapeSettings keeps a ref to it
-	JPH::Ref<JPH::ShapeSettings> innerSettings;
-	if (boxCo != nullptr)
+	// Shapes are always centred on the body, so each one gets wrapped with its collider's offset/rotation.
+	// One collider only needs a RotatedTranslatedShape, more than one get put together in a compound shape
+	// (which also works out the combined centre of mass). Both keep a ref to the shapes they're given.
+	JPH::Ref<JPH::ShapeSettings> shapeSettings;
+	if (colliders.size() == 1)
 	{
-		colliderPos = boxCo->getPosition();
-		colliderRot = boxCo->getRotationQuat();
-
-		const glm::vec3 halfExtents = glm::abs(ownerScale * boxCo->getScale()) * 0.5f;
-
-		// Jolt asserts if half extents are smaller than the convex radius, so shrink it for thin boxes
-		const float convexRadius = glm::min(JPH::cDefaultConvexRadius, glm::min(halfExtents.x, glm::min(halfExtents.y, halfExtents.z)));
-		innerSettings = new JPH::BoxShapeSettings(JPH::Vec3(halfExtents.x, halfExtents.y, halfExtents.z), convexRadius);
-	}
-	else if (sphereCo != nullptr)
-	{
-		colliderPos = sphereCo->getPosition();
-
-		// Already has the owner's scale in it (biggest axis, since spheres can't be squashed)
-		innerSettings = new JPH::SphereShapeSettings(sphereCo->getWorldRadius());
+		const Collider* pCollider = colliders[0];
+		shapeSettings = new JPH::RotatedTranslatedShapeSettings(
+			toJolt(ownerScale * pCollider->getPosition()),
+			toJolt(pCollider->getLocalRotation()),
+			pCollider->createShapeSettings(ownerScale));
 	}
 	else
 	{
-		colliderPos = capsuleCo->getPosition();
-		colliderRot = capsuleCo->getRotationQuat();
-
-		// Both already have the owner's scale in them. Jolt's capsule stands along Y too, so the rotation carries straight over
-		innerSettings = new JPH::CapsuleShapeSettings(capsuleCo->getWorldHalfHeight(), capsuleCo->getWorldRadius());
+		JPH::StaticCompoundShapeSettings* pCompound = new JPH::StaticCompoundShapeSettings;
+		for (const Collider* pCollider : colliders)
+		{
+			pCompound->AddShape(
+				toJolt(ownerScale * pCollider->getPosition()),
+				toJolt(pCollider->getLocalRotation()),
+				pCollider->createShapeSettings(ownerScale));
+		}
+		shapeSettings = pCompound;
 	}
 
-	const glm::vec3 offset = ownerScale * colliderPos;
-
-	// shapes are always centred on the body, this wraps it so the collider's offset/rotation still work
-	// glm::quat is (w, x, y, z) but JPH::Quat is (x, y, z, w), so go by name
-	JPH::RotatedTranslatedShapeSettings shapeSettings(
-		JPH::Vec3(offset.x, offset.y, offset.z),
-		JPH::Quat(colliderRot.x, colliderRot.y, colliderRot.z, colliderRot.w),
-		innerSettings);
-	shapeSettings.SetEmbedded();
-
-	JPH::ShapeSettings::ShapeResult shapeResult = shapeSettings.Create();
+	JPH::ShapeSettings::ShapeResult shapeResult = shapeSettings->Create();
 	if (shapeResult.HasError())
 	{
 		std::cerr << "RigidBody shape creation failed: " << shapeResult.GetError() << std::endl;
@@ -114,7 +98,7 @@ void Craig::Components::RigidBody::createPhysicsBody()
 	JPH::BodyCreationSettings bodySettings(
 		shapeResult.Get(),
 		JPH::RVec3(pos.x, pos.y, pos.z),
-		JPH::Quat(rot.x, rot.y, rot.z, rot.w),
+		toJolt(rot),
 		isStatic ? JPH::EMotionType::Static : JPH::EMotionType::Dynamic,
 		m_layer);
 
@@ -139,6 +123,24 @@ CraigError Craig::Components::RigidBody::update() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+	JPH::BodyInterface* bodyInterface = mp_owner->getScene()->getPhysicsEngine()->getBodyInterface();
+
+	// Colliders changed or the object got rescaled, rebuild it but keep it moving how it was
+	if (!rb_id.IsInvalid() && (m_shapeDirty || mp_owner->getScale() != mv3_builtScale))
+	{
+		const JPH::Vec3 linearVelocity = bodyInterface->GetLinearVelocity(rb_id);
+		const JPH::Vec3 angularVelocity = bodyInterface->GetAngularVelocity(rb_id);
+
+		destroyPhysicsBody();
+		createPhysicsBody();
+
+		if (!rb_id.IsInvalid() && m_layer != Physics::Layers::NON_MOVING)
+		{
+			bodyInterface->SetLinearAndAngularVelocity(rb_id, linearVelocity, angularVelocity);
+		}
+		return ret; // just made it from the object's transform, nothing to copy back yet
+	}
+
 	if (rb_id.IsInvalid())
 	{
 		createPhysicsBody();
@@ -154,7 +156,7 @@ CraigError Craig::Components::RigidBody::update() {
 	// The body's position is the object's origin, not the centre of mass, since the collider offset lives in the shape
 	JPH::RVec3 pos;
 	JPH::Quat rot;
-	mp_owner->getScene()->getPhysicsEngine()->getBodyInterface()->GetPositionAndRotation(rb_id, pos, rot);
+	bodyInterface->GetPositionAndRotation(rb_id, pos, rot);
 
 	mp_owner->setPosition(glm::vec3(pos.GetX(), pos.GetY(), pos.GetZ()));
 	// glm::quat takes (w, x, y, z)
@@ -200,7 +202,8 @@ void Craig::Components::RigidBody::displayImGuiAttributes()
 		destroyPhysicsBody(); // update() makes the new one
 	}
 
-	// picks up collider/transform changes, and puts the body back where the object is
+	// Collider and scale changes get picked up on their own, this is for putting the body back
+	// where the object is and stopping it
 	if (ImGui::Button("Recreate Body"))
 	{
 		destroyPhysicsBody();

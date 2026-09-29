@@ -99,7 +99,16 @@ CraigError Craig::Scene::save() {
 		{
 			nlohmann::json componentJson = nlohmann::json::object();
 			pComponent->saveToJson(componentJson);
-			objectJson["components"][pComponent->getJsonKey()] = componentJson;
+
+			// types that can have more then one (colliders) get an array under their key
+			if (pComponent->allowMultiple())
+			{
+				objectJson["components"][pComponent->getJsonKey()].push_back(componentJson);
+			}
+			else
+			{
+				objectJson["components"][pComponent->getJsonKey()] = componentJson;
+			}
 		}
 
 		sceneJson["gameObjects"].push_back(objectJson);
@@ -135,7 +144,31 @@ CraigError Craig::Scene::save() {
 	return ret;
 }
 
-// Components are keyed by type, e.g. "components": { "model": { "path": "..." }, "sun": { ... } }
+// types that can have more than one get saved as an array under their key
+// a single object still loads too, older scenes were saved like that
+template<typename T>
+static void loadMultipleComponentsFromJson(Craig::GameObject* pObject, const nlohmann::json& componentsJson, const char* key)
+{
+	if (!componentsJson.contains(key))
+	{
+		return;
+	}
+
+	const nlohmann::json& json = componentsJson[key];
+	if (json.is_array())
+	{
+		for (const nlohmann::json& componentJson : json)
+		{
+			pObject->addComponent<T>()->loadFromJson(componentJson);
+		}
+	}
+	else
+	{
+		pObject->addComponent<T>()->loadFromJson(json);
+	}
+}
+
+// Components are keyed by type, e.g. "components": { "model": { "path": "..." }, "sun": { ... }, "boxCollider": [ { ... }, { ... } ] }
 void Craig::Scene::loadComponentsFromJson(Craig::GameObject* pObject, const nlohmann::json& componentsJson)
 {
 	if (componentsJson.contains("model"))
@@ -161,20 +194,9 @@ void Craig::Scene::loadComponentsFromJson(Craig::GameObject* pObject, const nloh
 		}
 	}
 
-	if (componentsJson.contains("boxCollider"))
-	{
-		pObject->addComponent<Components::BoxCollider>()->loadFromJson(componentsJson["boxCollider"]);
-	}
-
-	if (componentsJson.contains("sphereCollider"))
-	{
-		pObject->addComponent<Components::SphereCollider>()->loadFromJson(componentsJson["sphereCollider"]);
-	}
-
-	if (componentsJson.contains("capsuleCollider"))
-	{
-		pObject->addComponent<Components::CapsuleCollider>()->loadFromJson(componentsJson["capsuleCollider"]);
-	}
+	loadMultipleComponentsFromJson<Components::BoxCollider>(pObject, componentsJson, "boxCollider");
+	loadMultipleComponentsFromJson<Components::SphereCollider>(pObject, componentsJson, "sphereCollider");
+	loadMultipleComponentsFromJson<Components::CapsuleCollider>(pObject, componentsJson, "capsuleCollider");
 
 	if (componentsJson.contains("rigidBody"))
 	{

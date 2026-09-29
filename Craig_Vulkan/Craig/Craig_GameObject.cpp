@@ -173,7 +173,7 @@ void Craig::GameObject::displayComponents()
 
 	if (ImGui::BeginPopup("AddComponentPopup"))
 	{
-		// items are greyed out if this object already has one
+		// greyed out if the object already has one, colliders can go on as many times as you want
 		if (ImGui::MenuItem("Model", nullptr, false, getComponent<Components::Model>() == nullptr))
 		{
 			addComponent<Components::Model>();

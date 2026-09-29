@@ -57,15 +57,31 @@ namespace Craig {
 		}
 
 		// Only one of each component type per object, returns nullptr if it already has one
+		// Every component of that type (or derived from it, e.g. getComponents<Collider>() gets all the collider shapes)
+		template<typename T>
+		std::vector<T*> getComponents() const
+		{
+			std::vector<T*> found;
+			for (const std::unique_ptr<Components::Component>& pComponent : mv_components)
+			{
+				if (T* pFound = dynamic_cast<T*>(pComponent.get()))
+				{
+					found.push_back(pFound);
+				}
+			}
+			return found;
+		}
+
+		// returns nullptr if the object already has one and the type only allows one
 		template<typename T>
 		T* addComponent()
 		{
-			if (getComponent<T>() != nullptr)
+			std::unique_ptr<T> pComponent = std::make_unique<T>();
+			if (!pComponent->allowMultiple() && getComponent<T>() != nullptr)
 			{
 				return nullptr;
 			}
 
-			std::unique_ptr<T> pComponent = std::make_unique<T>();
 			T* pRaw = pComponent.get();
 			pRaw->setOwner(this);
 			pRaw->init();
