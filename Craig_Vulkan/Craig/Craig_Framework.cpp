@@ -9,6 +9,7 @@
 #include "Craig_ResourceManager.hpp"
 #include "Craig_Editor.hpp"
 #include "Craig_SceneManager.hpp"
+#include "Craig_PhysicsEngine.hpp"
 
 #include <chrono>
 
@@ -20,11 +21,13 @@ CraigError Craig::Framework::init() {
 	mp_Window = new Craig::Window;
 	mp_SceneManager = new Craig::SceneManager;
 	mp_Renderer = new Craig::Renderer;
+	mp_PhysicsEngine = new Craig::PhysicsEngine;
 
 	//Check they were succesfully allocated just in case
 	assert(mp_Window != nullptr && "mp_Window failed to allocate memory");
 	assert(mp_SceneManager != nullptr && "mp_SceneManager failed to allocate memory");
 	assert(mp_Renderer != nullptr && "mp_Renderer failed to allocate memory");
+	assert(mp_PhysicsEngine != nullptr && "mp_PhysicsEngine failed to allocate memory");
 
 	//Initialise the objects
 	ret = mp_Window->init();
@@ -37,8 +40,8 @@ CraigError Craig::Framework::init() {
 	ret = mp_Renderer->init(mp_Window, mp_SceneManager);
 	assert(ret == CRAIG_SUCCESS);
 									
-
-	
+	ret = mp_PhysicsEngine->init();
+	assert(ret == CRAIG_SUCCESS);
 
 
 	m_LastFrameTime = std::chrono::steady_clock::now();
@@ -65,6 +68,8 @@ CraigError Craig::Framework::update() {
 	ret = mp_Renderer->update(elapsed);
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer failed to update");
 
+	ret = mp_PhysicsEngine->update(elapsed);
+	assert(ret == CRAIG_SUCCESS && "mp_PhysicsEngine failed to update");
 
 	return ret;
 }
@@ -77,6 +82,11 @@ CraigError Craig::Framework::terminate() {
 	assert(ret == CRAIG_SUCCESS && "mp_SceneManager didn't terminate properly");
 	delete mp_SceneManager;
 	mp_SceneManager = nullptr;
+
+	ret = mp_PhysicsEngine->terminate();
+	assert(ret == CRAIG_SUCCESS && "mp_PhysicsEngine failed to terminate");
+	delete mp_PhysicsEngine;
+	mp_PhysicsEngine = nullptr;
 
 	ret = mp_Renderer->terminate(); //Delete left over items in memory
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer didn't terminate properly"); //Check it closed properly

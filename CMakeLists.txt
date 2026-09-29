@@ -10,6 +10,32 @@ find_package(glm REQUIRED)
 
 set(CMAKE_CXX_STANDARD 20)
 
+#jolt physics, pulled from github and built with the project
+#its CMakeLists lives in Build/ instead of the repo root, hence SOURCE_SUBDIR
+include(FetchContent)
+
+#turn off the bits of jolt i'm not using
+set(JPH_USE_VK OFF)                          #gpu compute backends, need dxc to build and i don't need them
+set(JPH_USE_DX12 OFF)
+set(JPH_USE_MTL OFF)
+set(JPH_USE_CPU_COMPUTE OFF)
+set(ENABLE_OBJECT_STREAM OFF)                #jolt's own serialization, scenes are json already
+set(ENABLE_INSTALL OFF)
+set(ENABLE_ALL_WARNINGS OFF)                 #otherwise it builds with warnings as errors
+set(USE_STATIC_MSVC_RUNTIME_LIBRARY OFF)     #windows: match the runtime the main exe uses
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(USE_ASSERTS ON)
+endif()
+
+FetchContent_Declare(
+        JoltPhysics
+        GIT_REPOSITORY https://github.com/jrouwe/JoltPhysics.git
+        GIT_TAG v5.6.0
+        GIT_SHALLOW TRUE
+        SOURCE_SUBDIR Build
+)
+FetchContent_MakeAvailable(JoltPhysics)
+
 #get all my files to build
 file(GLOB_RECURSE CRAIG_SOURCES
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/Craig/*.cpp
@@ -52,6 +78,7 @@ target_link_libraries(Craig_Vulkan PUBLIC
         Vulkan::Vulkan
         SDL3::SDL3
         glm::glm
+        Jolt
 )
 
 

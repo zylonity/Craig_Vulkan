@@ -12,6 +12,7 @@ namespace Craig {
 	class Renderer;
 	class ImguiEditor;
 	class SceneManager;
+	class PhysicsEngine;
 
 
 	class Framework {
@@ -25,6 +26,7 @@ namespace Craig {
 		Craig::Window* mp_Window			 = nullptr;
 		Craig::Renderer* mp_Renderer		 = nullptr;
 		Craig::SceneManager* mp_SceneManager = nullptr;
+		Craig::PhysicsEngine* mp_PhysicsEngine = nullptr;
 
 #if defined(IMGUI_ENABLED)
 		Craig::ImguiEditor* mp_ImguiEditor = nullptr;
