@@ -24,6 +24,8 @@
 #include <filesystem>
 #include <fstream>
 
+#include "Components/Craig_BoxCollider.hpp"
+
 CraigError Craig::ImguiEditor::editorInit() {
 
 	CraigError ret = CRAIG_SUCCESS;
@@ -74,6 +76,8 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 	showRenderProperties(deltaTime);
 	showSceneDetails(deltaTime);
 	updateImGuizmo();
+	updateImGuizmoBoxCollider();
+	drawBoxColliderOutlines();
 
 	renderNewGameObjectWindow();
 	renderNewSceneWindow();
@@ -610,5 +614,182 @@ void Craig::ImguiEditor::updateImGuizmo()
 	}
 }
 
+void Craig::ImguiEditor::updateImGuizmoBoxCollider()
+{
+	// Looked up fresh every frame instead of keeping the pointer around, so it can't dangle when the
+	// collider/object gets removed or the scene changes. If more than one is selected the first one wins.
+	mp_selectedBoxCollider = nullptr;
+	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
+	{
+		Craig::Components::BoxCollider* pCollider = pGameObject->getComponent<Craig::Components::BoxCollider>();
+		if (pCollider != nullptr && pCollider->getSelected())
+		{
+			mp_selectedBoxCollider = pCollider;
+			break;
+		}
+	}
 
+	if (mp_selectedBoxCollider != nullptr)
+	{
+		// only one gizmo at a time, otherwise the object's and the collider's fight over the mouse
+		mp_selectedGameObject = nullptr;
+
+		// Use hotkeys to update the current transformation.
+		if (ImGui::IsKeyPressed(ImGuiKey_T))
+		{
+			m_CurrentOperation = ImGuizmo::TRANSLATE;
+		}
+		if (ImGui::IsKeyPressed(ImGuiKey_R))
+		{
+			m_CurrentOperation = ImGuizmo::ROTATE;
+		}
+		if (ImGui::IsKeyPressed(ImGuiKey_E))
+		{
+			m_CurrentOperation = ImGuizmo::SCALE;
+		}
+
+		// Set the screen rect and tell ImGuizmo how to project.
+		ImGuizmo::SetOrthographic(false);
+		const glm::vec2 screenSize = mp_renderer->getWindowSize();
+		ImGuizmo::SetRect(0, 0, screenSize.x, screenSize.y);
+
+		// The collider's values are relative to its game object, but the gizmo works in world space.
+		// So give it owner * local, then take the owner back out afterwards to get local again.
+		const glm::mat4 ownerMatrix = mp_selectedBoxCollider->getOwner()->calculateModelMatrix();
+		glm::mat4 transform = ownerMatrix * mp_selectedBoxCollider->getLocalMatrix();
+
+		// ImGuizmo handles right-handed matrices now, so no LH hack needed
+		// Proj rebuilt without the Vulkan Y-flip, ImGuizmo wants Y up
+		const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
+		const glm::mat4 proj = glm::perspective(
+			glm::radians(camera.m_fov), camera.m_aspect, camera.m_nearPlane, camera.m_farPlane);
+		const glm::mat4 view = camera.getView();
+
+		ImGuizmo::Manipulate(
+			glm::value_ptr(view),
+			glm::value_ptr(proj),
+			m_CurrentOperation,
+			ImGuizmo::MODE::LOCAL,
+			glm::value_ptr(transform)
+		);
+
+		if (ImGuizmo::IsUsing())
+		{
+			// World -> local. If the owner has non-uniform scale and the collider is rotated this has shear in it,
+			// which can't be split back into pos/rot/scale, so it'll come out slightly wrong in that case.
+			const glm::mat4 local = glm::inverse(ownerMatrix) * transform;
+
+			// Decompose the matrix manually so rotation stays as a quaternion (no Euler jumps).
+			glm::vec3 pos = glm::vec3(local[3]);
+			glm::vec3 scale = {
+				glm::length(glm::vec3(local[0])),
+				glm::length(glm::vec3(local[1])),
+				glm::length(glm::vec3(local[2]))
+			};
+			glm::mat3 rotMat(
+				glm::vec3(local[0]) / (scale.x != 0.0f ? scale.x : 1.0f),
+				glm::vec3(local[1]) / (scale.y != 0.0f ? scale.y : 1.0f),
+				glm::vec3(local[2]) / (scale.z != 0.0f ? scale.z : 1.0f)
+			);
+			glm::quat rot = glm::quat_cast(rotMat);
+
+			switch (m_CurrentOperation)
+			{
+			case ImGuizmo::OPERATION::TRANSLATE:
+				mp_selectedBoxCollider->setPosition(pos);
+				break;
+			case ImGuizmo::OPERATION::ROTATE:
+				mp_selectedBoxCollider->setRotationQuat(rot);
+				break;
+			case ImGuizmo::OPERATION::SCALE:
+				mp_selectedBoxCollider->setScale(scale);
+				break;
+			default:
+				break;
+			}
+		}
+	}
+}
+
+// Projects a clip space point to window pixels. Uses the same un-flipped proj as ImGuizmo, so NDC Y points up
+// and has to be flipped since ImGui's screen Y goes down.
+static ImVec2 clipToScreen(const glm::vec4& clipPos, const glm::vec2& screenSize)
+{
+	const glm::vec2 ndc = glm::vec2(clipPos) / clipPos.w;
+	return ImVec2(
+		(ndc.x * 0.5f + 0.5f) * screenSize.x,
+		(1.0f - (ndc.y * 0.5f + 0.5f)) * screenSize.y
+	);
+}
+
+void Craig::ImguiEditor::drawBoxColliderOutlines()
+{
+	const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
+	const glm::mat4 proj = glm::perspective(
+		glm::radians(camera.m_fov), camera.m_aspect, camera.m_nearPlane, camera.m_farPlane);
+	const glm::mat4 viewProj = proj * camera.getView();
+	const glm::vec2 screenSize = mp_renderer->getWindowSize();
+
+	// background list draws over the scene but under the editor windows
+	ImDrawList* pDrawList = ImGui::GetBackgroundDrawList();
+
+	// Anything with w below this is (nearly) behind the camera, dividing by it would flip it across the screen
+	constexpr float kMinW = 0.0001f;
+
+	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
+	{
+		const Craig::Components::BoxCollider* pCollider = pGameObject->getComponent<Craig::Components::BoxCollider>();
+		if (pCollider == nullptr || !pCollider->isOutlineVisible())
+		{
+			continue;
+		}
+
+		const ImU32 colour = pCollider == mp_selectedBoxCollider ? IM_COL32(255, 200, 0, 255) : IM_COL32(0, 255, 0, 255);
+		const glm::mat4 mvp = viewProj * pCollider->getWorldMatrix();
+
+		// Corner i uses bit 0 for x, bit 1 for y, bit 2 for z (0 = -0.5, 1 = +0.5)
+		glm::vec4 corners[8];
+		for (int i = 0; i < 8; i++)
+		{
+			const glm::vec3 localCorner = {
+				(i & 1) ? 0.5f : -0.5f,
+				(i & 2) ? 0.5f : -0.5f,
+				(i & 4) ? 0.5f : -0.5f
+			};
+			corners[i] = mvp * glm::vec4(localCorner, 1.0f);
+		}
+
+		// Two corners share an edge if their indices only differ by one bit
+		for (int a = 0; a < 8; a++)
+		{
+			for (int bit = 1; bit < 8; bit <<= 1)
+			{
+				const int b = a | bit;
+				if (b == a)
+				{
+					continue; // Each edge once, from the corner with the bit unset
+				}
+
+				glm::vec4 start = corners[a];
+				glm::vec4 end = corners[b];
+
+				// Clip the edge against the plane just in front of the camera
+				if (start.w < kMinW && end.w < kMinW)
+				{
+					continue;
+				}
+				if (start.w < kMinW)
+				{
+					start = glm::mix(start, end, (kMinW - start.w) / (end.w - start.w));
+				}
+				else if (end.w < kMinW)
+				{
+					end = glm::mix(end, start, (kMinW - end.w) / (start.w - end.w));
+				}
+
+				pDrawList->AddLine(clipToScreen(start, screenSize), clipToScreen(end, screenSize), colour, 2.0f);
+			}
+		}
+	}
+}
 

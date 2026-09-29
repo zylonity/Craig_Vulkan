@@ -7,6 +7,7 @@
 #include "../External/Imgui/imgui.h"
 #include "../External/Imgui/imfilebrowser.h"
 #include "../External/Imgui/ImGuizmo/ImGuizmo.h"
+#include "Components/Craig_BoxCollider.hpp"
 
 namespace Craig {
 	class GameObject;
@@ -28,6 +29,8 @@ namespace Craig {
 		void setSceneManager(Craig::SceneManager* pSceneManager) { mp_sceneManager = pSceneManager; };
 		void setCamera(Craig::Camera* pCamera) { mp_camera = pCamera; };
 		void setPhysicsEngine(Craig::PhysicsEngine* pPhysicsEngine) { mp_physicsEngine = pPhysicsEngine; };
+		// So components can switch the gizmo between move/rotate/scale from their own UI
+		void setGizmoOperation(ImGuizmo::OPERATION operation) { m_CurrentOperation = operation; };
 
 		//===============================================================================
 		// Singleton Implementations
@@ -75,8 +78,11 @@ namespace Craig {
 		Craig::PhysicsEngine* mp_physicsEngine;
 
 		Craig::GameObject* mp_selectedGameObject = nullptr;
+		Craig::Components::BoxCollider* mp_selectedBoxCollider = nullptr;
 
 		void updateImGuizmo();
+		void updateImGuizmoBoxCollider();
+		void drawBoxColliderOutlines();
 		ImGuizmo::OPERATION m_CurrentOperation = ImGuizmo::OPERATION::TRANSLATE;
 
 		int m_currentMipLevel = 0;

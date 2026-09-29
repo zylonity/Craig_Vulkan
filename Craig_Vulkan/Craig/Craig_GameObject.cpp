@@ -11,6 +11,7 @@
 #include "Craig_Utilities.hpp"
 #include "imgui.h"
 #include "imgui_stdlib.h"
+#include "Components/Craig_BoxCollider.hpp"
 
 CraigError Craig::GameObject::init(std::string name, Craig::Scene* scenePtr) {
 
@@ -51,12 +52,16 @@ CraigError Craig::GameObject::update() {
 }
 
 
-void Craig::GameObject::updateModelMatrix()
+glm::mat4 Craig::GameObject::calculateModelMatrix() const
 {
-	m_modelMatrix = glm::translate(glm::mat4(1), mv3_position)
+	return glm::translate(glm::mat4(1), mv3_position)
 		* glm::mat4_cast(m_rotationQuat)
 		* glm::scale(glm::mat4(1), mv3_scale);
+}
 
+void Craig::GameObject::updateModelMatrix()
+{
+	m_modelMatrix = calculateModelMatrix();
 }
 
 
@@ -179,6 +184,11 @@ void Craig::GameObject::displayComponents()
 		if (sceneHasSun)
 		{
 			ImGui::SetItemTooltip("The scene already has a sun (%s)", mp_scene->getSun()->getOwner()->getName().c_str());
+		}
+
+		if (ImGui::MenuItem("Box Collider", nullptr, false))
+		{
+			addComponent<Components::BoxCollider>();
 		}
 
 		ImGui::EndPopup();

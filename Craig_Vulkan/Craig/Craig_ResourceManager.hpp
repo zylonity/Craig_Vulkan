@@ -105,6 +105,9 @@ namespace Craig {
 		const Craig::Material& getMaterial(int32_t materialIndex) const;
 		// Follows texture -> image, gives the white fallback if there isn't one
 		Craig::Texture& getMaterialImage(const Craig::Material& material);
+		// box around every vertex with the node transforms applied, in the model's own space
+		// false if there's no geometry
+		bool calculateBounds(glm::vec3& min, glm::vec3& max) const;
 	};
 
 	

@@ -84,3 +84,28 @@ void Craig::Utilities::writeJsonVec2(nlohmann::json& json, const char* key, cons
 void Craig::Utilities::writeJsonVec2(nlohmann::json& json, const char* key, const glm::ivec2& value) { writeJsonVec(json, key, value); }
 void Craig::Utilities::writeJsonVec3(nlohmann::json& json, const char* key, const glm::vec3& value) { writeJsonVec(json, key, value); }
 void Craig::Utilities::writeJsonVec3(nlohmann::json& json, const char* key, const glm::ivec3& value) { writeJsonVec(json, key, value); }
+
+//Quaternion
+// Components are read/written by name instead of index, glm's storage order changes with GLM_FORCE_QUAT_DATA_XYZW
+glm::quat Craig::Utilities::readJsonQuat(const nlohmann::json& json, const char* key, const glm::quat& fallback)
+{
+	const glm::vec4 xyzw = readJsonVec(json, key, glm::vec4(fallback.x, fallback.y, fallback.z, fallback.w));
+
+	// all zeros (or close) can't be normalised into a rotation
+	if (glm::dot(xyzw, xyzw) < 0.000001f)
+	{
+		return fallback;
+	}
+
+	glm::quat result;
+	result.x = xyzw.x;
+	result.y = xyzw.y;
+	result.z = xyzw.z;
+	result.w = xyzw.w;
+	return glm::normalize(result);
+}
+
+void Craig::Utilities::writeJsonQuat(nlohmann::json& json, const char* key, const glm::quat& value)
+{
+	writeJsonVec(json, key, glm::vec4(value.x, value.y, value.z, value.w));
+}

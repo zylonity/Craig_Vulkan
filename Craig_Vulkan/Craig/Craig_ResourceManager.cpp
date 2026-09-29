@@ -7,6 +7,7 @@
 #include "../External/tiny_gltf.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
+#include <limits>
 
 vk::VertexInputBindingDescription Craig::Vertex::getBindingDescription() {
     vk::VertexInputBindingDescription bindingDescription;
@@ -104,6 +105,31 @@ Craig::Texture& Craig::Model::getMaterialImage(const Craig::Material& material) 
         }
     }
     return images.back();
+}
+
+// Grows min/max by every vertex under this node, then does the same for its children
+static void expandBoundsByNode(const Craig::Node* node, glm::vec3& min, glm::vec3& max) {
+    const glm::mat4 nodeMatrix = node->getWorldMatrix();
+    for (const Craig::SubMesh* subMesh : node->subMeshes) {
+        for (const Craig::Vertex& vertex : subMesh->m_vertices) {
+            const glm::vec3 pos = glm::vec3(nodeMatrix * glm::vec4(vertex.m_pos, 1.0f));
+            min = glm::min(min, pos);
+            max = glm::max(max, pos);
+        }
+    }
+    for (const Craig::Node* child : node->children) {
+        expandBoundsByNode(child, min, max);
+    }
+}
+
+bool Craig::Model::calculateBounds(glm::vec3& min, glm::vec3& max) const {
+    // start inside out so the first vertex sets both
+    min = glm::vec3(std::numeric_limits<float>::max());
+    max = glm::vec3(std::numeric_limits<float>::lowest());
+    for (const Craig::Node* node : nodes) {
+        expandBoundsByNode(node, min, max);
+    }
+    return min.x <= max.x;
 }
 
 // images can be stored inside the glTF, so we grab them from tinygltf and upload them

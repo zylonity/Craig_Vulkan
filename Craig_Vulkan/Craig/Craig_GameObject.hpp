@@ -26,6 +26,8 @@ namespace Craig {
 		CraigError terminate();
 
 		glm::mat4 GetModelMatrix() { return m_modelMatrix; }
+		// Built from the current pos/rot/scale, GetModelMatrix() is only refreshed in update() so can be a frame behind
+		glm::mat4 calculateModelMatrix() const;
 
 		const glm::vec3& getPosition() const { return mv3_position; }
 		const glm::vec3& getRotation() const { return mv3_rotation; }

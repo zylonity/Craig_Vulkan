@@ -3,6 +3,7 @@
 #include <vector>
 #include <glm/vec2.hpp>
 #include <glm/vec3.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include "../External/json.hpp"
 
@@ -32,6 +33,10 @@ namespace Craig {
 		static void writeJsonVec2(nlohmann::json& json, const char* key, const glm::ivec2& value);
 		static void writeJsonVec3(nlohmann::json& json, const char* key, const glm::vec3& value);
 		static void writeJsonVec3(nlohmann::json& json, const char* key, const glm::ivec3& value);
+
+		// Stored as [x, y, z, w] (same order as glTF), read gives back a normalised quat
+		static glm::quat readJsonQuat(const nlohmann::json& json, const char* key, const glm::quat& fallback);
+		static void writeJsonQuat(nlohmann::json& json, const char* key, const glm::quat& value);
 
 	private:
 		static bool compareStringsCaseInsensitive(std::string str1, std::string str2);
