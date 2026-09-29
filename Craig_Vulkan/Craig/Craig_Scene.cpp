@@ -4,6 +4,7 @@
 #include "Components/Craig_Sun.hpp"
 #include "Components/Craig_BoxCollider.hpp"
 #include "Components/Craig_SphereCollider.hpp"
+#include "Components/Craig_CapsuleCollider.hpp"
 #include "Components/Craig_RigidBody.hpp"
 #include "../External/json.hpp"
 #include <filesystem>
@@ -168,6 +169,11 @@ void Craig::Scene::loadComponentsFromJson(Craig::GameObject* pObject, const nloh
 	if (componentsJson.contains("sphereCollider"))
 	{
 		pObject->addComponent<Components::SphereCollider>()->loadFromJson(componentsJson["sphereCollider"]);
+	}
+
+	if (componentsJson.contains("capsuleCollider"))
+	{
+		pObject->addComponent<Components::CapsuleCollider>()->loadFromJson(componentsJson["capsuleCollider"]);
 	}
 
 	if (componentsJson.contains("rigidBody"))

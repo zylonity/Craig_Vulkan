@@ -2,10 +2,12 @@
 #include "Craig/Craig_Utilities.hpp"
 #include "Craig_BoxCollider.hpp"
 #include "Craig_SphereCollider.hpp"
+#include "Craig_CapsuleCollider.hpp"
 #include "imgui.h"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
+#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 
 #include "Craig_GameObject.hpp"
 #include "Craig_Scene.hpp"
@@ -39,10 +41,11 @@ CraigError Craig::Components::RigidBody::init() {
 
 void Craig::Components::RigidBody::createPhysicsBody()
 {
-	// box wins if the object has both
+	// if the object has more than one collider, box wins, then sphere, then capsule
 	const Craig::Components::BoxCollider* boxCo = mp_owner->getComponent<BoxCollider>();
 	const Craig::Components::SphereCollider* sphereCo = boxCo == nullptr ? mp_owner->getComponent<SphereCollider>() : nullptr;
-	if (boxCo == nullptr && sphereCo == nullptr)
+	const Craig::Components::CapsuleCollider* capsuleCo = boxCo == nullptr && sphereCo == nullptr ? mp_owner->getComponent<CapsuleCollider>() : nullptr;
+	if (boxCo == nullptr && sphereCo == nullptr && capsuleCo == nullptr)
 	{
 		return; // nothing to collide with yet, try again next update
 	}
@@ -50,25 +53,41 @@ void Craig::Components::RigidBody::createPhysicsBody()
 	// collider values are in the object's space so its scale has to be baked in
 	// Jolt can't scale a body, only a shape
 	const glm::vec3& ownerScale = mp_owner->getScale();
-	const glm::vec3 offset = ownerScale * (boxCo != nullptr ? boxCo->getPosition() : sphereCo->getPosition());
+
+	glm::vec3 colliderPos;
 	// spheres look the same any way round so they don't have a rotation
-	const glm::quat colliderRot = boxCo != nullptr ? boxCo->getRotationQuat() : glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+	glm::quat colliderRot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 
 	// On the heap (ref counted) so it outlives this if/else, the RotatedTranslatedShapeSettings keeps a ref to it
 	JPH::Ref<JPH::ShapeSettings> innerSettings;
 	if (boxCo != nullptr)
 	{
+		colliderPos = boxCo->getPosition();
+		colliderRot = boxCo->getRotationQuat();
+
 		const glm::vec3 halfExtents = glm::abs(ownerScale * boxCo->getScale()) * 0.5f;
 
 		// Jolt asserts if half extents are smaller than the convex radius, so shrink it for thin boxes
 		const float convexRadius = glm::min(JPH::cDefaultConvexRadius, glm::min(halfExtents.x, glm::min(halfExtents.y, halfExtents.z)));
 		innerSettings = new JPH::BoxShapeSettings(JPH::Vec3(halfExtents.x, halfExtents.y, halfExtents.z), convexRadius);
 	}
-	else
+	else if (sphereCo != nullptr)
 	{
+		colliderPos = sphereCo->getPosition();
+
 		// Already has the owner's scale in it (biggest axis, since spheres can't be squashed)
 		innerSettings = new JPH::SphereShapeSettings(sphereCo->getWorldRadius());
 	}
+	else
+	{
+		colliderPos = capsuleCo->getPosition();
+		colliderRot = capsuleCo->getRotationQuat();
+
+		// Both already have the owner's scale in them. Jolt's capsule stands along Y too, so the rotation carries straight over
+		innerSettings = new JPH::CapsuleShapeSettings(capsuleCo->getWorldHalfHeight(), capsuleCo->getWorldRadius());
+	}
+
+	const glm::vec3 offset = ownerScale * colliderPos;
 
 	// shapes are always centred on the body, this wraps it so the collider's offset/rotation still work
 	// glm::quat is (w, x, y, z) but JPH::Quat is (x, y, z, w), so go by name
