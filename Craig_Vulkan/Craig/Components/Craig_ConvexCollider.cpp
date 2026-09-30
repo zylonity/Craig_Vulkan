@@ -3,13 +3,13 @@
 #include "Craig/Craig_GameObject.hpp"
 #include "Craig/Craig_ResourceManager.hpp"
 #include "Craig/Craig_Utilities.hpp"
+#include "Craig/Craig_Logger.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 
 #include <algorithm>
-#include <iostream>
 #include <set>
 
 CraigError Craig::Components::ConvexCollider::update() {
@@ -66,7 +66,7 @@ bool Craig::Components::ConvexCollider::refreshHull() {
 	if (hullResult.HasError())
 	{
 		// happens for flat models (all points on a plane), a hull needs some depth
-		std::cerr << "Couldn't build a convex hull for " << modelPath << ": " << hullResult.GetError() << std::endl;
+		Craig::Logger::physics().error("Couldn't build a convex hull for {}: {}", modelPath, hullResult.GetError().c_str());
 		return true;
 	}
 

@@ -25,6 +25,7 @@
 #include "Craig_Editor.hpp"
 #include "Craig_SceneManager.hpp"
 #include "Craig_Profiler.hpp"
+#include "Craig_Logger.hpp"
 #include "Components/Craig_Model.hpp"
 #include "Components/Craig_Sun.hpp"
 
@@ -40,7 +41,7 @@ static void check_vk_result(VkResult err)
 {
     if (err == 0)
         return;
-    fprintf(stderr, "[vulkan-imgui] Error: VkResult = %d\n", err);
+    Craig::Logger::renderer().error("[vulkan-imgui] Error: VkResult = {}", static_cast<int>(err));
     if (err < 0)
         abort();
 }
@@ -1079,7 +1080,7 @@ void Craig::Renderer::updateMinLOD(int minLOD) {
     createTextureSampler();
     updateDescriptorSets();
 
-    printf("Recreated sampler and updated the descriptor sets to change the LOD \n");
+    Craig::Logger::renderer().info("Recreated sampler and updated the descriptor sets to change the LOD");
 }
 
 void Craig::Renderer::drawFrame(const float& deltaTime) {

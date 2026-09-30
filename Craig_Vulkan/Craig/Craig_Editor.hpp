@@ -8,6 +8,7 @@
 #include "../External/Imgui/imfilebrowser.h"
 #include "../External/Imgui/ImGuizmo/ImGuizmo.h"
 #include "Components/Craig_Collider.hpp"
+#include "Craig_Logger.hpp"
 
 namespace Craig {
 	class GameObject;
@@ -63,6 +64,16 @@ namespace Craig {
 
 		void showSceneDetails(const float& deltaTime);
 		bool m_ShowSceneDetails = false;
+
+		// Everything the logger spits out, coloured by level with a filter box
+		void showLog();
+		bool m_ShowLog = false;
+		bool m_logAutoScroll = true;
+		int m_logMinLevel = 0; // dropdown index, lines up with spdlog's level_enum (0 = trace = everything)
+		ImGuiTextFilter m_logFilter;
+		std::vector<Craig::LogEntry> mv_logEntries; // Copy of the sink's lines, only refreshed when something new gets logged
+		std::vector<int> mv_visibleLogLines; // Indexes into mv_logEntries that pass the level and filter
+		uint64_t m_logVersion = UINT64_MAX; // something the sink can't be yet, so the first frame always copies
 
 		void renderNewSceneWindow();
 		bool m_ShowNewSceneWindow = false;

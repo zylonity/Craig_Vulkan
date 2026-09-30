@@ -1,9 +1,10 @@
 #include "Craig_PhysicsEngine.hpp"
 
+#include "Craig_Logger.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdarg>
-#include <iostream>
 #include <thread>
 
 // Started from Jolt's HelloWorld example
@@ -16,12 +17,12 @@ void Craig::PhysicsEngine::traceCallback(const char* format, ...)
 	vsnprintf(buffer, sizeof(buffer), format, list);
 	va_end(list);
 
-	std::cout << buffer << std::endl;
+	Craig::Logger::physics().info("{}", buffer);
 }
 
 bool Craig::PhysicsEngine::assertFailedCallback(const char* expression, const char* message, const char* file, JPH::uint line)
 {
-	std::cerr << file << ":" << line << ": (" << expression << ") " << (message != nullptr ? message : "") << std::endl;
+	Craig::Logger::physics().critical("{}:{}: ({}) {}", file, line, expression, message != nullptr ? message : "");
 
 	// true breaks into the debugger
 	return true;

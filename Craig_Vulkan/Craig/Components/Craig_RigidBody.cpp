@@ -1,10 +1,10 @@
 #include "Craig_RigidBody.hpp"
 #include "Craig/Craig_Utilities.hpp"
+#include "Craig/Craig_Logger.hpp"
 #include "Craig_Collider.hpp"
 #include "imgui.h"
 
 #include <glm/gtc/type_ptr.hpp>
-#include <iostream>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 
@@ -67,7 +67,7 @@ void Craig::Components::RigidBody::createPhysicsBody()
 	JPH::ShapeSettings::ShapeResult shapeResult = shapeSettings->Create();
 	if (shapeResult.HasError())
 	{
-		std::cerr << "RigidBody shape creation failed: " << shapeResult.GetError() << std::endl;
+		Craig::Logger::physics().error("RigidBody shape creation failed: {}", shapeResult.GetError().c_str());
 		return;
 	}
 

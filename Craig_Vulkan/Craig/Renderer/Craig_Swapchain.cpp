@@ -1,5 +1,6 @@
 #include "Craig_Swapchain.hpp"
 #include <SDL3/SDL_vulkan.h>
+#include "Craig/Craig_Logger.hpp"
 
 CraigError Craig::Swapchain::init(const SwapchainInitInfo& info) {
 
@@ -37,9 +38,9 @@ void Craig::Swapchain::createSwapChain() {
         imageCount = swapChainSupport.capabilities.maxImageCount;
     }
 
-    printf("Creating draw buffer/swap chain with %i images\n", imageCount);
-    printf("Present mode = %s (vsync %s)\n", vk::to_string(presentMode).c_str(), m_vsyncEnabled ? "on" : "off");
-    printf("Current extent size = %i x %i\n", m_VK_swapChainExtent.width, m_VK_swapChainExtent.height);
+    Craig::Logger::renderer().info("Creating draw buffer/swap chain with {} images", imageCount);
+    Craig::Logger::renderer().info("Present mode = {} (vsync {})", vk::to_string(presentMode), m_vsyncEnabled ? "on" : "off");
+    Craig::Logger::renderer().info("Current extent size = {} x {}", m_VK_swapChainExtent.width, m_VK_swapChainExtent.height);
 
     vk::SwapchainCreateInfoKHR createInfo{};
     createInfo

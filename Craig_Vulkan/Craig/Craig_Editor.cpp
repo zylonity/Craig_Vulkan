@@ -45,11 +45,13 @@ CraigError Craig::ImguiEditor::editorInit() {
 
 		ImGui::DockBuilderDockWindow("###RenderingSettings", dock_id_right);
 		ImGui::DockBuilderDockWindow("###SceneDetails", dock_id_left);
+		ImGui::DockBuilderDockWindow("###Log", dock_id_bottom);
 		ImGui::DockBuilderFinish(dockspace_id);
 
 		//Default windows to open
 		m_ShowRendererProperties = true;
 		m_ShowSceneDetails = true;
+		m_ShowLog = true;
 
 		//When we initialise the renderer we have the max sampling level set, so for now this is good enough since we change it in both places at once
 		//TODO: Keep track of the current level in the renderer, not both there and here
@@ -76,6 +78,7 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 
 	showRenderProperties(deltaTime);
 	showSceneDetails(deltaTime);
+	showLog();
 	updateImGuizmo();
 	updateImGuizmoCollider();
 	drawColliderOutlines();
@@ -163,6 +166,7 @@ void Craig::ImguiEditor::showMainMenuBar()
 		{
 			ImGui::MenuItem("Rendering Properties", nullptr, &m_ShowRendererProperties);
 			ImGui::MenuItem("Scene Details", nullptr, &m_ShowSceneDetails);
+			ImGui::MenuItem("Log", nullptr, &m_ShowLog);
 			ImGui::MenuItem("New Game Object", nullptr, &m_ShowNewGameObjectWindow);
 			ImGui::EndMenu();
 		}
@@ -245,6 +249,105 @@ void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
 
 		ImGui::End();
 		
+	}
+}
+
+// Colour for each log level, same order as spdlog's level_enum
+static ImVec4 getLogLevelColour(spdlog::level::level_enum level)
+{
+	switch (level)
+	{
+	case spdlog::level::trace:		return { 0.5f, 0.5f, 0.5f, 1.0f };
+	case spdlog::level::debug:		return { 0.6f, 0.7f, 0.8f, 1.0f };
+	case spdlog::level::warn:		return { 1.0f, 0.8f, 0.2f, 1.0f };
+	case spdlog::level::err:		return { 1.0f, 0.4f, 0.4f, 1.0f };
+	case spdlog::level::critical:	return { 1.0f, 0.0f, 0.0f, 1.0f };
+	default:						return ImGui::GetStyleColorVec4(ImGuiCol_Text);
+	}
+}
+
+void Craig::ImguiEditor::showLog()
+{
+	if (m_ShowLog)
+	{
+		// ### for a unique ID so it stays docked at the bottom
+		ImGui::Begin("Log###Log", &m_ShowLog);
+
+		const std::shared_ptr<Craig::EditorLogSink> pSink = Craig::Logger::getInstance().getEditorSink();
+		bool rebuildVisibleLines = false;
+
+		if (ImGui::Button("Clear")) {
+			pSink->clear();
+		}
+		ImGui::SameLine();
+		const bool copyPressed = ImGui::Button("Copy");
+		ImGui::SameLine();
+		ImGui::Checkbox("Auto-scroll", &m_logAutoScroll);
+		ImGui::SameLine();
+
+		constexpr const char* kLogLevelNames[] = { "Trace", "Debug", "Info", "Warn", "Error", "Critical" };
+		ImGui::SetNextItemWidth(100.0f);
+		if (ImGui::Combo("Level", &m_logMinLevel, kLogLevelNames, IM_ARRAYSIZE(kLogLevelNames))) {
+			rebuildVisibleLines = true;
+		}
+		ImGui::SameLine();
+		if (m_logFilter.Draw("Filter", 200.0f)) {
+			rebuildVisibleLines = true;
+		}
+
+		// only copy when something's actually been logged, not every frame
+		const uint64_t sinkVersion = pSink->getVersion();
+		if (sinkVersion != m_logVersion) {
+			mv_logEntries = pSink->getEntries();
+			m_logVersion = sinkVersion;
+			rebuildVisibleLines = true;
+		}
+
+		if (rebuildVisibleLines) {
+			mv_visibleLogLines.clear();
+			for (int i = 0; i < static_cast<int>(mv_logEntries.size()); i++) {
+				const Craig::LogEntry& entry = mv_logEntries[i];
+				if (entry.level >= m_logMinLevel && m_logFilter.PassFilter(entry.text.c_str())) {
+					mv_visibleLogLines.push_back(i);
+				}
+			}
+		}
+
+		// copies what you can see (level and filter applied)
+		if (copyPressed) {
+			std::string clipboardText;
+			for (int line : mv_visibleLogLines) {
+				clipboardText += mv_logEntries[line].text;
+				clipboardText += '\n';
+			}
+			ImGui::SetClipboardText(clipboardText.c_str());
+		}
+
+		ImGui::Separator();
+
+		if (ImGui::BeginChild("LogScrolling", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar))
+		{
+			// clipper only draws what's on screen, all 5000 lines every frame would tank the fps
+			ImGuiListClipper clipper;
+			clipper.Begin(static_cast<int>(mv_visibleLogLines.size()));
+			while (clipper.Step()) {
+				for (int line = clipper.DisplayStart; line < clipper.DisplayEnd; line++) {
+					const Craig::LogEntry& entry = mv_logEntries[mv_visibleLogLines[line]];
+					ImGui::PushStyleColor(ImGuiCol_Text, getLogLevelColour(entry.level));
+					ImGui::TextUnformatted(entry.text.c_str());
+					ImGui::PopStyleColor();
+				}
+			}
+			clipper.End();
+
+			// stick to the bottom, unless you've scrolled up to read something
+			if (m_logAutoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+				ImGui::SetScrollHereY(1.0f);
+			}
+		}
+		ImGui::EndChild();
+
+		ImGui::End();
 	}
 }
 

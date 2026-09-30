@@ -11,12 +11,17 @@
 #include "Craig_SceneManager.hpp"
 #include "Craig_PhysicsEngine.hpp"
 #include "Craig_Profiler.hpp"
+#include "Craig_Logger.hpp"
 
 #include <chrono>
 
 CraigError Craig::Framework::init() {
 
 	CraigError ret = CRAIG_SUCCESS;
+
+	// Logger goes first so everything after it (validation layers included) ends up in the log
+	// not asserted, if the file won't open it still logs to the console and editor
+	Craig::Logger::getInstance().init();
 
 	//Create our objects and get the pointers we need to initialise later
 	mp_Window = new Craig::Window;
@@ -127,6 +132,10 @@ CraigError Craig::Framework::terminate() {
 	mp_Window = nullptr; //Set the pointer to null (Might not be done by default, just in case)
 
 	Craig::ResourceManager::getInstance().terminate();
+
+	// last so everything else can still log while it shuts down
+	ret = Craig::Logger::getInstance().terminate();
+	assert(ret == CRAIG_SUCCESS && "Logger didn't terminate properly");
 
 	return ret;
 }

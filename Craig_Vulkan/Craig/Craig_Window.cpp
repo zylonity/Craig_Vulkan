@@ -12,6 +12,7 @@
 
 #include "Craig_Window.hpp"
 #include "Craig_Camera.hpp"
+#include "Craig_Logger.hpp"
 
 CraigError Craig::Window::init() {
 
@@ -27,7 +28,7 @@ CraigError Craig::Window::init() {
 	// SDL3 returns its own array (owned by SDL, don't free it) and writes the count
 	const char* const* sdlExtensions = SDL_Vulkan_GetInstanceExtensions(&m_SDL_ExtensionCount);
 	if (sdlExtensions == nullptr) {
-		fprintf(stderr, "SDL_Vulkan_GetInstanceExtensions failed: %s\n", SDL_GetError());
+		Craig::Logger::engine().critical("SDL_Vulkan_GetInstanceExtensions failed: {}", SDL_GetError());
 	}
 	assert(sdlExtensions != nullptr && "Could not get the required instance extensions from SDL.");
 

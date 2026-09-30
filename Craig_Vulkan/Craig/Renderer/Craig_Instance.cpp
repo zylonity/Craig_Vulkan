@@ -3,8 +3,7 @@
 #include "Craig_Instance.hpp"
 #include "../Craig_Window.hpp"
 
-#include <iostream>
-#include <ostream>
+#include "Craig/Craig_Logger.hpp"
 
 CraigError Craig::Instance::init(const InstanceInitInfo& info) {
 
@@ -59,13 +58,25 @@ CraigError Craig::Instance::init(const InstanceInitInfo& info) {
 }
 
 // This function is called by Vulkan to report debug messages.
-// TODO: Maybe switch this to a logger later on, avoiding std::cerr
 VKAPI_ATTR VkBool32 VKAPI_CALL Craig::Instance::debugCallback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT severity,
 	VkDebugUtilsMessageTypeFlagsEXT type,
 	const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
 	void* userData) {
-	std::cerr << "Validation layer: " << callbackData->pMessage << std::endl;
+	// map Vulkan's severities onto the logger's
+	// verbose is mostly the loader being chatty as hell so it's debug
+	if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+		Craig::Logger::vulkan().error("{}", callbackData->pMessage);
+	}
+	else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+		Craig::Logger::vulkan().warn("{}", callbackData->pMessage);
+	}
+	else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
+		Craig::Logger::vulkan().info("{}", callbackData->pMessage);
+	}
+	else {
+		Craig::Logger::vulkan().debug("{}", callbackData->pMessage);
+	}
 	return VK_FALSE;
 }
 

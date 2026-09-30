@@ -1,5 +1,6 @@
 #include "Craig_Scene.hpp"
 #include "Craig_Utilities.hpp"
+#include "Craig_Logger.hpp"
 #include "Components/Craig_Model.hpp"
 #include "Components/Craig_Sun.hpp"
 #include "Components/Craig_BoxCollider.hpp"
@@ -10,7 +11,6 @@
 #include "../External/json.hpp"
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 
 CraigError Craig::Scene::init(const std::string& scenePath, Craig::PhysicsEngine* pPhysicsEngine) {
 
@@ -22,7 +22,7 @@ CraigError Craig::Scene::init(const std::string& scenePath, Craig::PhysicsEngine
 	std::ifstream sceneFile(scenePath);
 	if (!sceneFile.is_open())
 	{
-		std::cerr << "Couldn't open scene file: " << scenePath << std::endl;
+		Craig::Logger::scene().error("Couldn't open scene file: {}", scenePath);
 		return CRAIG_FILE_NOT_FOUND;
 	}
 
@@ -30,7 +30,7 @@ CraigError Craig::Scene::init(const std::string& scenePath, Craig::PhysicsEngine
 	const nlohmann::json sceneJson = nlohmann::json::parse(sceneFile, nullptr, false);
 	if (sceneJson.is_discarded())
 	{
-		std::cerr << "Scene file isn't valid json: " << scenePath << std::endl;
+		Craig::Logger::scene().error("Scene file isn't valid json: {}", scenePath);
 		return CRAIG_FAIL;
 	}
 
@@ -50,7 +50,7 @@ CraigError Craig::Scene::init(const std::string& scenePath, Craig::PhysicsEngine
 		// skip anything broken instead of crashing the whole scene
 		if (objectName.empty() || findObject(objectName) != nullptr)
 		{
-			std::cerr << "Skipping game object '" << objectName << "' in " << scenePath << " (no name or duplicate name)" << std::endl;
+			Craig::Logger::scene().warn("Skipping game object '{}' in {} (no name or duplicate name)", objectName, scenePath);
 			continue;
 		}
 
@@ -123,14 +123,14 @@ CraigError Craig::Scene::save() {
 	std::ofstream sceneFile(tempPath);
 	if (!sceneFile.is_open())
 	{
-		std::cerr << "Couldn't open " << tempPath << " for writing" << std::endl;
+		Craig::Logger::scene().error("Couldn't open {} for writing", tempPath.string());
 		return CRAIG_FAIL;
 	}
 	sceneFile << sceneJson.dump(2) << std::endl;
 	sceneFile.close();
 	if (sceneFile.fail())
 	{
-		std::cerr << "Couldn't write " << tempPath << std::endl;
+		Craig::Logger::scene().error("Couldn't write {}", tempPath.string());
 		return CRAIG_FAIL;
 	}
 
@@ -138,7 +138,7 @@ CraigError Craig::Scene::save() {
 	std::filesystem::rename(tempPath, scenePath, error);
 	if (error)
 	{
-		std::cerr << "Couldn't replace " << scenePath << ": " << error.message() << std::endl;
+		Craig::Logger::scene().error("Couldn't replace {}: {}", scenePath.string(), error.message());
 		return CRAIG_FAIL;
 	}
 
@@ -177,7 +177,7 @@ void Craig::Scene::loadComponentsFromJson(Craig::GameObject* pObject, const nloh
 		Components::Model* pModel = pObject->addComponent<Components::Model>();
 		if (pModel->loadFromJson(componentsJson["model"]) != CRAIG_SUCCESS)
 		{
-			std::cerr << "Couldn't load the model for '" << pObject->getName() << "' in " << m_scenePath << " (missing file or not a .glb)" << std::endl;
+			Craig::Logger::scene().warn("Couldn't load the model for '{}' in {} (missing file or not a .glb)", pObject->getName(), m_scenePath);
 			pObject->removeComponent(pModel);
 		}
 	}
@@ -187,7 +187,7 @@ void Craig::Scene::loadComponentsFromJson(Craig::GameObject* pObject, const nloh
 		// only one sun per scene, first one wins
 		if (getSun() != nullptr)
 		{
-			std::cerr << "Skipping sun on '" << pObject->getName() << "' in " << m_scenePath << ", the scene already has one" << std::endl;
+			Craig::Logger::scene().warn("Skipping sun on '{}' in {}, the scene already has one", pObject->getName(), m_scenePath);
 		}
 		else
 		{

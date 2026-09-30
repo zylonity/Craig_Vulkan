@@ -4,6 +4,7 @@
 #include <cstring>
 
 #include "Craig_Swapchain.hpp"
+#include "Craig/Craig_Logger.hpp"
 
 CraigError Craig::Device::init(DeviceInitInfo& initInfo) {
 
@@ -100,7 +101,7 @@ void Craig::Device::pickPhysicalDevice() {
 
     if (m_VK_physicalDevice) {
         const auto props = m_VK_physicalDevice.getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDriverProperties>();
-        printf("\nFound GPU: %s (driver: %s)\n",
+        Craig::Logger::renderer().info("Found GPU: {} (driver: {})",
             props.get<vk::PhysicalDeviceProperties2>().properties.deviceName.data(),
             props.get<vk::PhysicalDeviceDriverProperties>().driverName.data());
     }
@@ -121,10 +122,10 @@ bool Craig::Device::isDeviceSuitable(const vk::PhysicalDevice& device) {
         swapChainAdequate = Swapchain::isSwapChainAdequate(device, m_DVC_surface);
     }
 
-    printf("Found graphics and presentation indices: %s\n", indices.isComplete() ? "True" : "False");
-    printf("Found dedicated transfer index: %s\n", indices.hasDedicatedTransfer() ? "True" : "False");
-    printf("Extensions (Like swapchain/double buffers) are supported: %s\n", extensionsSupported ? "True" : "False");
-    printf("The swapchain extension is adequate for our use: %s\n", swapChainAdequate ? "True" : "False");
+    Craig::Logger::renderer().debug("Found graphics and presentation indices: {}", indices.isComplete());
+    Craig::Logger::renderer().debug("Found dedicated transfer index: {}", indices.hasDedicatedTransfer());
+    Craig::Logger::renderer().debug("Extensions (Like swapchain/double buffers) are supported: {}", extensionsSupported);
+    Craig::Logger::renderer().debug("The swapchain extension is adequate for our use: {}", swapChainAdequate);
 
     return indices.isComplete() && extensionsSupported && swapChainAdequate;
 }

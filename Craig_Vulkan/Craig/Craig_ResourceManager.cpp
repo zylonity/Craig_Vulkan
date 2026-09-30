@@ -4,9 +4,9 @@
 
 #include "Craig_ResourceManager.hpp"
 #include "Craig_Renderer.hpp"
+#include "Craig_Logger.hpp"
 #include "../External/tiny_gltf.h"
 #include <glm/gtc/type_ptr.hpp>
-#include <iostream>
 #include <limits>
 
 vk::VertexInputBindingDescription Craig::Vertex::getBindingDescription() {
@@ -161,7 +161,7 @@ static void loadImages(const tinygltf::Model& input, Craig::Model& outModel, Cra
 
         // tinygltf gives us 8 bit RGBA by default, anything else gets the white pixel instead
         if (glTFImage.image.empty() || glTFImage.bits != 8 || glTFImage.component != 4) {
-            std::cerr << "Unsupported image " << i << " in " << outModel.modelPath << ", using white instead" << std::endl;
+            Craig::Logger::resources().warn("Unsupported image {} in {}, using white instead", i, outModel.modelPath);
             renderer->createTextureImage2(kWhitePixel, 1, 1, 4, &outModel.images[i]);
             continue;
         }
@@ -356,16 +356,17 @@ bool Craig::ResourceManager::loadModel(std::string modelPath) {
     // use LoadBinaryFromFile for .glb
 
     if (!warn.empty()) {
-        std::cout << warn << std::endl;
+        Craig::Logger::resources().warn("{}", warn);
     }
     if (!err.empty()) {
-        std::cerr << err << std::endl;
+        Craig::Logger::resources().error("{}", err);
     }
     if (!ret) {
+        Craig::Logger::resources().critical("Couldn't load {}, bailing out", modelPath);
         exit(CRAIG_FAIL);
     }
     else {
-        printf("model found \n");
+        Craig::Logger::resources().info("Loaded {}", modelPath);
     }
 
     // Insert first and fill it in place, saves copying all the vectors after
@@ -384,7 +385,7 @@ bool Craig::ResourceManager::loadModel(std::string modelPath) {
         }
     }
     else {
-        std::cerr << modelPath << " has no scenes, nothing to draw" << std::endl;
+        Craig::Logger::resources().warn("{} has no scenes, nothing to draw", modelPath);
     }
 
     newModel.subMeshesCount = (uint32_t)newModel.subMeshes.size();
