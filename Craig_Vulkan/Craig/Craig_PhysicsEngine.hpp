@@ -1,8 +1,7 @@
 #pragma once
 #include "Craig/Craig_Constants.hpp"
 
-// Jolt includes
-#include <iostream>
+// Jolt.h has to come before any other Jolt header
 #include <Jolt/Jolt.h>
 #include <Jolt/RegisterTypes.h>
 #include <Jolt/Core/Factory.h>
@@ -13,15 +12,13 @@
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
-#include <Jolt/Physics/Body/BodyActivationListener.h>
+
+#include <memory>
 
 namespace Craig {
 
-
-	// Layer that objects can be in, determines which other objects it can collide with
-	// Typically you at least want to have 1 layer for moving bodies and 1 layer for static bodies, but you can have more
-	// layers if you want. E.g. you could have a layer for high detail collision (which is not used by the physics simulation
-	// but only if you do collision testing).
+	// Object layers decide what collides with what. Static bodies go in NON_MOVING, dynamic ones in MOVING.
+	// Static bodies don't collide with each other since neither can move.
 	namespace Physics::Layers
 	{
 		static constexpr JPH::ObjectLayer NON_MOVING = 0;
@@ -29,12 +26,8 @@ namespace Craig {
 		static constexpr JPH::ObjectLayer NUM_LAYERS = 2;
 	};
 
-
-	// Each broadphase layer results in a separate bounding volume tree in the broad phase. You at least want to have
-	// a layer for non-moving and moving objects to avoid having to update a tree full of static objects every frame.
-	// You can have a 1-on-1 mapping between object layers and broadphase layers (like in this case) but if you have
-	// many object layers you'll be creating many broad phase trees, which is not efficient. If you want to fine tune
-	// your broadphase layers define JPH_TRACK_BROADPHASE_STATS and look at the stats reported on the TTY.
+	// Each broad phase layer is its own bounding volume tree, so the static tree doesn't have to be updated
+	// when things move. One per object layer for now.
 	namespace Physics::BroadPhaseLayers
 	{
 		static constexpr JPH::BroadPhaseLayer NON_MOVING(0);
@@ -50,145 +43,71 @@ namespace Craig {
 		CraigError update(const float& deltaTime);
 		CraigError terminate();
 
-		float getFixedTimeStep() const { return fixed_time_step; }
-		JPH::BodyInterface* getBodyInterface() const { return body_interface; }
-
+		float getFixedTimeStep() const { return m_fixedTimeStep; }
 		void setFixedTimeStep(float timeStep); // clamped between 10Hz and 1000Hz
+
+		// the locking version, it's safe to use from any thread
+		JPH::BodyInterface* getBodyInterface() const { return mp_bodyInterface; }
+
 	private:
 
-		static void TraceImpl(const char *inFMT, ...);
-		static bool AssertFailedImpl(const char *inExpression, const char *inMessage, const char *inFile, JPH::uint inLine);
+		// Jolt's trace/assert callbacks, printed to the console
+		static void traceCallback(const char* format, ...);
+		static bool assertFailedCallback(const char* expression, const char* message, const char* file, JPH::uint line);
 
-		// This is the max amount of rigid bodies that you can add to the physics system. If you try to add more you'll get an error.
-		// Note: This value is low because this is a simple test. For a real project use something in the order of 65536.
-		const JPH::uint cMaxBodies = 1024;
-
-
-		// This determines how many mutexes to allocate to protect rigid bodies from concurrent access. Set it to 0 for the default settings.
-		const uint cNumBodyMutexes = 0;
-
-		// This is the max amount of body pairs that can be queued at any time (the broad phase will detect overlapping
-		// body pairs based on their bounding boxes and will insert them into a queue for the narrowphase). If you make this buffer
-		// too small the queue will fill up and the broad phase jobs will start to do narrow phase work. This is slightly less efficient.
-		// Note: This value is low because this is a simple test. For a real project use something in the order of 65536.
-		const uint cMaxBodyPairs = 1024;
-
-		// This is the maximum size of the contact constraint buffer. If more contacts (collisions between bodies) are detected than this
-		// number then these contacts will be ignored and bodies will start interpenetrating / fall through the world.
-		// Note: This value is low because this is a simple test. For a real project use something in the order of 10240.
-		const uint cMaxContactConstraints = 1024;
-
-
-		// We need a temp allocator for temporary allocations during the physics update. We're
-		// pre-allocating 10 MB to avoid having to do allocations during the physics update.
-		// B.t.w. 10 MB is way too much for this example but it is a typical value you can use.
-		// If you don't want to pre-allocate you can also use TempAllocatorMalloc to fall back to
-		// malloc / free.
-		JPH::TempAllocatorImpl* temp_allocator = nullptr;
-
-		// We need a job system that will execute physics jobs on multiple threads. Typically
-		// you would implement the JobSystem interface yourself and let Jolt Physics run on top
-		// of your own job scheduler. JobSystemThreadPool is an example implementation.
-		JPH::JobSystemThreadPool* job_system = nullptr;
-
-		/// Class that determines if two object layers can collide
-		class ObjectLayerPairFilterImpl : public JPH::ObjectLayerPairFilter
+		// Maps object layers to broad phase layers
+		class BroadPhaseLayerInterfaceImpl final : public JPH::BroadPhaseLayerInterface
 		{
 		public:
-			virtual bool ShouldCollide(JPH::ObjectLayer inObject1, JPH::ObjectLayer inObject2) const override;
-		};
-
-		// BroadPhaseLayerInterface implementation
-		// This defines a mapping between object and broadphase layers.
-		class BPLayerInterfaceImpl final : public JPH::BroadPhaseLayerInterface
-		{
-		public:
-			BPLayerInterfaceImpl();
-			virtual JPH::uint GetNumBroadPhaseLayers() const override;
-			virtual JPH::BroadPhaseLayer GetBroadPhaseLayer(JPH::ObjectLayer inLayer) const override;
+			BroadPhaseLayerInterfaceImpl();
+			JPH::uint GetNumBroadPhaseLayers() const override;
+			JPH::BroadPhaseLayer GetBroadPhaseLayer(JPH::ObjectLayer layer) const override;
 #if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)
-			virtual const char*	GetBroadPhaseLayerName(JPH::BroadPhaseLayer inLayer) const override;
-#endif // JPH_EXTERNAL_PROFILE || JPH_PROFILE_ENABLED
+			const char* GetBroadPhaseLayerName(JPH::BroadPhaseLayer layer) const override;
+#endif
 		private:
-			JPH::BroadPhaseLayer					mObjectToBroadPhase[Physics::Layers::NUM_LAYERS];
+			JPH::BroadPhaseLayer m_objectToBroadPhase[Physics::Layers::NUM_LAYERS];
 		};
 
-
-		// An example contact listener
-		class MyContactListener : public JPH::ContactListener
-		{
-		public:
-			// See: ContactListener
-			virtual JPH::ValidateResult OnContactValidate(const JPH::Body &inBody1, const JPH::Body &inBody2, JPH::RVec3Arg inBaseOffset, const JPH::CollideShapeResult &inCollisionResult) override;
-			virtual void OnContactAdded(const JPH::Body &inBody1, const JPH::Body &inBody2, const JPH::ContactManifold &inManifold, JPH::ContactSettings &ioSettings) override;
-			virtual void OnContactPersisted(const JPH::Body &inBody1, const JPH::Body &inBody2, const JPH::ContactManifold &inManifold, JPH::ContactSettings &ioSettings) override;
-			virtual void OnContactRemoved(const JPH::SubShapeIDPair &inSubShapePair) override;
-		};
-
-
-		// An example activation listener
-		class MyBodyActivationListener : public JPH::BodyActivationListener
-		{
-		public:
-			virtual void OnBodyActivated(const JPH::BodyID &inBodyID, JPH::uint64 inBodyUserData) override;
-			virtual void OnBodyDeactivated(const JPH::BodyID &inBodyID, JPH::uint64 inBodyUserData) override;
-		};
-
-
-		/// Class that determines if an object layer can collide with a broadphase layer
+		// Can an object layer collide with a broad phase layer (checked first, cheap)
 		class ObjectVsBroadPhaseLayerFilterImpl : public JPH::ObjectVsBroadPhaseLayerFilter
 		{
 		public:
-			virtual bool ShouldCollide(JPH::ObjectLayer inLayer1, JPH::BroadPhaseLayer inLayer2) const override;
+			bool ShouldCollide(JPH::ObjectLayer layer, JPH::BroadPhaseLayer broadPhaseLayer) const override;
 		};
 
-		// Create mapping table from object layer to broadphase layer
-		// Note: As this is an interface, PhysicsSystem will take a reference to this so this instance needs to stay alive!
-		// Also have a look at BroadPhaseLayerInterfaceTable or BroadPhaseLayerInterfaceMask for a simpler interface.
-		BPLayerInterfaceImpl broad_phase_layer_interface;
+		// can two object layers collide
+		class ObjectLayerPairFilterImpl : public JPH::ObjectLayerPairFilter
+		{
+		public:
+			bool ShouldCollide(JPH::ObjectLayer layerA, JPH::ObjectLayer layerB) const override;
+		};
 
-		// Create class that filters object vs broadphase layers
-		// Note: As this is an interface, PhysicsSystem will take a reference to this so this instance needs to stay alive!
-		// Also have a look at ObjectVsBroadPhaseLayerFilterTable or ObjectVsBroadPhaseLayerFilterMask for a simpler interface.
-		ObjectVsBroadPhaseLayerFilterImpl object_vs_broadphase_layer_filter;
-
-		// Create class that filters object vs object layers
-		// Note: As this is an interface, PhysicsSystem will take a reference to this so this instance needs to stay alive!
-		// Also have a look at ObjectLayerPairFilterTable or ObjectLayerPairFilterMask for a simpler interface.
-		ObjectLayerPairFilterImpl object_vs_object_layer_filter;
-
-		// Now we can create the actual physics system.
-		JPH::PhysicsSystem physics_system;
-
-		// A body activation listener gets notified when bodies activate and go to sleep
-		// Note that this is called from a job so whatever you do here needs to be thread safe.
-		// Registering one is entirely optional.
-		MyBodyActivationListener body_activation_listener;
-
-
-		// A contact listener gets notified when bodies (are about to) collide, and when they separate again.
-		// Note that this is called from a job so whatever you do here needs to be thread safe.
-		// Registering one is entirely optional.
-		MyContactListener contact_listener;
-
-		// The main way to interact with the bodies in the physics system is through the body interface. There is a locking and a non-locking
-		// variant of this. We're going to use the locking version (even though we're not planning to access bodies from multiple threads)
-		JPH::BodyInterface* body_interface;
-
-
-
-		JPH::uint step = 0;
-
-		// Physics runs at a fixed rate, frame delta time is added to the accumulator and consumed in fixed_time_step sized chunks
-		float fixed_time_step = 1.0f / 60.0f;
-		float time_accumulator = 0.0f;
+		// Limits for the physics system, going over them fails body creation or drops contacts.
+		// Jolt suggests 65536 bodies/body pairs and 10240 contacts for a real game.
+		static constexpr JPH::uint kMaxBodies = 1024;
+		static constexpr JPH::uint kNumBodyMutexes = 0; // 0 = Jolt picks
+		static constexpr JPH::uint kMaxBodyPairs = 1024;
+		static constexpr JPH::uint kMaxContactConstraints = 1024;
 
 		// Caps the steps taken in one frame, so a long frame (hitch, window drag) can't snowball into more and more catch-up steps
-		int max_steps_per_frame = 5;
+		static constexpr int kMaxStepsPerFrame = 5;
 
+		// The physics system keeps references to these, so they have to live as long as it does
+		BroadPhaseLayerInterfaceImpl m_broadPhaseLayerInterface;
+		ObjectVsBroadPhaseLayerFilterImpl m_objectVsBroadPhaseLayerFilter;
+		ObjectLayerPairFilterImpl m_objectLayerPairFilter;
 
+		std::unique_ptr<JPH::TempAllocatorImpl> mp_tempAllocator;
+		std::unique_ptr<JPH::JobSystemThreadPool> mp_jobSystem;
+		// Made in init(), since it has to be after Jolt's types are registered
+		std::unique_ptr<JPH::PhysicsSystem> mp_physicsSystem;
+
+		JPH::BodyInterface* mp_bodyInterface = nullptr; // Owned by the physics system
+
+		// fixed rate, frame time goes into the accumulator and gets eaten in m_fixedTimeStep chunks
+		float m_fixedTimeStep = 1.0f / 60.0f;
+		float m_timeAccumulator = 0.0f;
 	};
-
-
 
 }

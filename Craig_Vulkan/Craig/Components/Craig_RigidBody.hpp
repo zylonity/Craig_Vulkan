@@ -14,7 +14,6 @@ namespace Craig {
 
 		public:
 
-			CraigError init() override;
 			CraigError update() override;
 			CraigError terminate() override;
 
@@ -29,13 +28,13 @@ namespace Craig {
 			void markShapeDirty() { m_shapeDirty = true; }
 
 		private:
-			// Called from update() until the body exists (rb_id is valid). Done there instead of init() since init()
+			// Called from update() until the body exists (m_bodyId is valid). Done there instead of init() since init()
 			// runs before loadFromJson and possibly before the colliders have been added.
 			// all the object's colliders go into one body
 			void createPhysicsBody();
 			void destroyPhysicsBody();
 
-			JPH::BodyID rb_id;
+			JPH::BodyID m_bodyId;
 
 			bool m_shapeDirty = false;
 			// The object's scale gets baked into the shapes, so the body has to be rebuilt if it changes

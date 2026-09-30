@@ -26,6 +26,10 @@ constexpr uint32_t kVertexAttributeDescriptors = 4;
 constexpr char kScenesDirectory[] = "data/scenes";
 constexpr char kDefaultScenePath[] = "data/scenes/TestScene1.json"; // Scene loaded on startup
 
+//Physics
+// Jolt's scratch memory per step, going over it aborts ("TempAllocator: Out of memory")
+constexpr uint32_t kPhysicsTempAllocatorSize = 10 * 1024 * 1024; // 10 MB
+
 enum CraigError {
 	CRAIG_SUCCESS = 0,
 	CRAIG_FAIL = 1,
