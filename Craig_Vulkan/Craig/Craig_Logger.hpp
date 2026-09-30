@@ -3,6 +3,7 @@
 #include "Craig_Constants.hpp"
 #include <spdlog/logger.h>
 #include <spdlog/sinks/base_sink.h>
+#include <spdlog/stopwatch.h> // For timing things, spdlog::stopwatch timer; then timer.elapsed()
 #include <deque>
 #include <memory>
 #include <mutex>

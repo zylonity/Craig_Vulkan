@@ -112,6 +112,9 @@ CraigError Craig::PhysicsEngine::init() {
 
 	mp_bodyInterface = &mp_physicsSystem->GetBodyInterface();
 
+	Craig::Logger::physics().info("Jolt up: {} worker threads, {} max bodies, {} MB temp allocator, {:.0f} Hz",
+		workerThreads, kMaxBodies, kPhysicsTempAllocatorSize / (1024 * 1024), 1.0f / m_fixedTimeStep);
+
 	return ret;
 }
 
@@ -136,6 +139,15 @@ CraigError Craig::PhysicsEngine::update(const float& deltaTime) {
 	// Hit the step cap and still behind, drop the leftover time instead of carrying it into the next frame
 	if (m_timeAccumulator >= m_fixedTimeStep)
 	{
+		if (!m_droppedTimeWarned)
+		{
+			Craig::Logger::physics().warn("Physics can't keep up (hit {} steps in one frame), dropping {:.1f} ms so it doesn't spiral. Things will look slow-mo", kMaxStepsPerFrame, m_timeAccumulator * 1000.0f);
+			m_droppedTimeWarned = true;
+		}
+		else
+		{
+			Craig::Logger::physics().debug("Physics fell behind again, dropped {:.1f} ms", m_timeAccumulator * 1000.0f);
+		}
 		m_timeAccumulator = 0.0f;
 	}
 
@@ -146,6 +158,8 @@ void Craig::PhysicsEngine::setFixedTimeStep(float timeStep)
 {
 	// a step of 0 would make the accumulator loop in update() never end
 	m_fixedTimeStep = std::clamp(timeStep, 1.0f / 1000.0f, 1.0f / 10.0f);
+	// trace since the editor slider calls this every frame you drag it
+	Craig::Logger::physics().trace("Physics rate set to {:.0f} Hz", 1.0f / m_fixedTimeStep);
 }
 
 CraigError Craig::PhysicsEngine::terminate() {
@@ -154,6 +168,10 @@ CraigError Craig::PhysicsEngine::terminate() {
 
 	// bodies are already gone, rigid bodies remove themselves when the scenes terminate
 	// everything Jolt made has to go before its types are unregistered, newest first
+	if (mp_physicsSystem->GetNumBodies() > 0)
+	{
+		Craig::Logger::physics().warn("{} bodies still in the physics system at shutdown, something didn't clean up after itself", mp_physicsSystem->GetNumBodies());
+	}
 	mp_bodyInterface = nullptr;
 	mp_physicsSystem.reset();
 	mp_jobSystem.reset();
@@ -163,6 +181,8 @@ CraigError Craig::PhysicsEngine::terminate() {
 
 	delete JPH::Factory::sInstance;
 	JPH::Factory::sInstance = nullptr;
+
+	Craig::Logger::physics().info("Jolt shut down");
 
 	return ret;
 }

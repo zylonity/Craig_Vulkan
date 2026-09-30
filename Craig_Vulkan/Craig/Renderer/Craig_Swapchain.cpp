@@ -15,6 +15,7 @@ CraigError Craig::Swapchain::init(const SwapchainInitInfo& info) {
     }
     else
     {
+        Craig::Logger::renderer().critical("Swapchain got a null window, init it after the window");
         throw std::runtime_error("pWindow in swapchain is nullptr");
     }
 
@@ -38,9 +39,11 @@ void Craig::Swapchain::createSwapChain() {
         imageCount = swapChainSupport.capabilities.maxImageCount;
     }
 
-    Craig::Logger::renderer().info("Creating draw buffer/swap chain with {} images", imageCount);
-    Craig::Logger::renderer().info("Present mode = {} (vsync {})", vk::to_string(presentMode), m_vsyncEnabled ? "on" : "off");
-    Craig::Logger::renderer().info("Current extent size = {} x {}", m_VK_swapChainExtent.width, m_VK_swapChainExtent.height);
+    // one line since this runs every time the window's resized
+    Craig::Logger::renderer().info("Creating swapchain: {} x {}, {} images, {} (vsync {}), {} {}",
+        m_VK_swapChainExtent.width, m_VK_swapChainExtent.height, imageCount,
+        vk::to_string(presentMode), m_vsyncEnabled ? "on" : "off",
+        vk::to_string(surfaceFormat.format), vk::to_string(surfaceFormat.colorSpace));
 
     vk::SwapchainCreateInfoKHR createInfo{};
     createInfo
@@ -85,6 +88,7 @@ void Craig::Swapchain::createSwapChain() {
         m_VK_swapChain = mSC_device.createSwapchainKHR(createInfo);
     }
     catch (const vk::SystemError& err) {
+        Craig::Logger::renderer().critical("Failed to create the swapchain: {}", err.what());
         throw std::runtime_error("failed to create swap chain!");
     }
 
@@ -114,6 +118,8 @@ vk::SurfaceFormatKHR Craig::Swapchain::chooseSwapSurfaceFormat(const std::vector
         }
     }
 
+    // Colours will probably look a bit off (too dark or washed out) if it's not sRGB
+    Craig::Logger::renderer().warn("No B8G8R8A8 sRGB surface format, falling back to {} {}", vk::to_string(availableFormats[0].format), vk::to_string(availableFormats[0].colorSpace));
     return availableFormats[0];
 }
 
@@ -138,6 +144,7 @@ vk::PresentModeKHR Craig::Swapchain::chooseSwapPresentMode(const std::vector<vk:
         }
     }
 
+    Craig::Logger::renderer().warn("Vsync's off but there's no mailbox or immediate mode, stuck with FIFO (vsync) anyway");
     return vk::PresentModeKHR::eFifo;
 }
 

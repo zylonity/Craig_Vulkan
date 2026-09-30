@@ -120,6 +120,7 @@ void Craig::Renderer::InitImgui() {
     ImGui_ImplVulkan_Init(&init_info);
     createImGuiPipeline();
 
+    Craig::Logger::renderer().info("ImGui {} up (SDL3 + Vulkan backends, docking on)", ImGui::GetVersion());
 }
 
 // imgui draws in the scene's pass now, so its pipeline needs the same formats + MSAA as that pass
@@ -134,6 +135,7 @@ void Craig::Renderer::createImGuiPipeline() {
     pipelineInfo.MSAASamples = static_cast<VkSampleCountFlagBits>(m_renderingAttachments.m_VK_msaaSamples);
 
     ImGui_ImplVulkan_CreateMainPipeline(&pipelineInfo);
+    Craig::Logger::renderer().debug("ImGui pipeline made with {} MSAA", vk::to_string(m_renderingAttachments.m_VK_msaaSamples));
 }
 #endif
 
@@ -237,6 +239,8 @@ CraigError Craig::Renderer::initSceneResources() {
     Craig::ImguiEditor::getInstance().setCamera(&mp_SceneManager->getCurrentScene()->getCamera());
 #endif
 
+    Craig::Logger::renderer().info("Scene resources ready (sampler, buffers, UBOs, descriptor sets)");
+
     return ret;
 }
 
@@ -245,8 +249,11 @@ void Craig::Renderer::recreateSwapChain() {
     m_swapChain.setSwapExtent();
 
     if (m_swapChain.getExtent().width <= 0 || m_swapChain.getExtent().height <= 0) {
+        Craig::Logger::renderer().trace("Window's 0 size (minimised?), not recreating the swapchain yet");
         return; // Skip this frame
     }
+
+    Craig::Logger::renderer().debug("Recreating the swapchain (resized or out of date)");
 
     m_Devices.getLogicalDevice().waitIdle();
 
@@ -264,9 +271,11 @@ void Craig::Renderer::recreateSwapChainFull() {
     m_swapChain.setSwapExtent();
 
     if (m_swapChain.getExtent().width <= 0 || m_swapChain.getExtent().height <= 0) {
+        Craig::Logger::renderer().trace("Window's 0 size (minimised?), not recreating the swapchain yet");
         return; // Skip this frame
     }
 
+    Craig::Logger::renderer().debug("Recreating the swapchain and pipelines");
 
     m_Devices.getLogicalDevice().waitIdle();
 
@@ -291,6 +300,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
     vk::CommandBufferBeginInfo beginInfo{};
 
     if (commandBuffer.begin(&beginInfo) != vk::Result::eSuccess) {
+        Craig::Logger::renderer().critical("Failed to begin recording the command buffer");
         throw std::runtime_error("failed to begin recording command buffer!");
     }
 
@@ -432,6 +442,7 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
         commandBuffer.end();
     }
     catch (const vk::SystemError& err) {
+        Craig::Logger::renderer().critical("Failed to record the command buffer: {}", err.what());
         throw std::runtime_error("failed to record command buffer!");
     }
 
@@ -508,10 +519,12 @@ void Craig::Renderer::createVertexBuffer() {
     }
 
     if (totalVertexCount == 0) {
+        Craig::Logger::renderer().debug("No vertices in the scene, skipping the vertex buffer");
         return;
     }
 
     vk::DeviceSize bufferSize = sizeof(Craig::Vertex) * totalVertexCount;
+    Craig::Logger::renderer().debug("Vertex buffer: {} vertices ({:.2f} MB)", totalVertexCount, bufferSize / (1024.0 * 1024.0));
 
     vk::Buffer stagingBuffer{};
     VmaAllocation stagingAlloc{};
@@ -585,10 +598,12 @@ void Craig::Renderer::createIndexBuffer() {
     }
 
     if (totalIndexCount == 0) {
+        Craig::Logger::renderer().debug("No indices in the scene, skipping the index buffer");
         return;
     }
 
     vk::DeviceSize bufferSize = sizeof(uint32_t) * totalIndexCount;
+    Craig::Logger::renderer().debug("Index buffer: {} indices ({:.2f} MB)", totalIndexCount, bufferSize / (1024.0 * 1024.0));
 
     vk::Buffer stagingBuffer{};
     VmaAllocation stagingAlloc{};
@@ -643,6 +658,8 @@ void Craig::Renderer::createIndexBuffer() {
 
 // TODO: sub-allocate instead of full rebuild
 void Craig::Renderer::rebuildGeometryBuffers() {
+
+    Craig::Logger::renderer().debug("Scene geometry changed, rebuilding the vertex and index buffers");
 
     // GPU might still be drawing with the old buffers
     m_Devices.getLogicalDevice().waitIdle();
@@ -919,10 +936,12 @@ void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, i
     vk::DeviceSize imageSize = texWidth * texHeight * 4;
 
     if (!pixels) {
+        Craig::Logger::renderer().critical("Tried to make a texture with no pixels");
         throw std::runtime_error("failed to load texture image!");
     }
 
     outTexture->m_VK_mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+    Craig::Logger::renderer().debug("Uploading a {} x {} texture ({} mips)", texWidth, texHeight, outTexture->m_VK_mipLevels);
 
     vk::Buffer stagingBuffer;
     VmaAllocation stagingAlloc{};
@@ -988,6 +1007,7 @@ void Craig::Renderer::createTextureSampler() {
         .setMipLodBias(0.0f);
 
     m_VK_textureSampler = m_Devices.getLogicalDevice().createSampler(samplerInfo);
+    Craig::Logger::renderer().debug("Texture sampler made ({}x anisotropy, min LOD {})", physicalDeviceProperties.limits.maxSamplerAnisotropy, m_minLODLevel);
 
 
 
@@ -1021,8 +1041,10 @@ void Craig::Renderer::updateSamplingLevel(int levelToSet) {
         break;
 
     default:
+        Craig::Logger::renderer().warn("{}x isn't a valid MSAA level, keeping {}", levelToSet, vk::to_string(m_renderingAttachments.m_VK_msaaSamples));
         break;
     }
+    Craig::Logger::renderer().info("MSAA set to {}", vk::to_string(m_renderingAttachments.m_VK_msaaSamples));
     recreateSwapChainFull();
 
 }
@@ -1057,6 +1079,7 @@ CraigError Craig::Renderer::loadScene(const std::string& scenePath)
     ret = mp_SceneManager->loadScene(scenePath);
     if (ret != CRAIG_SUCCESS)
     {
+        Craig::Logger::renderer().error("Couldn't switch to {}, keeping the current scene", scenePath);
         return ret;
     }
 
@@ -1080,7 +1103,7 @@ void Craig::Renderer::updateMinLOD(int minLOD) {
     createTextureSampler();
     updateDescriptorSets();
 
-    Craig::Logger::renderer().info("Recreated sampler and updated the descriptor sets to change the LOD");
+    Craig::Logger::renderer().info("Min LOD set to {}, recreated the sampler and updated the descriptor sets", minLOD);
 }
 
 void Craig::Renderer::drawFrame(const float& deltaTime) {
@@ -1107,6 +1130,7 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         return;
     }
     else if (nextImageResult != VK_SUCCESS && nextImageResult != VK_SUBOPTIMAL_KHR) {
+        Craig::Logger::renderer().critical("Failed to acquire a swapchain image: {}", vk::to_string(vk::Result(nextImageResult)));
         throw std::runtime_error("failed to acquire swap chain image!");
     }
 
@@ -1150,6 +1174,7 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
         mp_CurrentWindow->finishedResize();
     }
     else if (presentResult != VK_SUCCESS) {
+        Craig::Logger::renderer().critical("Failed to present: {}", vk::to_string(vk::Result(presentResult)));
         throw std::runtime_error("failed to present swap chain image!");
     }
 
@@ -1206,6 +1231,8 @@ CraigError Craig::Renderer::terminate() {
     m_Devices.terminate();
 
     m_instance.terminate();
+
+    Craig::Logger::renderer().info("Renderer shut down");
 
     return ret;
 }

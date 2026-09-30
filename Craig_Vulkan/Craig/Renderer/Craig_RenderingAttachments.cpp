@@ -1,5 +1,6 @@
 #include "Craig_RenderingAttachments.hpp"
 #include "Craig_ImageHelpers.hpp"
+#include "Craig/Craig_Logger.hpp"
 
 CraigError Craig::RenderingAttachments::init(const RenderingAttachmentsInitInfo& info) {
 
@@ -11,6 +12,8 @@ CraigError Craig::RenderingAttachments::init(const RenderingAttachmentsInitInfo&
 	mRA_memoryAllocator = info.memoryAllocator;
 
 	m_VK_msaaSamples = getMaxUsableSampleCount();
+	Craig::Logger::renderer().info("Max MSAA this GPU can do: {}, starting on that", vk::to_string(m_VK_msaaSamples));
+	Craig::Logger::renderer().info("Depth format: {}", vk::to_string(findDepthFormat()));
 
 	return ret;
 }
@@ -42,6 +45,7 @@ vk::Format Craig::RenderingAttachments::findSupportedFormat(const std::vector<vk
 			return format;
 	}
 
+	Craig::Logger::renderer().critical("None of the depth formats we asked for are supported");
 	throw std::runtime_error("no supported depth format found");
 }
 

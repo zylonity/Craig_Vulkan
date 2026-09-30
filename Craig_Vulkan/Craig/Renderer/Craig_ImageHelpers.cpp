@@ -1,6 +1,7 @@
 #include "Craig_ImageHelpers.hpp"
 #include "Craig_Device.hpp"
 #include "Craig_CommandManager.hpp"
+#include "Craig/Craig_Logger.hpp"
 
 vk::ImageView Craig::ImageHelpers::createImageView(vk::Device device, vk::Image image, vk::Format format, vk::ImageAspectFlags aspectFlags, uint32_t mipLevels) {
 	vk::ImageViewCreateInfo createInfo{};
@@ -27,6 +28,7 @@ vk::ImageView Craig::ImageHelpers::createImageView(vk::Device device, vk::Image 
 		imageView = device.createImageView(createInfo);
 	}
 	catch (const vk::SystemError& err) {
+		Craig::Logger::renderer().critical("Failed to create a {} image view: {}", vk::to_string(format), err.what());
 		throw std::runtime_error("failed to create image views!");
 	}
 
@@ -74,8 +76,10 @@ vk::Image Craig::ImageHelpers::createImage(vk::PhysicalDevice physicalDevice, vk
     VkImage tempImage;
     VkResult result = vmaCreateImage(allocator, imageInfo, &aci, &tempImage, &allocation, nullptr);
 
-    if (result != VK_SUCCESS)
+    if (result != VK_SUCCESS) {
+        Craig::Logger::renderer().critical("vmaCreateImage failed for a {} x {} {} image: {}", width, height, vk::to_string(format), vk::to_string(vk::Result(result)));
         throw std::runtime_error("vmaCreateImage failed");
+    }
 
     return tempImage;
 
@@ -120,6 +124,7 @@ void Craig::ImageHelpers::transitionImageLayout(Craig::CommandManager& commandMa
             .setDstAccessMask(vk::AccessFlagBits2::eShaderRead);
     }
     else {
+        Craig::Logger::renderer().critical("No barrier set up for {} -> {}, add it to transitionImageLayout", vk::to_string(oldLayout), vk::to_string(newLayout));
         throw std::invalid_argument("unsupported layout transition!");
     }
 
@@ -185,6 +190,7 @@ void Craig::ImageHelpers::transitionSwapImage(vk::CommandBuffer cmd, vk::Image i
     }
     else
     {
+        Craig::Logger::renderer().critical("No barrier set up for {} -> {}, add it to transitionSwapImage", vk::to_string(oldLayout), vk::to_string(newLayout));
         throw std::runtime_error("unsupported swapchain layout transition");
     }
 

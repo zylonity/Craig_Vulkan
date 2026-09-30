@@ -211,12 +211,14 @@ static Craig::SubMesh* loadPrimitive(const tinygltf::Model& input, const tinyglt
     //INDICES STUFF
     if (prim.indices < 0) {
         // you *can* support non-indexed later, skip for now
+        Craig::Logger::resources().warn("Skipping a primitive with no indices, non-indexed meshes aren't supported yet");
         return nullptr;
     }
 
     //POSITION STUFF
     auto itPos = prim.attributes.find("POSITION");
     if (itPos == prim.attributes.end()) {
+        Craig::Logger::resources().warn("Skipping a primitive with no positions");
         return nullptr; // no positions mean we can skip the primitive
     }
 
@@ -345,8 +347,11 @@ bool Craig::ResourceManager::loadModel(std::string modelPath) {
     // same glb), don't re-upload it. Doing so leaks the GPU texture and SubMesh
     // pointers because unordered_map::insert silently drops the duplicate key.
     if (m_loadedModels.find(modelPath) != m_loadedModels.end()) {
+        Craig::Logger::resources().debug("{} is already loaded, reusing it", modelPath);
         return false;
     }
+
+    const spdlog::stopwatch loadTimer;
 
     tinygltf::Model model;
     tinygltf::TinyGLTF loader;
@@ -365,9 +370,7 @@ bool Craig::ResourceManager::loadModel(std::string modelPath) {
         Craig::Logger::resources().critical("Couldn't load {}, bailing out", modelPath);
         exit(CRAIG_FAIL);
     }
-    else {
-        Craig::Logger::resources().info("Loaded {}", modelPath);
-    }
+    Craig::Logger::resources().debug("Parsed {} in {:.1f} ms, uploading it", modelPath, loadTimer.elapsed().count() * 1000.0);
 
     // Insert first and fill it in place, saves copying all the vectors after
     Craig::Model& newModel = m_loadedModels[modelPath];
@@ -390,10 +393,23 @@ bool Craig::ResourceManager::loadModel(std::string modelPath) {
 
     newModel.subMeshesCount = (uint32_t)newModel.subMeshes.size();
 
+    size_t vertexCount = 0;
+    size_t indexCount = 0;
+    for (const Craig::SubMesh* subMesh : newModel.subMeshes) {
+        vertexCount += subMesh->m_vertices.size();
+        indexCount += subMesh->m_indices.size();
+    }
+
+    // images has the white fallback on the end, so one less
+    Craig::Logger::resources().info("Loaded {}: {} submeshes, {} vertices, {} triangles, {} textures, {} materials in {:.1f} ms",
+        modelPath, newModel.subMeshesCount, vertexCount, indexCount / 3, newModel.images.size() - 1, newModel.materials.size(), loadTimer.elapsed().count() * 1000.0);
+
     return true;
 }
 
 void Craig::ResourceManager::terminateModels(const vk::Device& device, const VmaAllocator& memoryAllocator) {
+
+    Craig::Logger::resources().debug("Freeing {} model(s)", m_loadedModels.size());
 
     for (auto& modelPair : m_loadedModels)
     {

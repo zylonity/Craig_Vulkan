@@ -44,9 +44,20 @@ CraigError Craig::Instance::init(const InstanceInitInfo& info) {
 
 	m_VK_instance = vk::createInstance(m_VK_instInfo); //Now that we have the instance created, we can initialize Vulkan
 
+	Craig::Logger::renderer().info("Vulkan instance created (API {}.{})", VK_API_VERSION_MAJOR(VK_API_VERSION_1_4), VK_API_VERSION_MINOR(VK_API_VERSION_1_4));
+	for (const char* layer : mv_ITNC_Layers) {
+		Craig::Logger::renderer().info("Layer on: {}", layer);
+	}
+	for (const char* extension : mp_CurrentWindow->getExtensionsVector()) {
+		Craig::Logger::renderer().debug("Instance extension on: {}", extension);
+	}
+
 	// Create a Vulkan surface for rendering
 	VkSurfaceKHR cSurface; // Vulkan surface for rendering
 	bool sdlRetBool = SDL_Vulkan_CreateSurface(mp_CurrentWindow->getSDLWindow(), static_cast<VkInstance>(m_VK_instance), nullptr, &cSurface);
+	if (!sdlRetBool) {
+		Craig::Logger::renderer().critical("SDL_Vulkan_CreateSurface failed: {}", SDL_GetError());
+	}
 	assert(sdlRetBool && "Could not create a Vulkan surface.");
 
 	m_VK_surface = vk::SurfaceKHR(cSurface);
@@ -115,8 +126,11 @@ void Craig::Instance::setupDebugMessenger() {
 	// If the function was loaded successfully, call it to create the messenger
 	if (!func || func(static_cast<VkInstance>(m_VK_instance), &createInfo, nullptr,
 		reinterpret_cast<VkDebugUtilsMessengerEXT*>(&m_VK_debugMessenger)) != VK_SUCCESS) {
+		Craig::Logger::renderer().critical("Failed to set up the debug messenger, is VK_EXT_debug_utils on?");
 		throw std::runtime_error("failed to set up debug messenger!");
 		}
+
+	Craig::Logger::renderer().debug("Debug messenger set up, validation messages go to the Vulkan logger");
 }
 
 CraigError Craig::Instance::terminate() {
@@ -140,6 +154,7 @@ CraigError Craig::Instance::terminate() {
 #endif
 
 	m_VK_instance.destroy();
+	Craig::Logger::renderer().debug("Vulkan instance destroyed");
 
 	return ret;
 }

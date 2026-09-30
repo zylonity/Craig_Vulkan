@@ -2,6 +2,7 @@
 #include "Craig/Craig_GameObject.hpp"
 #include "Craig/Craig_ResourceManager.hpp"
 #include "Craig/Craig_Scene.hpp"
+#include "Craig/Craig_Logger.hpp"
 #include "imgui.h"
 #include "imgui_stdlib.h"
 
@@ -58,18 +59,21 @@ CraigError Craig::Components::Model::setModelPath(const std::string& modelPath) 
 	{
 		if (!std::filesystem::exists(modelPath))
 		{
+			Craig::Logger::resources().warn("'{}' can't use {}, the file doesn't exist", mp_owner->getName(), modelPath);
 			return CRAIG_FILE_NOT_FOUND;
 		}
 
 		// ResourceManager only does binary glTF and just exits the whole damn app if it fails, so catch it here
 		if (std::filesystem::path(modelPath).extension() != ".glb")
 		{
+			Craig::Logger::resources().warn("'{}' can't use {}, only .glb models work", mp_owner->getName(), modelPath);
 			return CRAIG_FAIL;
 		}
 
 		Craig::ResourceManager::getInstance().loadModel(modelPath);
 	}
 
+	Craig::Logger::resources().debug("'{}' model: {}", mp_owner->getName(), modelPath.empty() ? "(none)" : modelPath);
 	m_modelPath = modelPath;
 	markSceneGeometryDirty();
 

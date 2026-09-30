@@ -97,6 +97,8 @@ bool Craig::Components::ConvexCollider::refreshHull() {
 	}
 	mv_hullEdges.assign(edges.begin(), edges.end());
 
+	Craig::Logger::physics().debug("Convex hull for {}: {} model points down to {} hull points, {} faces", modelPath, modelPoints.size(), mv_hullPoints.size(), pHull->GetNumFaces());
+
 	return true;
 }
 

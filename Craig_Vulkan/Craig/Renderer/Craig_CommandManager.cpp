@@ -1,6 +1,7 @@
 #include "Craig_CommandManager.hpp"
 
 #include "Craig_Device.hpp"
+#include "Craig/Craig_Logger.hpp"
 
 CraigError Craig::CommandManager::init(const CommandManagerInitInfo& info) {
 
@@ -11,6 +12,8 @@ CraigError Craig::CommandManager::init(const CommandManagerInitInfo& info) {
 
 	createCommandPool();
 	createCommandBuffers();
+
+	Craig::Logger::renderer().debug("Command pools and {} command buffers ready", mv_VK_commandBuffers.size());
 
 
 
@@ -56,6 +59,7 @@ void Craig::CommandManager::createCommandBuffers() {
 		mv_VK_commandBuffers = mp_Device->getLogicalDevice().allocateCommandBuffers(allocInfo);
 	}
 	catch (const vk::SystemError& err) {
+		Craig::Logger::renderer().critical("Failed to allocate command buffers: {}", err.what());
 		throw std::runtime_error("failed to allocate command buffers!");
 	}
 

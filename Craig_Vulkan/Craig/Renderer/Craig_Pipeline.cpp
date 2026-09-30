@@ -1,4 +1,5 @@
 #include "Craig_Pipeline.hpp"
+#include "Craig/Craig_Logger.hpp"
 
 CraigError Craig::Pipeline::init(const PipelineInitInfo& info) {
 
@@ -130,6 +131,7 @@ void Craig::Pipeline::createGraphicsPipeline() {
         m_VK_pipelineLayout = mPipe_device.createPipelineLayout(pipelineLayoutInfo);
     }
     catch (const vk::SystemError& err) {
+        Craig::Logger::renderer().critical("Failed to create the pipeline layout: {}", err.what());
         throw std::runtime_error("failed to createPipelineLayout!");
     }
 
@@ -163,9 +165,12 @@ void Craig::Pipeline::createGraphicsPipeline() {
     auto result = mPipe_device.createGraphicsPipeline(VK_NULL_HANDLE, pipelineInfo);
 
     if (result.result != vk::Result::eSuccess) {
+        Craig::Logger::renderer().critical("Failed to create the graphics pipeline: {}", vk::to_string(result.result));
         throw std::runtime_error("Failed to create graphics pipeline!");
     }
     m_VK_graphicsPipeline = result.value;
+
+    Craig::Logger::renderer().info("Graphics pipeline made ({} colour, {} depth, {} MSAA)", vk::to_string(mPipe_colorFormat), vk::to_string(mPipe_depthFormat), vk::to_string(*mPipe_msaaSamples));
 
 
 }
@@ -265,6 +270,7 @@ CraigError Craig::Pipeline::terminate() {
 
 void Craig::Pipeline::recreate()
 {
+    Craig::Logger::renderer().debug("Recreating the graphics pipeline");
     cleanupGraphicsPipeline();
     createGraphicsPipeline();
 }

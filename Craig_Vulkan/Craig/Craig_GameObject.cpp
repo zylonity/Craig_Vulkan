@@ -6,6 +6,7 @@
 
 #include "Craig_GameObject.hpp"
 #include "Craig_Scene.hpp"
+#include "Craig_Logger.hpp"
 #include "Components/Craig_Model.hpp"
 #include "Components/Craig_Sun.hpp"
 #include "Craig_Utilities.hpp"
@@ -105,6 +106,7 @@ void Craig::GameObject::displayImGuiAttributes()
 		// Game object requires a name.
 		if (tempName.empty())
 		{
+			Craig::Logger::scene().warn("Can't rename '{}' to nothing", m_name);
 			ImGui::TextColored({ 1.0f, 0.f, 0.f, 1.0f }, "Name cannot be empty");
 			tempName = m_name; // Revert
 		}
@@ -114,12 +116,17 @@ void Craig::GameObject::displayImGuiAttributes()
 			const GameObject* pGameObject = mp_scene->findObject(tempName);
 			if (pGameObject != nullptr && pGameObject != this)
 			{
+				Craig::Logger::scene().warn("Can't rename '{}' to '{}', that name's taken", m_name, tempName);
 				ImGui::TextColored({ 1.0f, 0.f, 0.f, 1.0f }, "Game object already exists with that name.");
 				tempName = m_name; // Revert
 			}
 			// Name has passed validation so update it.
 			else
 			{
+				if (tempName != m_name)
+				{
+					Craig::Logger::scene().info("Renamed '{}' to '{}'", m_name, tempName);
+				}
 				m_name = tempName;
 				// Update the game object list by sorting into alphabetical order.
 				Utilities::sortGameObjectsByName(mp_scene->getGameObjects());
@@ -165,8 +172,12 @@ void Craig::GameObject::displayComponents()
 
 	if (pComponentToRemove != nullptr)
 	{
+		Craig::Logger::scene().info("Removed {} from '{}'", pComponentToRemove->getTypeName(), m_name);
 		removeComponent(pComponentToRemove);
 	}
+
+	// whatever gets picked lands on the end, so this catches them all in one place
+	const size_t componentCountBefore = mv_components.size();
 
 	if (ImGui::Button("Add Component"))
 	{
@@ -219,6 +230,11 @@ void Craig::GameObject::displayComponents()
 		}
 
 		ImGui::EndPopup();
+	}
+
+	if (mv_components.size() > componentCountBefore)
+	{
+		Craig::Logger::scene().info("Added {} to '{}'", mv_components.back()->getTypeName(), m_name);
 	}
 }
 

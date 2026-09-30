@@ -1,6 +1,7 @@
 #include "Craig_SyncManager.hpp"
 
 #include "Craig_Device.hpp"
+#include "Craig/Craig_Logger.hpp"
 
 #include <cassert>
 
@@ -12,6 +13,8 @@ CraigError Craig::SyncManager::init(const SyncManagerInitInfo& info) {
 	m_SM_swapChainImageCount = info.swapChainImageCount;
 
 	createSyncObjects();
+
+	Craig::Logger::renderer().debug("Sync objects ready: 1 timeline semaphore, {} image available and {} render finished semaphores", kMaxFramesInFlight, m_SM_swapChainImageCount);
 
 	return ret;
 }

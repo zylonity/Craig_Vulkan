@@ -9,12 +9,16 @@
 #include "Components/Craig_ConvexCollider.hpp"
 #include "Components/Craig_RigidBody.hpp"
 #include "../External/json.hpp"
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 
 CraigError Craig::Scene::init(const std::string& scenePath, Craig::PhysicsEngine* pPhysicsEngine) {
 
 	CraigError ret = CRAIG_SUCCESS;
+
+	const spdlog::stopwatch loadTimer;
+	Craig::Logger::scene().info("Loading scene {}", scenePath);
 
 	// set before anything loads so components can reach it
 	mp_physicsEngine = pPhysicsEngine;
@@ -62,6 +66,7 @@ CraigError Craig::Scene::init(const std::string& scenePath, Craig::PhysicsEngine
 		mpv_Gameobjects.push_back(pObject);
 
 		loadComponentsFromJson(pObject, objectJson.value("components", nlohmann::json::object()));
+		Craig::Logger::scene().debug("Loaded '{}' with {} component(s)", objectName, pObject->getComponents().size());
 	}
 
 	// Sort the editor game object list by alphabetical order.
@@ -69,6 +74,11 @@ CraigError Craig::Scene::init(const std::string& scenePath, Craig::PhysicsEngine
 
 	// whoever loads the scene builds the buffers for it, so nothing's dirty yet
 	m_geometryDirty = false;
+
+	Craig::Logger::scene().info("Loaded scene '{}': {} game objects in {:.1f} ms", m_name, mpv_Gameobjects.size(), loadTimer.elapsed().count() * 1000.0);
+	if (getSun() == nullptr) {
+		Craig::Logger::scene().warn("'{}' has no sun, it's going to be pretty dark", m_name);
+	}
 
 	return ret;
 }
@@ -142,6 +152,8 @@ CraigError Craig::Scene::save() {
 		return CRAIG_FAIL;
 	}
 
+	Craig::Logger::scene().info("Saved scene '{}' to {} ({} game objects)", m_name, scenePath.string(), mpv_Gameobjects.size());
+
 	return ret;
 }
 
@@ -172,6 +184,16 @@ static void loadMultipleComponentsFromJson(Craig::GameObject* pObject, const nlo
 // Components are keyed by type, e.g. "components": { "model": { "path": "..." }, "sun": { ... }, "boxCollider": [ { ... }, { ... } ] }
 void Craig::Scene::loadComponentsFromJson(Craig::GameObject* pObject, const nlohmann::json& componentsJson)
 {
+	// typos in the json used to just get ignored, now you'll hear about it
+	constexpr const char* kKnownComponentKeys[] = { "model", "sun", "boxCollider", "sphereCollider", "capsuleCollider", "convexCollider", "rigidBody" };
+	for (const auto& [key, value] : componentsJson.items())
+	{
+		if (std::find(std::begin(kKnownComponentKeys), std::end(kKnownComponentKeys), key) == std::end(kKnownComponentKeys))
+		{
+			Craig::Logger::scene().warn("Unknown component '{}' on '{}' in {}, ignoring it", key, pObject->getName(), m_scenePath);
+		}
+	}
+
 	if (componentsJson.contains("model"))
 	{
 		Components::Model* pModel = pObject->addComponent<Components::Model>();
@@ -237,6 +259,8 @@ void Craig::Scene::deleteGameObject(GameObject* const pObject)
 {
 	assert(pObject != nullptr);
 
+	Craig::Logger::scene().info("Deleted game object '{}'", pObject->getName());
+
 	// Clean up the object's resouces
 	pObject->terminate();
 
@@ -258,12 +282,14 @@ CraigError Craig::Scene::newGameObject(std::string objectName, std::string model
 	// Check to see if name has been provided.
 	if (objectName.empty())
 	{
+		Craig::Logger::scene().warn("Can't make a game object with no name");
 		return CRAIG_NO_NAME;
 	}
 
 	// Check to see if name is already in use.
 	if (findObject(objectName) != nullptr)
 	{
+		Craig::Logger::scene().warn("There's already a game object called '{}'", objectName);
 		return CRAIG_DUPLICATE_NAME;
 	}
 
@@ -277,6 +303,7 @@ CraigError Craig::Scene::newGameObject(std::string objectName, std::string model
 		ret = tempObject->addComponent<Components::Model>()->setModelPath(modelPath);
 		if (ret != CRAIG_SUCCESS)
 		{
+			Craig::Logger::scene().error("Couldn't give '{}' the model {}, not making it", objectName, modelPath);
 			tempObject->terminate();
 			delete tempObject;
 			return ret;
@@ -285,6 +312,8 @@ CraigError Craig::Scene::newGameObject(std::string objectName, std::string model
 
 	tempObject->setPosition(position);
 	mpv_Gameobjects.push_back(tempObject);
+
+	Craig::Logger::scene().info("New game object '{}'{} at ({:.2f}, {:.2f}, {:.2f})", objectName, modelPath.empty() ? "" : " with " + modelPath, position.x, position.y, position.z);
 
 	// Sort the editor game object list by alphabetical order.
 	Utilities::sortGameObjectsByName(mpv_Gameobjects);
@@ -306,6 +335,8 @@ CraigError Craig::Scene::update(const float& deltaTime) {
 CraigError Craig::Scene::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
+
+	Craig::Logger::scene().debug("Unloading scene '{}' ({} game objects)", m_name, mpv_Gameobjects.size());
 
 	for (size_t i = 0; i < mpv_Gameobjects.size(); i++)
 	{

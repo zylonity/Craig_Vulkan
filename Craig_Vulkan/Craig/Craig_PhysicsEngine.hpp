@@ -108,6 +108,7 @@ namespace Craig {
 		// fixed rate, frame time goes into the accumulator and gets eaten in m_fixedTimeStep chunks
 		float m_fixedTimeStep = 1.0f / 60.0f;
 		float m_timeAccumulator = 0.0f;
+		bool m_droppedTimeWarned = false; // only warn the first time, after that it's debug so it doesn't flood the log
 	};
 
 }

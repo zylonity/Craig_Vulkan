@@ -18,6 +18,8 @@ CraigError Craig::Device::init(DeviceInitInfo& initInfo) {
     createLogicalDevice();
     initVMA();
 
+    Craig::Logger::renderer().info("Device ready");
+
 	return ret;
 }
 
@@ -78,11 +80,15 @@ void Craig::Device::pickPhysicalDevice() {
 
     auto devices = m_DVC_instance.enumeratePhysicalDevices();
     if (devices.empty()) {
+        Craig::Logger::renderer().critical("No Vulkan-compatible GPUs found, check your drivers");
         throw std::runtime_error("No Vulkan-compatible GPUs found.");
     }
 
+    Craig::Logger::renderer().info("Found {} GPU(s), checking which ones work", devices.size());
+
     for (const auto& device : devices) {
         if (!isDeviceSuitable(device)) {
+            Craig::Logger::renderer().info("Skipping {}, it's missing something we need (see the debug lines above)", device.getProperties().deviceName.data());
             continue;
         }
 
@@ -101,11 +107,15 @@ void Craig::Device::pickPhysicalDevice() {
 
     if (m_VK_physicalDevice) {
         const auto props = m_VK_physicalDevice.getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDriverProperties>();
-        Craig::Logger::renderer().info("Found GPU: {} (driver: {})",
-            props.get<vk::PhysicalDeviceProperties2>().properties.deviceName.data(),
-            props.get<vk::PhysicalDeviceDriverProperties>().driverName.data());
+        const vk::PhysicalDeviceProperties& properties = props.get<vk::PhysicalDeviceProperties2>().properties;
+        Craig::Logger::renderer().info("Using GPU: {} ({}, driver: {}, Vulkan {}.{}.{})",
+            properties.deviceName.data(),
+            vk::to_string(properties.deviceType),
+            props.get<vk::PhysicalDeviceDriverProperties>().driverName.data(),
+            VK_API_VERSION_MAJOR(properties.apiVersion), VK_API_VERSION_MINOR(properties.apiVersion), VK_API_VERSION_PATCH(properties.apiVersion));
     }
     else {
+        Craig::Logger::renderer().critical("None of the GPUs have what we need (graphics + present queues, swapchain support and the device extensions)");
         throw std::runtime_error("failed to find a suitable GPU!");
     }
 
@@ -122,10 +132,12 @@ bool Craig::Device::isDeviceSuitable(const vk::PhysicalDevice& device) {
         swapChainAdequate = Swapchain::isSwapChainAdequate(device, m_DVC_surface);
     }
 
-    Craig::Logger::renderer().debug("Found graphics and presentation indices: {}", indices.isComplete());
-    Craig::Logger::renderer().debug("Found dedicated transfer index: {}", indices.hasDedicatedTransfer());
-    Craig::Logger::renderer().debug("Extensions (Like swapchain/double buffers) are supported: {}", extensionsSupported);
-    Craig::Logger::renderer().debug("The swapchain extension is adequate for our use: {}", swapChainAdequate);
+    const vk::PhysicalDeviceProperties properties = device.getProperties();
+    Craig::Logger::renderer().debug("Checking {} ({})", properties.deviceName.data(), vk::to_string(properties.deviceType));
+    Craig::Logger::renderer().debug("  Found graphics and presentation indices: {}", indices.isComplete());
+    Craig::Logger::renderer().debug("  Found dedicated transfer index: {}", indices.hasDedicatedTransfer());
+    Craig::Logger::renderer().debug("  Extensions (Like swapchain/double buffers) are supported: {}", extensionsSupported);
+    Craig::Logger::renderer().debug("  The swapchain extension is adequate for our use: {}", swapChainAdequate);
 
     return indices.isComplete() && extensionsSupported && swapChainAdequate;
 }
@@ -141,6 +153,11 @@ bool Craig::Device::checkDeviceExtensionSupport(const vk::PhysicalDevice& device
 
     for (const auto& extension : availableExtensions) {
         requiredExtensions.erase(extension.extensionName);
+    }
+
+    // whatever's left over is missing
+    for (const std::string& missingExtension : requiredExtensions) {
+        Craig::Logger::renderer().debug("  {} doesn't have {}", device.getProperties().deviceName.data(), missingExtension);
     }
 
     return requiredExtensions.empty();
@@ -201,8 +218,16 @@ void Craig::Device::createLogicalDevice() {
         .setPEnabledExtensionNames(enabledExtensions)
         .setPNext(&timelineFeatures);
 
+    for (const char* extension : enabledExtensions) {
+        Craig::Logger::renderer().debug("Device extension on: {}", extension);
+    }
+
     // Create the logical device for the selected physical device
     m_VK_logicalDevice = m_VK_physicalDevice.createDevice(createInfo);
+
+    Craig::Logger::renderer().info("Queue families: graphics {}, present {}, transfer {}{}",
+        indices.graphicsFamily.value(), indices.presentFamily.value(), indices.transferFamily.value(),
+        indices.hasDedicatedTransfer() ? " (dedicated)" : " (shared with graphics)");
 
     // Retrieve the queue handles for rendering and presentation
     m_VK_graphicsQueue = m_VK_logicalDevice.getQueue(indices.graphicsFamily.value(), 0);
@@ -232,7 +257,12 @@ void Craig::Device::initVMA() {
     vmaCreateInfo.pVulkanFunctions = &vmaFunctions;
 
     VkResult r = vmaCreateAllocator(&vmaCreateInfo, &m_VMA_allocator);
-    if (r != VK_SUCCESS) throw std::runtime_error("vmaCreateAllocator failed");
+    if (r != VK_SUCCESS) {
+        Craig::Logger::renderer().critical("vmaCreateAllocator failed: {}", vk::to_string(vk::Result(r)));
+        throw std::runtime_error("vmaCreateAllocator failed");
+    }
+
+    Craig::Logger::renderer().debug("VMA allocator ready");
 
 }
 
@@ -258,7 +288,11 @@ void Craig::Device::createBufferVMA(
     }
 
     VkBuffer raw{};
-    vmaCreateBuffer(m_VMA_allocator, &bi, &aci, &raw, &alloc, outInfo);
+    // this used to fail silently and hand back a null buffer, fuck that
+    const VkResult result = vmaCreateBuffer(m_VMA_allocator, &bi, &aci, &raw, &alloc, outInfo);
+    if (result != VK_SUCCESS) {
+        Craig::Logger::renderer().error("vmaCreateBuffer failed for a {} byte buffer: {}", size, vk::to_string(vk::Result(result)));
+    }
     buffer = vk::Buffer(raw);
 }
 
@@ -268,6 +302,7 @@ CraigError Craig::Device::terminate() {
 
     vmaDestroyAllocator(m_VMA_allocator);
     m_VK_logicalDevice.destroy();
+    Craig::Logger::renderer().debug("Device and VMA destroyed");
 
 	return ret;
 }

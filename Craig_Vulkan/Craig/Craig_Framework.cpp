@@ -15,6 +15,13 @@
 
 #include <chrono>
 
+// asserts vanish in release, this way a failure still ends up in the log
+static void logIfFailed(CraigError ret, const char* what) {
+	if (ret != CRAIG_SUCCESS) {
+		Craig::Logger::engine().critical("{} failed (CraigError {})", what, static_cast<int>(ret));
+	}
+}
+
 CraigError Craig::Framework::init() {
 
 	CraigError ret = CRAIG_SUCCESS;
@@ -22,6 +29,19 @@ CraigError Craig::Framework::init() {
 	// Logger goes first so everything after it (validation layers included) ends up in the log
 	// not asserted, if the file won't open it still logs to the console and editor
 	Craig::Logger::getInstance().init();
+
+	const spdlog::stopwatch startupTimer;
+#if defined(_DEBUG)
+	constexpr const char* kBuildType = "debug";
+#else
+	constexpr const char* kBuildType = "release";
+#endif
+#if defined(IMGUI_ENABLED)
+	constexpr const char* kImguiState = "on";
+#else
+	constexpr const char* kImguiState = "off";
+#endif
+	Craig::Logger::engine().info("Starting Craig ({} build, ImGui {})", kBuildType, kImguiState);
 
 	//Create our objects and get the pointers we need to initialise later
 	mp_Window = new Craig::Window;
@@ -37,6 +57,7 @@ CraigError Craig::Framework::init() {
 
 	//Initialise the objects
 	ret = mp_Window->init();
+	logIfFailed(ret, "Window init");
 	assert(ret == CRAIG_SUCCESS);
 
 	Craig::ImguiEditor::getInstance().setRenderer(mp_Renderer);
@@ -45,20 +66,25 @@ CraigError Craig::Framework::init() {
 	Craig::ResourceManager::getInstance().init(mp_Renderer); // Initialize the Resource Manager Singleton, this needs to be done before the renderer
 
 	ret = mp_Renderer->init(mp_Window, mp_SceneManager);
+	logIfFailed(ret, "Renderer init");
 	assert(ret == CRAIG_SUCCESS);
 
 	// before the scene manager so the scenes get a ready physics engine
 	ret = mp_PhysicsEngine->init();
+	logIfFailed(ret, "Physics init");
 	assert(ret == CRAIG_SUCCESS);
 
 	// Has to be between the renderer's two inits, loading the scene's models needs the device
 	// and the renderer's buffers need the scene's models
 	ret = mp_SceneManager->init(mp_PhysicsEngine);
+	logIfFailed(ret, "Scene manager init");
 	assert(ret == CRAIG_SUCCESS);
 
 	ret = mp_Renderer->initSceneResources();
+	logIfFailed(ret, "Renderer scene resources");
 	assert(ret == CRAIG_SUCCESS);
 
+	Craig::Logger::engine().info("Everything's up, startup took {:.0f} ms", startupTimer.elapsed().count() * 1000.0);
 
 	m_LastFrameTime = std::chrono::steady_clock::now();
 
@@ -76,6 +102,9 @@ CraigError Craig::Framework::update() {
 		CRAIG_PROFILE_SCOPE("Window");
 		ret = mp_Window->update(elapsed);
 	}
+	if (ret != CRAIG_CLOSED) {
+		logIfFailed(ret, "Window update");
+	}
 	assert((ret == CRAIG_SUCCESS || ret == CRAIG_CLOSED) && "mp_Window failed to update");
 	if(ret == CRAIG_CLOSED) {
 		return CRAIG_CLOSED; // If the window is closed, we return that code
@@ -87,18 +116,21 @@ CraigError Craig::Framework::update() {
 		CRAIG_PROFILE_SCOPE("Physics");
 		ret = mp_PhysicsEngine->update(elapsed);
 	}
+	logIfFailed(ret, "Physics update");
 	assert(ret == CRAIG_SUCCESS && "mp_PhysicsEngine failed to update");
 
 	{
 		CRAIG_PROFILE_SCOPE("SceneManager");
 		ret = mp_SceneManager->update(elapsed);
 	}
+	logIfFailed(ret, "Scene manager update");
 	assert(ret == CRAIG_SUCCESS && "mp_SceneManager failed to update");
 
 	{
 		CRAIG_PROFILE_SCOPE("Renderer (total)");
 		ret = mp_Renderer->update(elapsed);
 	}
+	logIfFailed(ret, "Renderer update");
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer failed to update");
 
 	CRAIG_PROFILE_END_FRAME();
@@ -110,23 +142,29 @@ CraigError Craig::Framework::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+	Craig::Logger::engine().info("Shutting everything down");
+
 	// Scenes go before the physics engine, rigid bodies remove themselves from it when they terminate
 	ret = mp_SceneManager->terminate();
+	logIfFailed(ret, "Scene manager terminate");
 	assert(ret == CRAIG_SUCCESS && "mp_SceneManager didn't terminate properly");
 	delete mp_SceneManager;
 	mp_SceneManager = nullptr;
 
 	ret = mp_PhysicsEngine->terminate();
+	logIfFailed(ret, "Physics terminate");
 	assert(ret == CRAIG_SUCCESS && "mp_PhysicsEngine failed to terminate");
 	delete mp_PhysicsEngine;
 	mp_PhysicsEngine = nullptr;
 
 	ret = mp_Renderer->terminate(); //Delete left over items in memory
+	logIfFailed(ret, "Renderer terminate");
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer didn't terminate properly"); //Check it closed properly
 	delete mp_Renderer; //Delete the scene manager
 	mp_Renderer = nullptr; //Set the pointer to null (Might not be done by default, just in case)
 
 	ret = mp_Window->terminate(); //Delete left over items in memory
+	logIfFailed(ret, "Window terminate");
 	assert(ret == CRAIG_SUCCESS && "mp_Window didn't terminate properly"); //Check it closed properly
 	delete mp_Window; //Delete the scene manager
 	mp_Window = nullptr; //Set the pointer to null (Might not be done by default, just in case)

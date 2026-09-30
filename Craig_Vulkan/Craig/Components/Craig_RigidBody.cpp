@@ -36,6 +36,8 @@ void Craig::Components::RigidBody::createPhysicsBody()
 	}
 	if (colliders.empty())
 	{
+		// trace since this gets tried every update untill a collider shows up
+		Craig::Logger::physics().trace("'{}' has a rigid body but no colliders with a shape yet", mp_owner->getName());
 		return; // nothing to collide with yet, try again next update
 	}
 
@@ -67,7 +69,7 @@ void Craig::Components::RigidBody::createPhysicsBody()
 	JPH::ShapeSettings::ShapeResult shapeResult = shapeSettings->Create();
 	if (shapeResult.HasError())
 	{
-		Craig::Logger::physics().error("RigidBody shape creation failed: {}", shapeResult.GetError().c_str());
+		Craig::Logger::physics().error("RigidBody shape creation failed on '{}': {}", mp_owner->getName(), shapeResult.GetError().c_str());
 		return;
 	}
 
@@ -87,6 +89,15 @@ void Craig::Components::RigidBody::createPhysicsBody()
 
 	m_bodyId = mp_owner->getScene()->getPhysicsEngine()->getBodyInterface()->CreateAndAddBody(bodySettings,
 		isStatic ? JPH::EActivation::DontActivate : JPH::EActivation::Activate);
+
+	if (m_bodyId.IsInvalid())
+	{
+		Craig::Logger::physics().error("Jolt wouldn't make a body for '{}', probably out of bodies (kMaxBodies)", mp_owner->getName());
+		return;
+	}
+
+	// trace since dragging a collider in the editor rebuilds the body every frame
+	Craig::Logger::physics().trace("Made a {} body for '{}' with {} collider(s)", isStatic ? "static" : "dynamic", mp_owner->getName(), colliders.size());
 }
 
 void Craig::Components::RigidBody::destroyPhysicsBody()

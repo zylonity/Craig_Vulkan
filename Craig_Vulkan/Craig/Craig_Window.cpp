@@ -19,10 +19,23 @@ CraigError Craig::Window::init() {
 	CraigError ret = CRAIG_SUCCESS;
 
 	int sdlRetInt = SDL_Init(SDL_INIT_VIDEO);
+	if (sdlRetInt != true) {
+		Craig::Logger::engine().critical("SDL_Init failed: {}", SDL_GetError());
+	}
 	assert(sdlRetInt == true && "Could not initialize SDL.");
 
+	const int sdlVersion = SDL_GetVersion();
+	Craig::Logger::engine().info("SDL {}.{}.{} up, video driver: {}", SDL_VERSIONNUM_MAJOR(sdlVersion), SDL_VERSIONNUM_MINOR(sdlVersion), SDL_VERSIONNUM_MICRO(sdlVersion), SDL_GetCurrentVideoDriver());
+
 	mp_SDL_Window = SDL_CreateWindow(kSDL_WindowName, kSDL_WindowWidth, kSDL_WindowHeight, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY); // Native res on retina screens, otherwise macOS has to upscale every frame
+	if (mp_SDL_Window == NULL) {
+		Craig::Logger::engine().critical("SDL_CreateWindow failed: {}", SDL_GetError());
+	}
 	assert(mp_SDL_Window != NULL && "Could not create SDL window.");
+
+	// Pixel size is bigger than the window size on retina/high DPI screens
+	const WindowExtent pixelSize = getDrawableExtent();
+	Craig::Logger::engine().info("Window created: {} x {} ({} x {} pixels)", kSDL_WindowWidth, kSDL_WindowHeight, pixelSize.width, pixelSize.height);
 
 	// Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
 	// SDL3 returns its own array (owned by SDL, don't free it) and writes the count
@@ -56,15 +69,19 @@ CraigError Craig::Window::update(const float& deltaTime) {
 		switch (event.type) {
 
 		case SDL_EVENT_QUIT:
+			Craig::Logger::engine().info("Window closed, quitting");
 			ret = CRAIG_CLOSED; // Set the return code to fail to indicate that the window should close
 			continue;
 
 		case SDL_EVENT_WINDOW_RESIZED:
 		case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: // Moving between retina and non retina screens
+			// trace since dragging the window edge fires this loads
+			Craig::Logger::engine().trace("Window resized to {} x {}", event.window.data1, event.window.data2);
 			m_resizeNeeded = true;
 			continue;
 
 		case SDL_EVENT_WINDOW_MINIMIZED:
+			Craig::Logger::engine().debug("Window minimised");
 			m_resizeNeeded = false;
 			continue;
 
@@ -72,7 +89,7 @@ CraigError Craig::Window::update(const float& deltaTime) {
 			if (event.key.key == SDLK_TAB) {
 				m_mouseLocked = !m_mouseLocked;
 				SDL_SetWindowRelativeMouseMode(mp_SDL_Window, m_mouseLocked);
-				
+				Craig::Logger::engine().debug("Mouse {}", m_mouseLocked ? "locked" : "unlocked");
 			}
 			continue;
 
@@ -98,6 +115,7 @@ CraigError Craig::Window::terminate() {
 
 	SDL_DestroyWindow(mp_SDL_Window);
 	SDL_Quit();
+	Craig::Logger::engine().debug("Window destroyed and SDL shut down");
 
 	return ret;
 }

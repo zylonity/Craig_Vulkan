@@ -224,6 +224,7 @@ void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
 
 		ImGui::SeparatorText("Video Settings");
 		if (ImGui::Checkbox("VSYNC", &mp_renderer->getVSyncState())) {
+			Craig::Logger::renderer().info("VSync {}", mp_renderer->getVSyncState() ? "on" : "off");
 			mp_renderer->refreshSwapChain();
 		}
 		ImGui::SeparatorText("Camera");
@@ -499,12 +500,14 @@ void Craig::ImguiEditor::renderNewSceneWindow()
 				std::ofstream sceneFile(scenePath);
 				if (!sceneFile.is_open())
 				{
+					Craig::Logger::scene().error("Couldn't create {}", scenePath.string());
 					m_newSceneError = "Couldn't create " + scenePath.string();
 				}
 				else
 				{
 					sceneFile << sceneJson.dump(2) << std::endl;
 					sceneFile.close();
+					Craig::Logger::scene().info("Created new scene '{}' at {}", m_newSceneName, scenePath.string());
 
 					// Selected object belongs to the old scene, drop it before it's deleted
 					mp_selectedGameObject = nullptr;
