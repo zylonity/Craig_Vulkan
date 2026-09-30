@@ -10,6 +10,7 @@
 #include "Craig_Editor.hpp"
 #include "Craig_SceneManager.hpp"
 #include "Craig_PhysicsEngine.hpp"
+#include "Craig_Profiler.hpp"
 
 #include <chrono>
 
@@ -66,20 +67,34 @@ CraigError Craig::Framework::update() {
 
 	const float elapsed = getElapsedTime();
 
-	ret = mp_Window->update(elapsed);
+	{
+		CRAIG_PROFILE_SCOPE("Window");
+		ret = mp_Window->update(elapsed);
+	}
 	assert((ret == CRAIG_SUCCESS || ret == CRAIG_CLOSED) && "mp_Window failed to update");
 	if(ret == CRAIG_CLOSED) {
 		return CRAIG_CLOSED; // If the window is closed, we return that code
 	}
 
-	ret = mp_SceneManager->update(elapsed);
+	{
+		CRAIG_PROFILE_SCOPE("SceneManager");
+		ret = mp_SceneManager->update(elapsed);
+	}
 	assert(ret == CRAIG_SUCCESS && "mp_SceneManager failed to update");
 
-	ret = mp_Renderer->update(elapsed);
+	{
+		CRAIG_PROFILE_SCOPE("Renderer (total)");
+		ret = mp_Renderer->update(elapsed);
+	}
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer failed to update");
 
-	ret = mp_PhysicsEngine->update(elapsed);
+	{
+		CRAIG_PROFILE_SCOPE("Physics");
+		ret = mp_PhysicsEngine->update(elapsed);
+	}
 	assert(ret == CRAIG_SUCCESS && "mp_PhysicsEngine failed to update");
+
+	CRAIG_PROFILE_END_FRAME();
 
 	return ret;
 }

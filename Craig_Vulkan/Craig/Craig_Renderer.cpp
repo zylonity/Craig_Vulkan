@@ -24,6 +24,7 @@
 #include "Craig_ShaderCompilation.hpp"
 #include "Craig_Editor.hpp"
 #include "Craig_SceneManager.hpp"
+#include "Craig_Profiler.hpp"
 #include "Components/Craig_Model.hpp"
 #include "Components/Craig_Sun.hpp"
 
@@ -110,19 +111,28 @@ void Craig::Renderer::InitImgui() {
     init_info.QueueFamily = indices.graphicsFamily.value();
     init_info.Queue = m_Devices.getGraphicsQueue();
     init_info.MinImageCount = 2;
-    init_info.ImageCount = kMaxFramesInFlight;
+    init_info.ImageCount = static_cast<uint32_t>(m_swapChain.getImages().size());
     init_info.CheckVkResultFn = check_vk_result;
     init_info.UseDynamicRendering = true;
 
-    //imgui updated a lot of vulkan/pipeline stuff
-    init_info.PipelineInfoMain.PipelineRenderingCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
-    init_info.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-    VkFormat colourFormat = static_cast<VkFormat>(m_swapChain.getImageFormat());
-    init_info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &colourFormat;
-    init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-
+    // PipelineInfoMain is left empty so Init doesn't make the pipeline, createImGuiPipeline does it
     ImGui_ImplVulkan_Init(&init_info);
+    createImGuiPipeline();
 
+}
+
+// imgui draws in the scene's pass now, so its pipeline needs the same formats + MSAA as that pass
+void Craig::Renderer::createImGuiPipeline() {
+
+    ImGui_ImplVulkan_PipelineInfo pipelineInfo{};
+    pipelineInfo.PipelineRenderingCreateInfo = {VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO};
+    pipelineInfo.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+    VkFormat colourFormat = static_cast<VkFormat>(m_swapChain.getImageFormat());
+    pipelineInfo.PipelineRenderingCreateInfo.pColorAttachmentFormats = &colourFormat; // ImGui makes a copy of this
+    pipelineInfo.PipelineRenderingCreateInfo.depthAttachmentFormat = static_cast<VkFormat>(m_renderingAttachments.findDepthFormat());
+    pipelineInfo.MSAASamples = static_cast<VkSampleCountFlagBits>(m_renderingAttachments.m_VK_msaaSamples);
+
+    ImGui_ImplVulkan_CreateMainPipeline(&pipelineInfo);
 }
 #endif
 
@@ -132,6 +142,7 @@ CraigError Craig::Renderer::update(const float& deltaTime) {
 
 #if defined(IMGUI_ENABLED)
     if (m_swapChain.getExtent().width > 0 && m_swapChain.getExtent().height > 0) {
+        CRAIG_PROFILE_SCOPE("  ImGui editor");
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
@@ -259,6 +270,9 @@ void Craig::Renderer::recreateSwapChainFull() {
     m_Devices.getLogicalDevice().waitIdle();
 
     m_pipeline.recreate();
+#if defined(IMGUI_ENABLED)
+    createImGuiPipeline(); // MSAA sample count might have changed
+#endif
 
     m_renderingAttachments.cleanupColourAndDepthImageViews();
     m_swapChain.cleanupSwapChain();
@@ -319,7 +333,9 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
             .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
             .setResolveImageView(m_swapChain.getImageViews()[imageIndex])
             .setResolveImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
-            .setResolveMode(vk::ResolveModeFlagBits::eAverage);
+            .setResolveMode(vk::ResolveModeFlagBits::eAverage)
+            // We only need the resolved image, writing every MSAA sample out to memory is a waste (especially on Apple's GPUs)
+            .setStoreOp(vk::AttachmentStoreOp::eDontCare);
     }
 
     // vk::RenderingInfo begins a dynamic rendering instance.
@@ -400,31 +416,14 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
         }
     }
 
-    commandBuffer.endRendering();
-
 #if defined(IMGUI_ENABLED)
-    //gotta render imgui's UI separately
-    vk::RenderingAttachmentInfo uiColourAtt{};
-    uiColourAtt
-        .setImageView(m_swapChain.getImageViews()[imageIndex])
-        .setImageLayout(vk::ImageLayout::eColorAttachmentOptimal)
-        .setLoadOp(vk::AttachmentLoadOp::eLoad)     // keep what scene wrote
-        .setStoreOp(vk::AttachmentStoreOp::eStore);
-
-    vk::RenderingInfo uiRi{};
-    uiRi
-        .setRenderArea({ {0,0}, m_swapChain.getExtent() })
-        .setLayerCount(1)
-        .setColorAttachmentCount(1)
-        .setPColorAttachments(&uiColourAtt)
-        .setPDepthAttachment(nullptr);
-    commandBuffer.beginRendering(uiRi);
-
+    // ImGui used to have its own pass after this one, but with vsync off macOS can show the image in between the two passes
+    // (the scene without the UI, looked like horizontal cuts across the imgui windows). Same pass = the image only gets written once
     ImGui::Render();
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+#endif
 
     commandBuffer.endRendering();
-#endif
 
     Craig::ImageHelpers::transitionSwapImage(commandBuffer, m_swapChain.getImages()[imageIndex], vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR);
 
@@ -1027,14 +1026,6 @@ void Craig::Renderer::updateSamplingLevel(int levelToSet) {
 
 }
 
-const glm::vec2 Craig::Renderer::getWindowSize() const
-{
-    glm::vec2 size;
-    size.x = m_swapChain.getExtent().width;
-    size.y = m_swapChain.getExtent().height;
-    return size;
-}
-
 void Craig::Renderer::deleteGameObject(Craig::GameObject* gameObject)
 {
     //gotta wait for the object to leave the command buffer or vulkan cries with validation error
@@ -1093,7 +1084,10 @@ void Craig::Renderer::updateMinLOD(int minLOD) {
 
 void Craig::Renderer::drawFrame(const float& deltaTime) {
 
-    m_syncManager.waitForGpu();
+    {
+        CRAIG_PROFILE_SCOPE("  Wait for GPU");
+        m_syncManager.waitForGpu();
+    }
     const uint32_t& currentFrame = m_syncManager.getCurrentFrame();
 
     if (m_swapChain.getExtent().width <= 0 || m_swapChain.getExtent().height <= 0) {
@@ -1101,7 +1095,11 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
     }
 
     uint32_t imageIndex = 0;
-    VkResult nextImageResult = vkAcquireNextImageKHR(m_Devices.getLogicalDevice(), m_swapChain.getSwapChain(), UINT64_MAX, m_syncManager.getVK_imageAvailableSemaphores()[currentFrame], VK_NULL_HANDLE, &imageIndex);
+    VkResult nextImageResult;
+    {
+        CRAIG_PROFILE_SCOPE("  Acquire image");
+        nextImageResult = vkAcquireNextImageKHR(m_Devices.getLogicalDevice(), m_swapChain.getSwapChain(), UINT64_MAX, m_syncManager.getVK_imageAvailableSemaphores()[currentFrame], VK_NULL_HANDLE, &imageIndex);
+    }
 
     if (nextImageResult == VK_ERROR_OUT_OF_DATE_KHR) {
         recreateSwapChain();
@@ -1112,13 +1110,22 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
     }
 
     // Record drawing commands into the command buffer
-    m_commandManager.getCommandBuffers()[currentFrame].reset();
-    recordCommandBuffer(m_commandManager.getCommandBuffers()[currentFrame], imageIndex);
+    {
+        CRAIG_PROFILE_SCOPE("  Record commands");
+        m_commandManager.getCommandBuffers()[currentFrame].reset();
+        recordCommandBuffer(m_commandManager.getCommandBuffers()[currentFrame], imageIndex);
+    }
 
-    updateUniformBuffer(currentFrame, deltaTime);
+    {
+        CRAIG_PROFILE_SCOPE("  Update UBOs");
+        updateUniformBuffer(currentFrame, deltaTime);
+    }
 
     //Creates the submit info and submits the command buffer to the gfx queue
-    m_syncManager.submitFrame(m_commandManager.getCommandBuffers(), imageIndex, m_Devices.getGraphicsQueue());
+    {
+        CRAIG_PROFILE_SCOPE("  Submit");
+        m_syncManager.submitFrame(m_commandManager.getCommandBuffers(), imageIndex, m_Devices.getGraphicsQueue());
+    }
 
     // Present the rendered image to the screen
     vk::PresentInfoKHR presentInfo;
@@ -1131,7 +1138,11 @@ void Craig::Renderer::drawFrame(const float& deltaTime) {
 
 
     //We have to revert back to the original C code otherwise if it returns ERROR_OUT_OF_DATE, it throws an exception and messes up the code.
-    auto presentResult = vkQueuePresentKHR(m_Devices.getPresentationQueue(), presentInfo);
+    VkResult presentResult;
+    {
+        CRAIG_PROFILE_SCOPE("  Present");
+        presentResult = vkQueuePresentKHR(m_Devices.getPresentationQueue(), presentInfo);
+    }
 
     if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR || mp_CurrentWindow->isResizeNeeded()) {
         recreateSwapChain();

@@ -30,17 +30,15 @@ void Craig::Swapchain::createSwapChain() {
     vk::PresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
     m_VK_swapChainExtent = chooseSwapExtent(swapChainSupport.capabilities);
 
-    if (swapChainSupport.capabilities.minImageCount > kMaxFramesInFlight) {
-        assert("too many frames in flight for this system!");
-    }
-
-    uint32_t imageCount = kMaxFramesInFlight;
+    // One more than the minimum so we're not always waiting for the OS to give an image back (was a big fps hit on macOS)
+    uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
 
     if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
         imageCount = swapChainSupport.capabilities.maxImageCount;
     }
 
     printf("Creating draw buffer/swap chain with %i images\n", imageCount);
+    printf("Present mode = %s (vsync %s)\n", vk::to_string(presentMode).c_str(), m_vsyncEnabled ? "on" : "off");
     printf("Current extent size = %i x %i\n", m_VK_swapChainExtent.width, m_VK_swapChainExtent.height);
 
     vk::SwapchainCreateInfoKHR createInfo{};
@@ -126,13 +124,18 @@ vk::PresentModeKHR Craig::Swapchain::chooseSwapPresentMode(const std::vector<vk:
     //VK_PRESENT_MODE_FIFO_RELAXED_KHR : This mode only differs from the previous one if the application is late and the queue was empty at the last vertical blank.Instead of waiting for the next vertical blank, the image is transferred right away when it finally arrives.This may result in visible tearing.
     //VK_PRESENT_MODE_MAILBOX_KHR : This is another variation of the second mode.Instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer ones.This mode can be used to render frames as fast as possible while still avoiding tearing, resulting in fewer latency issues than standard vertical sync.This is commonly known as "triple buffering", although the existence of three buffers alone does not necessarily mean that the framerate is unlocked.
 
-    for (const auto& availablePresentMode : availablePresentModes) {
-        vk::PresentModeKHR modeToUse = m_vsyncEnabled ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eImmediate;
-        if (availablePresentMode == modeToUse) {
-            return availablePresentMode;
-        }
+    // FIFO is always supported, so vsync just uses that
+    if (m_vsyncEnabled) {
+        return vk::PresentModeKHR::eFifo;
     }
 
+    // Mailbox if we can (no tearing), otherwise immediate. macOS doesn't have mailbox so it's always immediate there
+    const vk::PresentModeKHR uncappedModes[] = { vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eImmediate };
+    for (const vk::PresentModeKHR mode : uncappedModes) {
+        if (std::find(availablePresentModes.begin(), availablePresentModes.end(), mode) != availablePresentModes.end()) {
+            return mode;
+        }
+    }
 
     return vk::PresentModeKHR::eFifo;
 }

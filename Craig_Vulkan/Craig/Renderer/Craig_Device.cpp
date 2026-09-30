@@ -1,6 +1,7 @@
 #include "Craig_Device.hpp"
 
 #include <set>
+#include <cstring>
 
 #include "Craig_Swapchain.hpp"
 
@@ -80,15 +81,28 @@ void Craig::Device::pickPhysicalDevice() {
     }
 
     for (const auto& device : devices) {
-        if (isDeviceSuitable(device)) {
+        if (!isDeviceSuitable(device)) {
+            continue;
+        }
+
+        // On macOS the GPU shows up once for each driver (MoltenVK and KosmicKrisp), we want KosmicKrisp if it's there
+        const std::string driverName = device.getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDriverProperties>()
+            .get<vk::PhysicalDeviceDriverProperties>().driverName.data();
+
+        if (driverName == "KosmicKrisp") {
             m_VK_physicalDevice = device;
             break;
+        }
+        if (!m_VK_physicalDevice) {
+            m_VK_physicalDevice = device;
         }
     }
 
     if (m_VK_physicalDevice) {
-        vk::PhysicalDeviceProperties props = m_VK_physicalDevice.getProperties();
-        printf("\nFound GPU: %s\n", props.deviceName.data());
+        const auto props = m_VK_physicalDevice.getProperties2<vk::PhysicalDeviceProperties2, vk::PhysicalDeviceDriverProperties>();
+        printf("\nFound GPU: %s (driver: %s)\n",
+            props.get<vk::PhysicalDeviceProperties2>().properties.deviceName.data(),
+            props.get<vk::PhysicalDeviceDriverProperties>().driverName.data());
     }
     else {
         throw std::runtime_error("failed to find a suitable GPU!");
@@ -165,12 +179,25 @@ void Craig::Device::createLogicalDevice() {
 
     timelineFeatures.setPNext(&v13);
 
+    std::vector<const char*> enabledExtensions = mv_DVC_deviceExtensions;
+
+#if defined(__APPLE__)
+    // MoltenVK has the portability subset and it has to be enabled if it's there, KosmicKrisp doesn't have it at all
+    // (spelled out since the #define for it is in vulkan_beta.h)
+    constexpr const char* kPortabilitySubsetExtension = "VK_KHR_portability_subset";
+    for (const vk::ExtensionProperties& extension : m_VK_physicalDevice.enumerateDeviceExtensionProperties()) {
+        if (std::strcmp(extension.extensionName, kPortabilitySubsetExtension) == 0) {
+            enabledExtensions.push_back(kPortabilitySubsetExtension);
+            break;
+        }
+    }
+#endif
+
     // Fill in device creation info with queue setup and feature requirements
     vk::DeviceCreateInfo createInfo = vk::DeviceCreateInfo()
         .setQueueCreateInfos(queueCreateInfos)
         .setPEnabledFeatures(&deviceFeatures)
-        .setEnabledExtensionCount(static_cast<uint32_t>(mv_DVC_deviceExtensions.size()))
-        .setPpEnabledExtensionNames(mv_DVC_deviceExtensions.data())
+        .setPEnabledExtensionNames(enabledExtensions)
         .setPNext(&timelineFeatures);
 
     // Create the logical device for the selected physical device

@@ -15,6 +15,8 @@ constexpr uint32_t kVK_EngineVersion = 1;
 constexpr float kClearColour[4] = { 1.0f, 0.5f, 0.0f, 1.0f }; // Clear colour for the render target
 constexpr int kMaxFramesInFlight = 2; //How many frames the GPU should deal with at a time
 
+#define CRAIG_ENABLE_PROFILER 0 // 1 prints how long each part of the frame takes every second (Craig_Profiler.hpp)
+
 constexpr uint32_t kMaxLODForDebugging = 16;
 constexpr uint32_t kMaxNumObjects = 4096;
 

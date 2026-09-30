@@ -20,7 +20,7 @@ CraigError Craig::Window::init() {
 	int sdlRetInt = SDL_Init(SDL_INIT_VIDEO);
 	assert(sdlRetInt == true && "Could not initialize SDL.");
 
-	mp_SDL_Window = SDL_CreateWindow(kSDL_WindowName, kSDL_WindowWidth, kSDL_WindowHeight, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE ); //TODO: FIX IMGUIZMO AND HIGHDPI FOR MAC | SDL_WINDOW_ALLOW_HIGHDPI);
+	mp_SDL_Window = SDL_CreateWindow(kSDL_WindowName, kSDL_WindowWidth, kSDL_WindowHeight, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY); // Native res on retina screens, otherwise macOS has to upscale every frame
 	assert(mp_SDL_Window != NULL && "Could not create SDL window.");
 
 	// Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
@@ -59,6 +59,7 @@ CraigError Craig::Window::update(const float& deltaTime) {
 			continue;
 
 		case SDL_EVENT_WINDOW_RESIZED:
+		case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: // Moving between retina and non retina screens
 			m_resizeNeeded = true;
 			continue;
 

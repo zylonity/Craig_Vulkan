@@ -345,7 +345,7 @@ void Craig::ImguiEditor::renderNewSceneWindow()
 		// same centering as the new game object window
 		const ImVec2 windowSize(500, 100);
 		ImGui::SetNextWindowSize(windowSize, ImGuiCond_Appearing);
-		const ImVec2 windowPos = ImVec2((mp_renderer->getWindowSize().x - windowSize.x) * 0.5f, (mp_renderer->getWindowSize().y - windowSize.y) * 0.5f);
+		const ImVec2 windowPos = ImVec2((ImGui::GetIO().DisplaySize.x - windowSize.x) * 0.5f, (ImGui::GetIO().DisplaySize.y - windowSize.y) * 0.5f);
 		ImGui::SetNextWindowPos(windowPos, ImGuiCond_Appearing);
 
 		ImGui::Begin("New Scene", &m_ShowNewSceneWindow);
@@ -442,7 +442,7 @@ void Craig::ImguiEditor::renderNewGameObjectWindow()
 		// Parameters for centering the window.
 		const ImVec2 windowSize(500, 120);
 		ImGui::SetNextWindowSize(windowSize, ImGuiCond_Appearing);
-		const ImVec2 windowPos = ImVec2((mp_renderer->getWindowSize().x - windowSize.x) * 0.5f, (mp_renderer->getWindowSize().y - windowSize.y) * 0.5f);
+		const ImVec2 windowPos = ImVec2((ImGui::GetIO().DisplaySize.x - windowSize.x) * 0.5f, (ImGui::GetIO().DisplaySize.y - windowSize.y) * 0.5f);
 		ImGui::SetNextWindowPos(windowPos, ImGuiCond_Appearing);
 
 		// Create new game object window.
@@ -557,7 +557,8 @@ void Craig::ImguiEditor::updateImGuizmo()
 
 		// Set the screen rect and tell ImGuizmo how to project.
 		ImGuizmo::SetOrthographic(false);
-		const glm::vec2 screenSize = mp_renderer->getWindowSize();
+		// ImGui's size, not the swapchain's, they're different on high DPI screens
+		const ImVec2 screenSize = ImGui::GetIO().DisplaySize;
 		ImGuizmo::SetRect(0, 0, screenSize.x, screenSize.y);
 
 		// Build the transform matrix directly from pos + quat + scale. Avoids Euler round-tripping
@@ -685,7 +686,8 @@ void Craig::ImguiEditor::updateImGuizmoCollider()
 
 	// Set the screen rect and tell ImGuizmo how to project.
 	ImGuizmo::SetOrthographic(false);
-	const glm::vec2 screenSize = mp_renderer->getWindowSize();
+	// ImGui's size, not the swapchain's, they're different on high DPI screens
+	const ImVec2 screenSize = ImGui::GetIO().DisplaySize;
 	ImGuizmo::SetRect(0, 0, screenSize.x, screenSize.y);
 
 	// Each collider builds its own world space gizmo matrix and takes it back apart afterwards
@@ -722,7 +724,7 @@ void Craig::ImguiEditor::drawColliderOutlines()
 	// background list draws over the scene but under the editor windows
 	context.pDrawList = ImGui::GetBackgroundDrawList();
 	context.viewProj = proj * camera.getView();
-	context.screenSize = mp_renderer->getWindowSize();
+	context.screenSize = glm::vec2(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y); // outlines are drawn with imgui so they use its size
 	// The camera's position is the inverse view's translation (the camera getter isn't const)
 	context.cameraPos = glm::vec3(glm::inverse(camera.getView())[3]);
 

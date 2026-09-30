@@ -51,8 +51,6 @@ namespace Craig {
 
 		RenderingAttachments getRenderingAttachments() {return m_renderingAttachments; };
 
-		const glm::vec2 getWindowSize() const;
-
 		void deleteGameObject(Craig::GameObject* gameObject);
 		CraigError newGameObject(std::string objectName, std::string modelPath, glm::vec3 position);
 		CraigError loadScene(const std::string& scenePath);
@@ -120,9 +118,7 @@ namespace Craig {
 		// Extensions / layers
 		const std::vector<const char*> mv_VK_deviceExtensions = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME
-		#if defined(__APPLE__)
-			, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
-		#endif
+			// VK_KHR_portability_subset gets added in Device::createLogicalDevice if the driver has it
 		};
 
 		std::vector<const char*> mv_VK_Layers; // Validation layers
@@ -189,6 +185,7 @@ namespace Craig {
 		// ImGui
 #if defined(IMGUI_ENABLED)
 		void InitImgui();
+		void createImGuiPipeline(); // Remade when MSAA changes since it has to match the scene pass
 #endif
 	};
 

@@ -97,7 +97,7 @@ bool Craig::PhysicsEngine::ObjectVsBroadPhaseLayerFilterImpl::ShouldCollide(JPH:
 
 JPH::ValidateResult Craig::PhysicsEngine::MyContactListener::OnContactValidate(const JPH::Body &inBody1, const JPH::Body &inBody2, JPH::RVec3Arg inBaseOffset, const JPH::CollideShapeResult &inCollisionResult)
 {
-	std::cout << "Contact validate callback" << std::endl;
+	//std::cout << "Contact validate callback" << std::endl;
 
 	// Allows you to ignore a contact before it is created (using layers to not make objects collide is cheaper!)
 	return JPH::ValidateResult::AcceptAllContactsForThisBodyPair;
@@ -105,17 +105,17 @@ JPH::ValidateResult Craig::PhysicsEngine::MyContactListener::OnContactValidate(c
 
 void Craig::PhysicsEngine::MyContactListener::OnContactAdded(const JPH::Body &inBody1, const JPH::Body &inBody2, const JPH::ContactManifold &inManifold, JPH::ContactSettings &ioSettings)
 {
-	std::cout << "A contact was added" << std::endl;
+	//std::cout << "A contact was added" << std::endl;
 }
 
 void Craig::PhysicsEngine::MyContactListener::OnContactPersisted(const JPH::Body &inBody1, const JPH::Body &inBody2, const JPH::ContactManifold &inManifold, JPH::ContactSettings &ioSettings)
 {
-	std::cout << "A contact was persisted" << std::endl;
+	//std::cout << "A contact was persisted" << std::endl;
 }
 
 void Craig::PhysicsEngine::MyContactListener::OnContactRemoved(const JPH::SubShapeIDPair &inSubShapePair)
 {
-	std::cout << "A contact was removed" << std::endl;
+	//std::cout << "A contact was removed" << std::endl;
 }
 
 void Craig::PhysicsEngine::MyBodyActivationListener::OnBodyActivated(const JPH::BodyID &inBodyID, JPH::uint64 inBodyUserData)

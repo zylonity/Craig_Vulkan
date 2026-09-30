@@ -156,19 +156,22 @@ void Craig::ImageHelpers::transitionSwapImage(vk::CommandBuffer cmd, vk::Image i
     if (oldLayout == vk::ImageLayout::eUndefined &&
         newLayout == vk::ImageLayout::eColorAttachmentOptimal)
     {
+        // Waits at colour attachment output instead of top of pipe, so swapchain images wait for the acquire semaphore
+        // and the MSAA image (shared between frames in flight) waits for the last frame to finish with it
         barrier
-            .setSrcStageMask(vk::PipelineStageFlagBits2::eTopOfPipe)
-            .setSrcAccessMask(vk::AccessFlagBits2::eNone)
+            .setSrcStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput)
+            .setSrcAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite)
             .setDstStageMask(vk::PipelineStageFlagBits2::eColorAttachmentOutput)
-            .setDstAccessMask(vk::AccessFlagBits2::eColorAttachmentWrite);
+            .setDstAccessMask(vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite);
     }
     else if (oldLayout == vk::ImageLayout::eUndefined &&
         newLayout == vk::ImageLayout::eDepthStencilAttachmentOptimal)
     {
+        // Depth image is shared between frames in flight too, wait for the last frame to finish with it
         barrier
-            .setSrcStageMask(vk::PipelineStageFlagBits2::eTopOfPipe)
-            .setSrcAccessMask({})
-            .setDstStageMask(vk::PipelineStageFlagBits2::eEarlyFragmentTests)
+            .setSrcStageMask(vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests)
+            .setSrcAccessMask(vk::AccessFlagBits2::eDepthStencilAttachmentWrite)
+            .setDstStageMask(vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests)
             .setDstAccessMask(vk::AccessFlagBits2::eDepthStencilAttachmentRead | vk::AccessFlagBits2::eDepthStencilAttachmentWrite);
     }
     else if (oldLayout == vk::ImageLayout::eColorAttachmentOptimal &&
