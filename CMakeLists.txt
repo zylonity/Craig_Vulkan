@@ -58,8 +58,12 @@ add_executable(Craig_Vulkan
 target_include_directories(Craig_Vulkan PRIVATE
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/Craig
-        ${CMAKE_SOURCE_DIR}/Craig_Vulkan/External
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/External/Imgui
+)
+
+# SYSTEM so third party headers (VMA) don't flood the build with warnings
+target_include_directories(Craig_Vulkan SYSTEM PRIVATE
+        ${CMAKE_SOURCE_DIR}/Craig_Vulkan/External
 )
 
 #Imgui flag for CLION, id rather set this in the IDE

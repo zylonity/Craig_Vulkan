@@ -2,6 +2,8 @@
 
 #include "Craig_Device.hpp"
 
+#include <cassert>
+
 CraigError Craig::SyncManager::init(const SyncManagerInitInfo& info) {
 
 	CraigError ret = CRAIG_SUCCESS;
@@ -52,7 +54,8 @@ void Craig::SyncManager::waitForGpu()
 		waitInfo.setValues(waitValue);
 
 		// This only blocks if the GPU is really lagging
-		m_SM_logicalDevice.waitSemaphores(waitInfo, UINT64_MAX);
+		[[maybe_unused]] vk::Result waitResult = m_SM_logicalDevice.waitSemaphores(waitInfo, UINT64_MAX);
+		assert(waitResult == vk::Result::eSuccess && "Timeline semaphore wait failed.");
 	}
 }
 

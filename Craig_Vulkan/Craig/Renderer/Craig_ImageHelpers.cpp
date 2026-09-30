@@ -223,7 +223,7 @@ void Craig::ImageHelpers::generateMipMaps(Craig::CommandManager& commandManager,
 
 
     if (!(formatProperties.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImageFilterLinear)) {
-       assert("texture image format does not support linear blitting!");
+       assert(false && "texture image format does not support linear blitting!");
     }
 
     vk::CommandBuffer tempBuffer = useTransferQueue ? commandManager.buffer_beginSingleTimeCommands() : commandManager.buffer_beginSingleTimeCommandsGFX();

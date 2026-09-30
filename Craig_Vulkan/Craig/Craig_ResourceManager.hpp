@@ -9,7 +9,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <vulkan/vulkan.hpp>
-#include "../External/vk_mem_alloc.h"
+#include <vk_mem_alloc.h>
 #include <unordered_map>
 
 

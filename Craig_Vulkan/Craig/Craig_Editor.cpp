@@ -478,7 +478,7 @@ void Craig::ImguiEditor::renderNewGameObjectWindow()
 		// If the game object name has any validation errors show them.
 		if (!m_NewGameObjectError.empty())
 		{
-			ImGui::TextColored({ 1.0f, 0.0f, 0.0f, 1.0f }, m_NewGameObjectError.c_str());
+			ImGui::TextColored({ 1.0f, 0.0f, 0.0f, 1.0f }, "%s", m_NewGameObjectError.c_str());
 		}
 
 		// Create on Enter or Create button press.

@@ -10,7 +10,7 @@
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_beta.h>
 #include <SDL3/SDL_vulkan.h>
-#include "../External/vk_mem_alloc.h"
+#include <vk_mem_alloc.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
