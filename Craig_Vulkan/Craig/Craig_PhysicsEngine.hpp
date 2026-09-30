@@ -91,9 +91,6 @@ namespace Craig {
 		// of your own job scheduler. JobSystemThreadPool is an example implementation.
 		JPH::JobSystemThreadPool* job_system = nullptr;
 
-		// Create the actual rigid body
-		JPH::Body *floor = nullptr;
-
 		/// Class that determines if two object layers can collide
 		class ObjectLayerPairFilterImpl : public JPH::ObjectLayerPairFilter
 		{
@@ -177,8 +174,6 @@ namespace Craig {
 		// The main way to interact with the bodies in the physics system is through the body interface. There is a locking and a non-locking
 		// variant of this. We're going to use the locking version (even though we're not planning to access bodies from multiple threads)
 		JPH::BodyInterface* body_interface;
-
-		JPH::BodyID sphere_id;
 
 
 

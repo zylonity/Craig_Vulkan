@@ -164,35 +164,6 @@ CraigError Craig::PhysicsEngine::init() {
 	// variant of this. We're going to use the locking version (even though we're not planning to access bodies from multiple threads)
 	body_interface = &physics_system.GetBodyInterface();
 
-	// Next we can create a rigid body to serve as the floor, we make a large box
-	// Create the settings for the collision volume (the shape).
-	// Note that for simple shapes (like boxes) you can also directly construct a BoxShape.
-	JPH::BoxShapeSettings floor_shape_settings(JPH::Vec3(100.0f, 1.0f, 100.0f));
-	floor_shape_settings.SetEmbedded(); // A ref counted object on the stack (base class RefTarget) should be marked as such to prevent it from being freed when its reference count goes to 0.
-
-	// Create the shape
-	JPH::ShapeSettings::ShapeResult floor_shape_result = floor_shape_settings.Create();
-	JPH::ShapeRefC floor_shape = floor_shape_result.Get(); // We don't expect an error here, but you can check floor_shape_result for HasError() / GetError()
-
-	// Create the settings for the body itself. Note that here you can also set other properties like the restitution / friction.
-	JPH::BodyCreationSettings floor_settings(floor_shape, JPH::RVec3(0.0f, -1.0f, 0.0f), JPH::Quat::sIdentity(), JPH::EMotionType::Static, Physics::Layers::NON_MOVING);
-
-	// // Create the actual rigid body
-	// floor = body_interface->CreateBody(floor_settings); // Note that if we run out of bodies this can return nullptr
-	//
-	// // Add it to the world
-	// body_interface->AddBody(floor->GetID(), JPH::EActivation::DontActivate);
-	//
-	// // Now create a dynamic body to bounce on the floor
-	// // Note that this uses the shorthand version of creating and adding a body to the world
-	// JPH::BodyCreationSettings sphere_settings(new JPH::SphereShape(0.5f), JPH::RVec3(0.0f, 2.0f, 0.0f), JPH::Quat::sIdentity(), JPH::EMotionType::Dynamic, Physics::Layers::MOVING);
-	// sphere_id = body_interface->CreateAndAddBody(sphere_settings, JPH::EActivation::Activate);
-	//
-	// // Now you can interact with the dynamic body, in this case we're going to give it a velocity.
-	// // (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
-	// body_interface->SetLinearVelocity(sphere_id, JPH::Vec3(0.0f, -5.0f, 0.0f));
-
-
 	// Optional step: Before starting the physics simulation you can optimize the broad phase. This improves collision detection performance (it's pointless here because we only have 2 bodies).
 	// You should definitely not call this every frame or when e.g. streaming in a new level section as it is an expensive operation.
 	// Instead insert all new objects in batches instead of 1 at a time to keep the broad phase efficient.
@@ -215,11 +186,6 @@ CraigError Craig::PhysicsEngine::update(const float& deltaTime) {
 	{
 		// Next step
 		++step;
-
-		// // Output current position and velocity of the sphere
-		// JPH::RVec3 position = body_interface->GetCenterOfMassPosition(sphere_id);
-		// JPH::Vec3 velocity = body_interface->GetLinearVelocity(sphere_id);
-		// std::cout << "Step " << step << ": Position = (" << position.GetX() << ", " << position.GetY() << ", " << position.GetZ() << "), Velocity = (" << velocity.GetX() << ", " << velocity.GetY() << ", " << velocity.GetZ() << ")" << std::endl;
 
 		// Step the world
 		physics_system.Update(fixed_time_step, cCollisionSteps, temp_allocator, job_system);
@@ -248,16 +214,7 @@ CraigError Craig::PhysicsEngine::terminate() {
 
 	CraigError ret = CRAIG_SUCCESS;
 
-
-	// Remove the sphere from the physics system. Note that the sphere itself keeps all of its state and can be re-added at any time.
-	body_interface->RemoveBody(sphere_id);
-
-	// Destroy the sphere. After this the sphere ID is no longer valid.
-	body_interface->DestroyBody(sphere_id);
-
-	// Remove and destroy the floor
-	body_interface->RemoveBody(floor->GetID());
-	body_interface->DestroyBody(floor->GetID());
+	// rigid bodies destroy their own Jolt bodies when their game objects are terminated
 
 	// Unregisters all types with the factory and cleans up the default material
 	JPH::UnregisterTypes();
