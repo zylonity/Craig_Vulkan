@@ -16,6 +16,7 @@
 
 #include "Craig_Constants.hpp"
 #include "Craig_Camera.hpp"
+#include "../External/json.hpp"
 #include "Craig_ResourceManager.hpp"
 #include "Renderer/Craig_CommandManager.hpp"
 #include "Renderer/Craig_Swapchain.hpp"
@@ -54,6 +55,9 @@ namespace Craig {
 		void deleteGameObject(Craig::GameObject* gameObject);
 		CraigError newGameObject(std::string objectName, std::string modelPath, glm::vec3 position);
 		CraigError loadScene(const std::string& scenePath);
+		// puts a scene back from json in memory (what Stop uses)
+		// keeps the editor's selection if it can
+		CraigError restoreScene(const nlohmann::json& sceneJson, const std::string& scenePath);
 
 	private:
 		struct PerObjectData {
@@ -95,6 +99,8 @@ namespace Craig {
 		void createVertexBuffer();
 		void createIndexBuffer();
 		void rebuildGeometryBuffers();
+		// everything that has to happen after a scene swap
+		void finishSceneSwap(const std::string& reselectObjectName);
 		//void createUniformBuffers();
 		void createUniformBuffers();
 		void updateUniformBuffer(uint32_t currentImage, const float& deltaTime);

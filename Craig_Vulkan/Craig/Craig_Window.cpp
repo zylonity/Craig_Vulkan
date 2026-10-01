@@ -13,6 +13,7 @@
 #include "Craig_Window.hpp"
 #include "Craig_Camera.hpp"
 #include "Craig_Logger.hpp"
+#include "Craig_Input.hpp"
 
 CraigError Craig::Window::init() {
 
@@ -99,6 +100,8 @@ CraigError Craig::Window::update(const float& deltaTime) {
 		}
 	}
 
+	// after the events are pumped so SDL's keyboard state is up to date
+	Craig::Input::getInstance().update();
 
 	return ret;
 }

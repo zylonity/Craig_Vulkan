@@ -122,6 +122,11 @@ CraigError Craig::PhysicsEngine::update(const float& deltaTime) {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+	if (!m_simulating)
+	{
+		return ret;
+	}
+
 	m_timeAccumulator += deltaTime;
 
 	// Jolt wants 1 collision step per 1/60th of a second (rounded up) to stay stable with bigger steps
@@ -152,6 +157,23 @@ CraigError Craig::PhysicsEngine::update(const float& deltaTime) {
 	}
 
 	return ret;
+}
+
+void Craig::PhysicsEngine::setSimulating(bool simulating)
+{
+	if (simulating == m_simulating)
+	{
+		return;
+	}
+
+	// coming back from a pause, bin the leftover time so the first frame doesn't do a load of catch up steps
+	if (simulating)
+	{
+		m_timeAccumulator = 0.0f;
+	}
+
+	m_simulating = simulating;
+	Craig::Logger::physics().debug("Simulation {}", simulating ? "on" : "off");
 }
 
 void Craig::PhysicsEngine::setFixedTimeStep(float timeStep)

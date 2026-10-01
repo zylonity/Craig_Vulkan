@@ -113,6 +113,28 @@ void Craig::Components::RigidBody::destroyPhysicsBody()
 	m_bodyId = JPH::BodyID();
 }
 
+void Craig::Components::RigidBody::pushTransformToBody()
+{
+	JPH::BodyInterface* bodyInterface = mp_owner->getScene()->getPhysicsEngine()->getBodyInterface();
+
+	JPH::RVec3 bodyPos;
+	JPH::Quat bodyRot;
+	bodyInterface->GetPositionAndRotation(m_bodyId, bodyPos, bodyRot);
+
+	const JPH::Vec3 objectPos = toJolt(mp_owner->getPosition());
+	const JPH::Quat objectRot = toJolt(mp_owner->getRotationQuat());
+
+	// only touch it if it moved, otherwise it'd keep waking up for nothing
+	if (bodyPos.IsClose(objectPos) && bodyRot.IsClose(objectRot))
+	{
+		return;
+	}
+
+	// wake it up or it'll just hang there asleep wherever you dragged it
+	const bool isStatic = m_layer == Physics::Layers::NON_MOVING;
+	bodyInterface->SetPositionAndRotation(m_bodyId, objectPos, objectRot, isStatic ? JPH::EActivation::DontActivate : JPH::EActivation::Activate);
+}
+
 CraigError Craig::Components::RigidBody::update() {
 
 	CraigError ret = CRAIG_SUCCESS;
@@ -139,6 +161,13 @@ CraigError Craig::Components::RigidBody::update() {
 	{
 		createPhysicsBody();
 		return ret; // just made it from the object's transform, nothing to copy back yet
+	}
+
+	// not simulating, the object's the boss
+	if (!mp_owner->getScene()->getPhysicsEngine()->isSimulating())
+	{
+		pushTransformToBody();
+		return ret;
 	}
 
 	// static bodies never move, so there's nothing to copy

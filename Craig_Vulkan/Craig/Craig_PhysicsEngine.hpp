@@ -44,6 +44,12 @@ namespace Craig {
 		CraigError terminate();
 
 		float getFixedTimeStep() const { return m_fixedTimeStep; }
+
+		// off = update() doesn't step at all
+		// the framework sets it every frame from the engine mode
+		void setSimulating(bool simulating);
+		// rigid bodies check this to know which way to copy
+		bool isSimulating() const { return m_simulating; }
 		void setFixedTimeStep(float timeStep); // clamped between 10Hz and 1000Hz
 
 		// the locking version, it's safe to use from any thread
@@ -108,6 +114,7 @@ namespace Craig {
 		// fixed rate, frame time goes into the accumulator and gets eaten in m_fixedTimeStep chunks
 		float m_fixedTimeStep = 1.0f / 60.0f;
 		float m_timeAccumulator = 0.0f;
+		bool m_simulating = false; // starts off, the engine mode turns it on
 		bool m_droppedTimeWarned = false; // only warn the first time, after that it's debug so it doesn't flood the log
 	};
 

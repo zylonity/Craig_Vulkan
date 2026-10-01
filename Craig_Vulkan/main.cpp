@@ -32,15 +32,19 @@
 #include <cassert>
 
 #include "Craig/Craig_Framework.hpp"
+#include "Game/CraigGame.hpp"
 //===============================================================================
 // Framework is constructed as Global
 Craig::Framework g_framework;
+// so is the game, the framework just borrows it
+Game::CraigGame g_game;
 //===============================================================================
 
 int main() {
 
     CraigError ret = CRAIG_SUCCESS;
 
+	g_framework.setGame(&g_game);
 	ret = g_framework.init();
 	assert(ret == CRAIG_SUCCESS && "Framework failed to init");
 

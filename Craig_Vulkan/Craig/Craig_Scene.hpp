@@ -15,11 +15,17 @@ namespace Craig {
 
 	public:
 		CraigError init(const std::string& scenePath, Craig::PhysicsEngine* pPhysicsEngine);
-		CraigError update(const float& deltaTime);
+		// init() but from json already in memory (the play snapshot)
+		// scenePath is still where save() writes
+		CraigError initFromJson(const nlohmann::json& sceneJson, const std::string& scenePath, Craig::PhysicsEngine* pPhysicsEngine);
+		CraigError update(const float& deltaTime); // engine side, every frame
+		CraigError gameplayUpdate(const float& deltaTime); // only while the game's running
 		CraigError terminate();
 
 		// writes the scene back to the .json it was loaded from
 		CraigError save();
+		// the whole scene in the layout init() reads
+		nlohmann::json toJson() const;
 
 		const std::string& getName() const { return m_name; }
 		const std::string& getScenePath() const { return m_scenePath; }

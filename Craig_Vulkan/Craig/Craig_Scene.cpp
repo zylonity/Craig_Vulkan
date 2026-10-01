@@ -15,13 +15,7 @@
 
 CraigError Craig::Scene::init(const std::string& scenePath, Craig::PhysicsEngine* pPhysicsEngine) {
 
-	CraigError ret = CRAIG_SUCCESS;
-
-	const spdlog::stopwatch loadTimer;
 	Craig::Logger::scene().info("Loading scene {}", scenePath);
-
-	// set before anything loads so components can reach it
-	mp_physicsEngine = pPhysicsEngine;
 
 	std::ifstream sceneFile(scenePath);
 	if (!sceneFile.is_open())
@@ -37,6 +31,18 @@ CraigError Craig::Scene::init(const std::string& scenePath, Craig::PhysicsEngine
 		Craig::Logger::scene().error("Scene file isn't valid json: {}", scenePath);
 		return CRAIG_FAIL;
 	}
+
+	return initFromJson(sceneJson, scenePath, pPhysicsEngine);
+}
+
+CraigError Craig::Scene::initFromJson(const nlohmann::json& sceneJson, const std::string& scenePath, Craig::PhysicsEngine* pPhysicsEngine) {
+
+	CraigError ret = CRAIG_SUCCESS;
+
+	const spdlog::stopwatch loadTimer;
+
+	// set before anything loads so components can reach it
+	mp_physicsEngine = pPhysicsEngine;
 
 	m_scenePath = scenePath;
 	m_name = sceneJson.value("name", std::filesystem::path(scenePath).stem().string());
@@ -83,9 +89,7 @@ CraigError Craig::Scene::init(const std::string& scenePath, Craig::PhysicsEngine
 	return ret;
 }
 
-CraigError Craig::Scene::save() {
-
-	CraigError ret = CRAIG_SUCCESS;
+nlohmann::json Craig::Scene::toJson() const {
 
 	// same layout init() reads
 	nlohmann::json sceneJson;
@@ -124,6 +128,15 @@ CraigError Craig::Scene::save() {
 
 		sceneJson["gameObjects"].push_back(objectJson);
 	}
+
+	return sceneJson;
+}
+
+CraigError Craig::Scene::save() {
+
+	CraigError ret = CRAIG_SUCCESS;
+
+	const nlohmann::json sceneJson = toJson();
 
 	// Write to a temp file first and swap it in, so a failed write can't wipe the old scene
 	const std::filesystem::path scenePath = m_scenePath;
@@ -327,6 +340,17 @@ CraigError Craig::Scene::update(const float& deltaTime) {
 	for (size_t i = 0; i < mpv_Gameobjects.size(); i++)
 	{
 		mpv_Gameobjects[i]->update();
+	}
+	return ret;
+}
+
+CraigError Craig::Scene::gameplayUpdate(const float& deltaTime) {
+
+	CraigError ret = CRAIG_SUCCESS;
+	// index loop on purpose, gameplay might spawn stuff and push_back would break a range-for
+	for (size_t i = 0; i < mpv_Gameobjects.size(); i++)
+	{
+		mpv_Gameobjects[i]->gameplayUpdate(deltaTime);
 	}
 	return ret;
 }

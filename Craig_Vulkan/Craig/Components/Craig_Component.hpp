@@ -16,7 +16,10 @@ namespace Craig {
 			virtual ~Component() = default;
 
 			virtual CraigError init() { return CRAIG_SUCCESS; }
+			// engine bookkeeping, runs every frame whatever mode we're in
 			virtual CraigError update() { return CRAIG_SUCCESS; }
+			// actual game stuff, only runs while playing
+			virtual CraigError gameplayUpdate(const float& deltaTime) { return CRAIG_SUCCESS; }
 			virtual CraigError terminate() { return CRAIG_SUCCESS; }
 
 			// reads the component's settings out of its block in the scene json

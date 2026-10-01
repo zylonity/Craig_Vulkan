@@ -57,6 +57,18 @@ CraigError Craig::GameObject::update() {
 	return ret;
 }
 
+CraigError Craig::GameObject::gameplayUpdate(const float& deltaTime) {
+
+	CraigError ret = CRAIG_SUCCESS;
+
+	for (const std::unique_ptr<Components::Component>& pComponent : mv_components)
+	{
+		pComponent->gameplayUpdate(deltaTime);
+	}
+
+	return ret;
+}
+
 
 glm::mat4 Craig::GameObject::calculateModelMatrix() const
 {
@@ -94,12 +106,14 @@ void Craig::GameObject::removeComponent(Components::Component* pComponent)
 	std::erase_if(mv_components, [pComponent](const std::unique_ptr<Components::Component>& pOwned) { return pOwned.get() == pComponent; });
 }
 
-void Craig::GameObject::displayImGuiAttributes()
+void Craig::GameObject::displayImGuiAttributes(bool editable)
 {
 
 	// Show text box for the game objects name.
 	std::string tempName = m_name;
+	ImGui::BeginDisabled(!editable);
 	ImGui::InputText("Name", &tempName);
+	ImGui::EndDisabled();
 
 	if (ImGui::IsItemDeactivatedAfterEdit())
 	{
@@ -137,18 +151,21 @@ void Craig::GameObject::displayImGuiAttributes()
 	// Display transform details.
 	if (ImGui::TreeNode("Transform"))
 	{
+		// disabled inside the tree node so you can still open it and look
+		ImGui::BeginDisabled(!editable);
 		Utilities::displayVectorAttribute("Position", mv3_position);
 		if (Utilities::displayVectorAttribute("Rotation", mv3_rotation)) {
 			m_rotationQuat = glm::quat(glm::radians(mv3_rotation));
 		}
 		Utilities::displayVectorAttribute("Scale", mv3_scale);
+		ImGui::EndDisabled();
 		ImGui::TreePop();
 	};
 
-	displayComponents();
+	displayComponents(editable);
 }
 
-void Craig::GameObject::displayComponents()
+void Craig::GameObject::displayComponents(bool editable)
 {
 	// Can't remove mid-loop or we'd invalidate the iterator, so remember it and do it after
 	Components::Component* pComponentToRemove = nullptr;
@@ -159,12 +176,15 @@ void Craig::GameObject::displayComponents()
 		// starts closed, ImGui remembers it once you open one
 		if (ImGui::TreeNodeEx("##Component", ImGuiTreeNodeFlags_None, "%s", pComponent->getTypeName()))
 		{
+			// covers every component's UI in one go
+			ImGui::BeginDisabled(!editable);
 			pComponent->displayImGuiAttributes();
 
 			if (ImGui::Button("Remove Component"))
 			{
 				pComponentToRemove = pComponent.get();
 			}
+			ImGui::EndDisabled();
 			ImGui::TreePop();
 		}
 		ImGui::PopID();
@@ -179,10 +199,12 @@ void Craig::GameObject::displayComponents()
 	// whatever gets picked lands on the end, so this catches them all in one place
 	const size_t componentCountBefore = mv_components.size();
 
+	ImGui::BeginDisabled(!editable);
 	if (ImGui::Button("Add Component"))
 	{
 		ImGui::OpenPopup("AddComponentPopup");
 	}
+	ImGui::EndDisabled();
 
 	if (ImGui::BeginPopup("AddComponentPopup"))
 	{

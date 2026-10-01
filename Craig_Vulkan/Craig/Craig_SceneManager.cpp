@@ -30,12 +30,31 @@ CraigError Craig::SceneManager::loadScene(const std::string& scenePath) {
 	// load the new scene first, so if it fails we still have the old one
 	Craig::Scene* pNewScene = new Craig::Scene;
 	ret = pNewScene->init(scenePath, mp_physicsEngine);
-	if (ret != CRAIG_SUCCESS)
+
+	return swapInScene(pNewScene, ret, scenePath);
+}
+
+CraigError Craig::SceneManager::loadSceneFromJson(const nlohmann::json& sceneJson, const std::string& scenePath) {
+
+	CraigError ret = CRAIG_SUCCESS;
+
+	Craig::Logger::scene().info("Rebuilding {} from memory", scenePath);
+
+	// same deal as loadScene, build the new one before binning the old one
+	Craig::Scene* pNewScene = new Craig::Scene;
+	ret = pNewScene->initFromJson(sceneJson, scenePath, mp_physicsEngine);
+
+	return swapInScene(pNewScene, ret, scenePath);
+}
+
+CraigError Craig::SceneManager::swapInScene(Craig::Scene* pNewScene, CraigError initResult, const std::string& scenePath) {
+
+	if (initResult != CRAIG_SUCCESS)
 	{
 		Craig::Logger::scene().error("Couldn't load {}, sticking with {}", scenePath, mp_CurrentScene->getScenePath());
 		pNewScene->terminate();
 		delete pNewScene;
-		return ret;
+		return initResult;
 	}
 
 	// swap it in and clean up the old one
@@ -43,7 +62,7 @@ CraigError Craig::SceneManager::loadScene(const std::string& scenePath) {
 	delete mp_CurrentScene;
 	mp_CurrentScene = pNewScene;
 
-	return ret;
+	return CRAIG_SUCCESS;
 }
 
 CraigError Craig::SceneManager::update(const float& deltaTime) {
@@ -51,6 +70,15 @@ CraigError Craig::SceneManager::update(const float& deltaTime) {
 	CraigError ret = CRAIG_SUCCESS;
 
 	mp_CurrentScene->update(deltaTime);
+
+	return ret;
+}
+
+CraigError Craig::SceneManager::gameplayUpdate(const float& deltaTime) {
+
+	CraigError ret = CRAIG_SUCCESS;
+
+	mp_CurrentScene->gameplayUpdate(deltaTime);
 
 	return ret;
 }

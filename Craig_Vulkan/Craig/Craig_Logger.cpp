@@ -36,6 +36,7 @@ CraigError Craig::Logger::init() {
 	mp_physics = createLogger("Physics");
 	mp_scene = createLogger("Scene");
 	mp_resources = createLogger("Resources");
+	mp_state = createLogger("State");
 
 	mp_engine->info("Logger's up, also writing to {}", kLogFilePath);
 

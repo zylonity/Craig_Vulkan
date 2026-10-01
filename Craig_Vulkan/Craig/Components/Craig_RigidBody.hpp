@@ -33,6 +33,8 @@ namespace Craig {
 			// all the object's colliders go into one body
 			void createPhysicsBody();
 			void destroyPhysicsBody();
+			// object -> body when physics is off, so gizmo moves actually stick
+			void pushTransformToBody();
 
 			JPH::BodyID m_bodyId;
 

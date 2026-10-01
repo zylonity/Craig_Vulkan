@@ -44,6 +44,12 @@ file(GLOB_RECURSE CRAIG_SOURCES
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/Craig/Renderer/*.hpp
 )
 
+#the game itself, kept out of Craig/ so the engine never depends on it
+file(GLOB_RECURSE GAME_SOURCES
+        ${CMAKE_SOURCE_DIR}/Craig_Vulkan/Game/*.cpp
+        ${CMAKE_SOURCE_DIR}/Craig_Vulkan/Game/*.hpp
+)
+
 file(GLOB_RECURSE IMGUI_SOURCES
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/External/Imgui/*.cpp
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/External/Imgui/*.h
@@ -51,6 +57,7 @@ file(GLOB_RECURSE IMGUI_SOURCES
 
 add_executable(Craig_Vulkan
         ${CRAIG_SOURCES}
+        ${GAME_SOURCES}
         ${IMGUI_SOURCES}
         Craig_Vulkan/main.cpp
 )

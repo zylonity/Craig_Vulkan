@@ -2,6 +2,7 @@
 #include "Craig_Renderer.hpp"
 #include "Craig_Camera.hpp"
 #include "Craig_PhysicsEngine.hpp"
+#include "Craig_Game.hpp"
 
 #include "../External/Imgui/imgui.h"
 #include "../External/Imgui/imfilebrowser.h"
@@ -83,8 +84,23 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 	updateImGuizmoCollider();
 	drawColliderOutlines();
 
-	renderNewGameObjectWindow();
-	renderNewSceneWindow();
+	// making a scene loads it, which would screw up the play snapshot
+	// no new game objects either
+	if (isEditing())
+	{
+		renderNewGameObjectWindow();
+		renderNewSceneWindow();
+	}
+
+	// game's stand in menus, still drawn while paused
+	if (mp_engineModes != nullptr)
+	{
+		const Craig::EngineContext& modeContext = mp_engineModes->getContext();
+		if (modeContext.pGame != nullptr && modeContext.gameSessionActive)
+		{
+			modeContext.pGame->drawImGui();
+		}
+	}
 
 	return ret;
 }
@@ -105,11 +121,24 @@ void Craig::ImguiEditor::showMainMenuBar()
 		saveCurrentScene();
 	}
 
+	// play/stop toggle
+	if (mp_engineModes != nullptr && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_P, ImGuiInputFlags_RouteGlobal))
+	{
+		mp_engineModes->requestChange(isEditing() ? Craig::EngineModeId::Play : Craig::EngineModeId::Edit);
+	}
+
+	// orange menu bar while playing, so you know whatever you change gets binned on Stop
+	const bool tintMenuBar = !isEditing();
+	if (tintMenuBar)
+	{
+		ImGui::PushStyleColor(ImGuiCol_MenuBarBg, ImVec4(0.45f, 0.25f, 0.05f, 1.0f));
+	}
+
 	if (ImGui::BeginMainMenuBar())
 	{
 		if (ImGui::BeginMenu("New"))
 		{
-			ImGui::MenuItem("New Scene", nullptr, &m_ShowNewSceneWindow);
+			ImGui::MenuItem("New Scene", nullptr, &m_ShowNewSceneWindow, isEditing());
 			ImGui::EndMenu();
 		}
 
@@ -119,11 +148,14 @@ void Craig::ImguiEditor::showMainMenuBar()
 			// copy, not a reference, since loading a scene deletes the old one mid-loop
 			const std::string currentScenePath = mp_sceneManager->getCurrentScene()->getScenePath();
 
-			if (ImGui::MenuItem("Save Scene", "Ctrl+S"))
+			if (ImGui::MenuItem("Save Scene", "Ctrl+S", false, isEditing()))
 			{
 				saveCurrentScene();
 			}
 			ImGui::Separator();
+
+			// switching mid play would leave Stop putting back a scene you'd already left
+			ImGui::BeginDisabled(!isEditing());
 
 			// error_code version so a missing folder doesn't throw
 			std::error_code error;
@@ -151,6 +183,8 @@ void Craig::ImguiEditor::showMainMenuBar()
 				}
 			}
 
+			ImGui::EndDisabled();
+
 			// show why the last load failed, if it did
 			if (!m_sceneLoadError.empty())
 			{
@@ -167,9 +201,11 @@ void Craig::ImguiEditor::showMainMenuBar()
 			ImGui::MenuItem("Rendering Properties", nullptr, &m_ShowRendererProperties);
 			ImGui::MenuItem("Scene Details", nullptr, &m_ShowSceneDetails);
 			ImGui::MenuItem("Log", nullptr, &m_ShowLog);
-			ImGui::MenuItem("New Game Object", nullptr, &m_ShowNewGameObjectWindow);
+			ImGui::MenuItem("New Game Object", nullptr, &m_ShowNewGameObjectWindow, isEditing());
 			ImGui::EndMenu();
 		}
+
+		showPlayControls();
 
 		// show the last save result for a few seconds
 		constexpr double kSaveStatusDuration = 3.0;
@@ -181,10 +217,71 @@ void Craig::ImguiEditor::showMainMenuBar()
 
 		ImGui::EndMainMenuBar();
 	}
+
+	if (tintMenuBar)
+	{
+		ImGui::PopStyleColor();
+	}
+}
+
+void Craig::ImguiEditor::showPlayControls()
+{
+	if (mp_engineModes == nullptr)
+	{
+		return;
+	}
+
+	ImGui::Separator();
+
+	// greyed out if the transition table says no
+	// new modes only need a line here
+	struct ModeButton {
+		const char* label;
+		Craig::EngineModeId target;
+		const char* tooltip;
+	};
+	static constexpr ModeButton kButtons[] = {
+		{ "Play", Craig::EngineModeId::Play, "Run the game (Ctrl+P)" },
+		{ "Pause", Craig::EngineModeId::Pause, "Freeze it, you can look around but not edit" },
+		{ "Step", Craig::EngineModeId::Step, "One frame (one physics step) then pause again" },
+		{ "Simulate", Craig::EngineModeId::Simulate, "Physics only, no gameplay" },
+		{ "Stop", Craig::EngineModeId::Edit, "Back to editing, puts the scene back how it was (Ctrl+P)" },
+	};
+
+	for (const ModeButton& button : kButtons)
+	{
+		ImGui::BeginDisabled(!mp_engineModes->canChangeTo(button.target));
+		if (ImGui::MenuItem(button.label))
+		{
+			mp_engineModes->requestChange(button.target);
+		}
+		ImGui::EndDisabled();
+		ImGui::SetItemTooltip("%s", button.tooltip);
+	}
+
+	ImGui::Separator();
+	ImGui::TextDisabled("%s", mp_engineModes->getCurrent()->getName());
+}
+
+bool Craig::ImguiEditor::isEditing() const
+{
+	// no modes hooked up = never playing
+	return mp_engineModes == nullptr || mp_engineModes->isCurrent(Craig::EngineModeId::Edit);
 }
 
 void Craig::ImguiEditor::saveCurrentScene()
 {
+	// Ctrl+S still lands here mid play
+	// saving now would write the played positions over the real ones
+	if (!isEditing())
+	{
+		Craig::Logger::scene().warn("Not saving while playing, hit Stop first");
+		m_saveStatus = "Stop playing before saving";
+		m_saveStatusColour = { 1.0f, 0.0f, 0.0f, 1.0f };
+		m_saveStatusTime = ImGui::GetTime();
+		return;
+	}
+
 	const Craig::Scene* pScene = mp_sceneManager->getCurrentScene();
 	const std::string fileName = std::filesystem::path(pScene->getScenePath()).filename().string();
 
@@ -362,9 +459,19 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	 	if (ImGui::CollapsingHeader("Game Objects", ImGuiTreeNodeFlags_DefaultOpen))
 	 	{
 
+	 		// nothing can change outside edit mode
+	 		// you can still select stuff and look at it
+	 		const bool editable = isEditing();
+	 		if (!editable)
+	 		{
+	 			ImGui::TextDisabled("Playing, hit Stop to edit");
+	 		}
+
+	 		ImGui::BeginDisabled(!editable);
 	 		if (ImGui::Button("New Gameobject")) {
 	 			m_ShowNewGameObjectWindow = true;
 	 		}
+	 		ImGui::EndDisabled();
 
 	 		// Display all properties of game objects in the scene.
 	 		const std::vector<Craig::GameObject*>& gameOjects = mp_sceneManager->getCurrentScene()->getGameObjects();
@@ -391,6 +498,7 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	 						mp_selectedGameObject = nullptr;
 	 					}
 
+	 					ImGui::BeginDisabled(!editable);
 	 					// Toggle translate mode on the selected game object.
 	 					if (ImGui::Button("Move"))
 	 					{
@@ -408,10 +516,14 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	 					{
 	 						m_CurrentOperation = ImGuizmo::SCALE;
 	 					}
+	 					ImGui::EndDisabled();
 	 				}
 
 	 				// Allow the user to delete the game object.
-	 				if (ImGui::Button("Delete Object"))
+	 				ImGui::BeginDisabled(!editable);
+	 				const bool deletePressed = ImGui::Button("Delete Object");
+	 				ImGui::EndDisabled();
+	 				if (deletePressed)
 	 				{
 	 					// Remove the game object from the scene.
 	 					mp_renderer->deleteGameObject(pGameObject);
@@ -429,7 +541,7 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	 				}
 
 	 				// Display the objects attributes
-	 				pGameObject->displayImGuiAttributes();
+	 				pGameObject->displayImGuiAttributes(editable);
 
 	 				ImGui::TreePop();
 	 			}
@@ -645,7 +757,8 @@ void Craig::ImguiEditor::updateImGuizmo()
 	// https://github.com/CedricGuillemet/ImGuizmo/issues/125
 	// I grabbed his code and adapted it, mine was similar before
 
-	if (mp_selectedGameObject != nullptr)
+	// no gizmo while playing
+	if (mp_selectedGameObject != nullptr && isEditing())
 	{
 		// Use hotkeys to update the current transformation.
 		if (ImGui::IsKeyPressed(ImGuiKey_T))
@@ -728,6 +841,21 @@ void Craig::ImguiEditor::selectGameObject(Craig::GameObject* pGameObject)
 	mp_selectedGameObject = pGameObject;
 }
 
+std::string Craig::ImguiEditor::getSelectedGameObjectName() const
+{
+	return mp_selectedGameObject != nullptr ? mp_selectedGameObject->getName() : "";
+}
+
+void Craig::ImguiEditor::onSceneSwapped(const std::string& reselectObjectName)
+{
+	// old pointers are dead, just forget them
+	mp_selectedGameObject = nullptr;
+	mp_selectedCollider = nullptr;
+
+	Craig::GameObject* pReselect = reselectObjectName.empty() ? nullptr : mp_sceneManager->getCurrentScene()->findObject(reselectObjectName);
+	selectGameObject(pReselect);
+}
+
 void Craig::ImguiEditor::selectCollider(Craig::Components::Collider* pCollider)
 {
 	mp_selectedGameObject = nullptr;
@@ -768,7 +896,8 @@ void Craig::ImguiEditor::updateImGuizmoCollider()
 		}
 	}
 
-	if (mp_selectedCollider == nullptr)
+	// still found above so the outline stays highlighted, just no gizmo
+	if (mp_selectedCollider == nullptr || !isEditing())
 	{
 		return;
 	}

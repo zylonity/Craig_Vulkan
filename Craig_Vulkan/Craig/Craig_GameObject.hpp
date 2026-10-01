@@ -22,7 +22,8 @@ namespace Craig {
 
 	public:
 		CraigError init(std::string name, Craig::Scene* scenePtr);
-		CraigError update();
+		CraigError update(); // engine side, every frame
+		CraigError gameplayUpdate(const float& deltaTime); // only while the game's running
 		CraigError terminate();
 
 		glm::mat4 GetModelMatrix() { return m_modelMatrix; }
@@ -92,9 +93,10 @@ namespace Craig {
 		void removeComponent(Components::Component* pComponent);
 		const std::vector<std::unique_ptr<Components::Component>>& getComponents() const { return mv_components; }
 
-		void displayImGuiAttributes();
+		// editable = false shows everything but nothing can be changed (for playing)
+		void displayImGuiAttributes(bool editable);
 	private:
-		void displayComponents();
+		void displayComponents(bool editable);
 
 		void updateModelMatrix();
 

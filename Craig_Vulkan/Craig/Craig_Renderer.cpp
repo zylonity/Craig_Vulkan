@@ -1083,6 +1083,39 @@ CraigError Craig::Renderer::loadScene(const std::string& scenePath)
         return ret;
     }
 
+    // different scene, so nothing to reselect
+    finishSceneSwap("");
+
+    return ret;
+}
+
+CraigError Craig::Renderer::restoreScene(const nlohmann::json& sceneJson, const std::string& scenePath)
+{
+    CraigError ret = CRAIG_SUCCESS;
+
+    // grab the name first, the pointer's dead after the swap
+    std::string selectedName;
+#if defined(IMGUI_ENABLED)
+    selectedName = Craig::ImguiEditor::getInstance().getSelectedGameObjectName();
+#endif
+
+    // GPU might still be using the old scene's buffers + sets
+    m_Devices.getLogicalDevice().waitIdle();
+
+    ret = mp_SceneManager->loadSceneFromJson(sceneJson, scenePath);
+    if (ret != CRAIG_SUCCESS)
+    {
+        Craig::Logger::renderer().error("Couldn't rebuild {} from memory, keeping what's there", scenePath);
+        return ret;
+    }
+
+    finishSceneSwap(selectedName);
+
+    return ret;
+}
+
+void Craig::Renderer::finishSceneSwap(const std::string& reselectObjectName)
+{
     // Buffers are built from the scene's objects, so remake them + sets for any new models
     rebuildGeometryBuffers();
     createModelDescriptorSets();
@@ -1091,9 +1124,11 @@ CraigError Craig::Renderer::loadScene(const std::string& scenePath)
     mp_CurrentWindow->setCameraRef(&mp_SceneManager->getCurrentScene()->getCamera());
 #if defined(IMGUI_ENABLED)
     Craig::ImguiEditor::getInstance().setCamera(&mp_SceneManager->getCurrentScene()->getCamera());
+    // the editor's still pointing at stuff from the old scene
+    Craig::ImguiEditor::getInstance().onSceneSwapped(reselectObjectName);
+#else
+    (void)reselectObjectName;
 #endif
-
-    return ret;
 }
 
 void Craig::Renderer::updateMinLOD(int minLOD) {

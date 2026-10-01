@@ -25,8 +25,10 @@ namespace Craig {
         glm::mat4 getProj()  const { return m_proj; }
 
         glm::vec3& getPosition() { return m_position; }
+        const glm::vec3& getPosition() const { return m_position; } // for const scenes (Scene::toJson)
         glm::vec3& getVelocity() { return m_velocity; }
         glm::vec2& getRotation() { return m_pitchYaw; }
+        const glm::vec2& getRotation() const { return m_pitchYaw; }
 
         float m_fov = 45.0f;
         float m_nearPlane = 0.1f;

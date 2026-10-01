@@ -4,6 +4,8 @@
 #define VMA_IMPLEMENTATION
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #include "Craig_Constants.hpp"
+#include "Craig_EngineModes.hpp"
+#include "Craig_Game.hpp"
 #include <chrono>
 namespace Craig {
 	
@@ -18,6 +20,10 @@ namespace Craig {
 	class Framework {
 
 	public:
+		// call before init()
+		// optional, without one it's just an editor
+		void setGame(Craig::Game* pGame) { mp_Game = pGame; }
+
 		CraigError init();
 		CraigError update();
 		CraigError terminate();
@@ -27,6 +33,11 @@ namespace Craig {
 		Craig::Renderer* mp_Renderer		 = nullptr;
 		Craig::SceneManager* mp_SceneManager = nullptr;
 		Craig::PhysicsEngine* mp_PhysicsEngine = nullptr;
+		Craig::Game* mp_Game = nullptr; // not owned, main.cpp is
+
+		// edit/play/pause etc, decides what ticks each frame
+		Craig::EngineModeMachine m_engineModes{ "Engine" };
+		Craig::GameServices m_gameServices;
 
 #if defined(IMGUI_ENABLED)
 		Craig::ImguiEditor* mp_ImguiEditor = nullptr;

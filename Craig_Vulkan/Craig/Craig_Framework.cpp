@@ -84,6 +84,31 @@ CraigError Craig::Framework::init() {
 	logIfFailed(ret, "Renderer scene resources");
 	assert(ret == CRAIG_SUCCESS);
 
+	// after everything the game might want is up
+	m_gameServices.init(mp_Renderer, mp_SceneManager);
+	if (mp_Game != nullptr) {
+		ret = mp_Game->init(&m_gameServices);
+		logIfFailed(ret, "Game init");
+		assert(ret == CRAIG_SUCCESS);
+	}
+	else {
+		Craig::Logger::engine().info("No game set, it's just the editor");
+	}
+
+	// last, entering the first mode can already start the game
+	Craig::EngineContext& modeContext = m_engineModes.getContext();
+	modeContext.pRenderer = mp_Renderer;
+	modeContext.pSceneManager = mp_SceneManager;
+	modeContext.pGame = mp_Game;
+	Craig::buildEngineModes(m_engineModes);
+#if defined(IMGUI_ENABLED)
+	Craig::ImguiEditor::getInstance().setEngineModes(&m_engineModes);
+	m_engineModes.start(Craig::EngineModeId::Edit);
+#else
+	// no editor means no Play button, so just play
+	m_engineModes.start(Craig::EngineModeId::Play);
+#endif
+
 	Craig::Logger::engine().info("Everything's up, startup took {:.0f} ms", startupTimer.elapsed().count() * 1000.0);
 
 	m_LastFrameTime = std::chrono::steady_clock::now();
@@ -110,18 +135,57 @@ CraigError Craig::Framework::update() {
 		return CRAIG_CLOSED; // If the window is closed, we return that code
 	}
 
+	// game wants out, back to the editor if there is one, otherwise close
+	if (m_gameServices.consumeExitRequest()) {
+#if defined(IMGUI_ENABLED)
+		m_engineModes.requestChange(Craig::EngineModeId::Edit);
+#else
+		Craig::Logger::engine().info("Game asked to quit");
+		return CRAIG_CLOSED;
+#endif
+	}
+
+	// the only place modes actually change
+	m_engineModes.applyRequests();
+	const Craig::EngineModeFlags& mode = Craig::getCurrentModeFlags(m_engineModes);
+
+	// stepping = one physics step, not however long the frame took
+	const float deltaTime = (mode.singleTick ? mp_PhysicsEngine->getFixedTimeStep() : elapsed) * mode.timeScale;
+
+	m_engineModes.update(deltaTime);
+
+	// game first, it might load a different scene
+	const bool gameRunning = mode.runGameplay && mp_Game != nullptr && m_engineModes.getContext().gameSessionActive;
+	if (gameRunning) {
+		CRAIG_PROFILE_SCOPE("Game");
+		ret = mp_Game->update(deltaTime);
+		logIfFailed(ret, "Game update");
+		assert(ret == CRAIG_SUCCESS && "mp_Game failed to update");
+	}
+	// menus freeze the world but the game keeps going so it can read input
+	const bool worldFrozenByGame = gameRunning && !mp_Game->isWorldRunning();
+
 	// physics steps, then the scene copies the results onto the objects, then it gets drawn
 	// otherwise every frame shows the step before
 	{
 		CRAIG_PROFILE_SCOPE("Physics");
-		ret = mp_PhysicsEngine->update(elapsed);
+		mp_PhysicsEngine->setSimulating(mode.stepPhysics && !worldFrozenByGame);
+		ret = mp_PhysicsEngine->update(deltaTime);
 	}
 	logIfFailed(ret, "Physics update");
 	assert(ret == CRAIG_SUCCESS && "mp_PhysicsEngine failed to update");
 
+	// gameplay before the engine side so model matrices pick up what it moved
+	if (mode.runGameplay && !worldFrozenByGame) {
+		CRAIG_PROFILE_SCOPE("Gameplay");
+		ret = mp_SceneManager->gameplayUpdate(deltaTime);
+		logIfFailed(ret, "Scene manager gameplay update");
+		assert(ret == CRAIG_SUCCESS && "mp_SceneManager failed to gameplay update");
+	}
+
 	{
 		CRAIG_PROFILE_SCOPE("SceneManager");
-		ret = mp_SceneManager->update(elapsed);
+		ret = mp_SceneManager->update(deltaTime);
 	}
 	logIfFailed(ret, "Scene manager update");
 	assert(ret == CRAIG_SUCCESS && "mp_SceneManager failed to update");
@@ -143,6 +207,15 @@ CraigError Craig::Framework::terminate() {
 	CraigError ret = CRAIG_SUCCESS;
 
 	Craig::Logger::engine().info("Shutting everything down");
+
+	// modes first, ends the game's session while the scene's still there
+	m_engineModes.stop();
+
+	if (mp_Game != nullptr) {
+		ret = mp_Game->terminate();
+		logIfFailed(ret, "Game terminate");
+		assert(ret == CRAIG_SUCCESS && "mp_Game didn't terminate properly");
+	}
 
 	// Scenes go before the physics engine, rigid bodies remove themselves from it when they terminate
 	ret = mp_SceneManager->terminate();

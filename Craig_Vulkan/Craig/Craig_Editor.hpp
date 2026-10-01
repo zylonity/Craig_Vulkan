@@ -9,6 +9,7 @@
 #include "../External/Imgui/ImGuizmo/ImGuizmo.h"
 #include "Components/Craig_Collider.hpp"
 #include "Craig_Logger.hpp"
+#include "Craig_EngineModes.hpp"
 
 namespace Craig {
 	class GameObject;
@@ -30,12 +31,19 @@ namespace Craig {
 		void setSceneManager(Craig::SceneManager* pSceneManager) { mp_sceneManager = pSceneManager; };
 		void setCamera(Craig::Camera* pCamera) { mp_camera = pCamera; };
 		void setPhysicsEngine(Craig::PhysicsEngine* pPhysicsEngine) { mp_physicsEngine = pPhysicsEngine; };
+		void setEngineModes(Craig::EngineModeMachine* pEngineModes) { mp_engineModes = pEngineModes; };
 		// So components can switch the gizmo between move/rotate/scale from their own UI
 		void setGizmoOperation(ImGuizmo::OPERATION operation) { m_CurrentOperation = operation; };
 
 		// Only one thing (a game object or a collider) can be selected at a time, these deselect everything else first
 		void selectGameObject(Craig::GameObject* pGameObject);
 		void selectCollider(Craig::Components::Collider* pCollider);
+
+		// empty if nothing's selected
+		std::string getSelectedGameObjectName() const;
+		// scene got swapped so everything we point at is gone
+		// reselects by name if it's still there
+		void onSceneSwapped(const std::string& reselectObjectName);
 
 		//===============================================================================
 		// Singleton Implementations
@@ -52,6 +60,9 @@ namespace Craig {
 		bool m_initialised = false;
 
 		void showMainMenuBar();
+		void showPlayControls();
+		// saving or switching scenes mid play would bake the played state into the file
+		bool isEditing() const;
 		std::string m_sceneLoadError;
 
 		void saveCurrentScene();
@@ -91,6 +102,7 @@ namespace Craig {
 		Craig::SceneManager* mp_sceneManager;
 		Craig::Camera* mp_camera;
 		Craig::PhysicsEngine* mp_physicsEngine;
+		Craig::EngineModeMachine* mp_engineModes = nullptr;
 
 		Craig::GameObject* mp_selectedGameObject = nullptr;
 		Craig::Components::Collider* mp_selectedCollider = nullptr;
