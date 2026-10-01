@@ -60,6 +60,8 @@ CraigError Craig::ImguiEditor::editorInit() {
 		mv_MSAADropdownOptions.resize(m_MSAAIndexes[mp_renderer->getRenderingAttachments().getMaxSamplingLevel()] + 1);
 		m_MSAADropdownIndex = m_MSAAIndexes[m_currentMSAALevel];
 
+		m_undoHistory.init(mp_renderer, mp_sceneManager);
+
 		m_initialised = true;
 	}
 	
@@ -76,6 +78,8 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 	// menu bar goes first so the dockspace fits underneath it
 	showMainMenuBar();
 	editorInit();
+	// before the windows so nothing's halfway through the object list when stuff gets deleted
+	handleShortcuts();
 
 	showRenderProperties(deltaTime);
 	showSceneDetails(deltaTime);
@@ -91,6 +95,9 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 		renderNewGameObjectWindow();
 		renderNewSceneWindow();
 	}
+
+	// last, everything that could edit the scene has had its go this frame
+	m_undoHistory.update(isEditing());
 
 	// game's stand in menus, still drawn while paused
 	if (mp_engineModes != nullptr)
@@ -139,6 +146,41 @@ void Craig::ImguiEditor::showMainMenuBar()
 		if (ImGui::BeginMenu("New"))
 		{
 			ImGui::MenuItem("New Scene", nullptr, &m_ShowNewSceneWindow, isEditing());
+			ImGui::EndMenu();
+		}
+
+		if (ImGui::BeginMenu("Edit"))
+		{
+			if (ImGui::MenuItem("Undo", "Ctrl+Z", false, isEditing() && m_undoHistory.canUndo()))
+			{
+				undoOrRedo(true);
+			}
+			if (ImGui::MenuItem("Redo", "Ctrl+Y", false, isEditing() && m_undoHistory.canRedo()))
+			{
+				undoOrRedo(false);
+			}
+			ImGui::Separator();
+
+			const bool hasObject = mp_selectedGameObject != nullptr;
+			const bool hasSelection = hasObject || mp_selectedCollider != nullptr;
+			if (ImGui::MenuItem("Deselect", "Ctrl+D", false, hasSelection))
+			{
+				selectGameObject(nullptr); // drops colliders too
+			}
+			if (ImGui::MenuItem("Focus Selected", "F", false, hasSelection))
+			{
+				focusOnSelected();
+			}
+			if (ImGui::MenuItem("Duplicate", "Ctrl+Shift+D", false, isEditing() && hasObject))
+			{
+				duplicateSelectedGameObject();
+			}
+			if (ImGui::MenuItem("Delete", "Delete", false, isEditing() && hasSelection))
+			{
+				deleteSelected();
+			}
+			ImGui::Separator();
+			ImGui::MenuItem("New Game Object", "Ctrl+N", &m_ShowNewGameObjectWindow, isEditing());
 			ImGui::EndMenu();
 		}
 
@@ -287,6 +329,9 @@ void Craig::ImguiEditor::saveCurrentScene()
 
 	if (mp_sceneManager->getCurrentScene()->save() == CRAIG_SUCCESS)
 	{
+		// undo only goes back as far as the last save
+		m_undoHistory.clear();
+
 		m_saveStatus = "Saved " + fileName;
 		m_saveStatusColour = { 0.4f, 1.0f, 0.4f, 1.0f };
 	}
@@ -296,6 +341,162 @@ void Craig::ImguiEditor::saveCurrentScene()
 		m_saveStatusColour = { 1.0f, 0.0f, 0.0f, 1.0f };
 	}
 	m_saveStatusTime = ImGui::GetTime();
+}
+
+// the camera's forward() is backwards and private, the view matrix knows which way it's actually looking
+static glm::vec3 getCameraLookDir(const Craig::Camera& camera)
+{
+	return -glm::normalize(glm::vec3(glm::inverse(camera.getView())[2]));
+}
+
+void Craig::ImguiEditor::handleShortcuts()
+{
+	// typing a name with an f in it shouldn't fling the camera across the map
+	const bool typing = ImGui::GetIO().WantTextInput;
+
+	// text boxes grab these first while you're typing in one, so they keep their own undo
+	constexpr ImGuiInputFlags kUndoFlags = ImGuiInputFlags_RouteGlobal | ImGuiInputFlags_Repeat;
+	if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z, kUndoFlags))
+	{
+		undoOrRedo(true);
+	}
+	if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Y, kUndoFlags) || ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z, kUndoFlags))
+	{
+		undoOrRedo(false);
+	}
+	if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_D, ImGuiInputFlags_RouteGlobal))
+	{
+		selectGameObject(nullptr); // drops colliders too
+	}
+	if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_D, ImGuiInputFlags_RouteGlobal))
+	{
+		duplicateSelectedGameObject();
+	}
+	if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N, ImGuiInputFlags_RouteGlobal) && isEditing())
+	{
+		m_ShowNewGameObjectWindow = true;
+	}
+	if (!typing && ImGui::Shortcut(ImGuiKey_Delete, ImGuiInputFlags_RouteGlobal))
+	{
+		deleteSelected();
+	}
+	if (!typing && ImGui::Shortcut(ImGuiKey_F, ImGuiInputFlags_RouteGlobal))
+	{
+		focusOnSelected();
+	}
+
+	// scroll to move forwards/back, only over the scene not the editor windows
+	const float wheel = ImGui::GetIO().MouseWheel;
+	if (isEditing() && wheel != 0.0f && !ImGui::GetIO().WantCaptureMouse)
+	{
+		Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
+		// 1 unit a notch at the default speed, so the move speed slider affects it too
+		const float step = wheel * camera.m_movementSpeed * 0.1f;
+		camera.setPosition(camera.getPosition() + getCameraLookDir(camera) * step);
+	}
+}
+
+void Craig::ImguiEditor::undoOrRedo(bool undo)
+{
+	// ctrl z halfway through dragging something would be a mess
+	if (!isEditing() || ImGui::IsAnyItemActive() || ImGuizmo::IsUsing())
+	{
+		return;
+	}
+
+	// whatever's selected might get deleted and remade, so go by name
+	const std::string selectedName = getSelectedGameObjectName();
+	const bool changed = undo ? m_undoHistory.undo() : m_undoHistory.redo();
+	if (changed)
+	{
+		onSceneSwapped(selectedName);
+	}
+}
+
+void Craig::ImguiEditor::deleteSelected()
+{
+	if (!isEditing())
+	{
+		return;
+	}
+
+	if (mp_selectedCollider != nullptr)
+	{
+		Craig::Components::Collider* pCollider = mp_selectedCollider;
+		deselectAllColliders();
+		Craig::Logger::scene().info("Removed {} from '{}'", pCollider->getTypeName(), pCollider->getOwner()->getName());
+		pCollider->getOwner()->removeComponent(pCollider);
+	}
+	else if (mp_selectedGameObject != nullptr)
+	{
+		Craig::GameObject* pGameObject = mp_selectedGameObject;
+		mp_selectedGameObject = nullptr;
+		mp_renderer->deleteGameObject(pGameObject);
+	}
+	else
+	{
+		return;
+	}
+
+	// not a widget so undo wouldn't notice otherwise
+	m_undoHistory.scanSoon();
+}
+
+void Craig::ImguiEditor::duplicateSelectedGameObject()
+{
+	if (!isEditing() || mp_selectedGameObject == nullptr)
+	{
+		return;
+	}
+
+	Craig::Scene* pScene = mp_sceneManager->getCurrentScene();
+
+	// first free "Fish (1)", "Fish (2)"...
+	std::string newName;
+	for (int i = 1; newName.empty() || pScene->findObject(newName) != nullptr; i++)
+	{
+		newName = mp_selectedGameObject->getName() + " (" + std::to_string(i) + ")";
+	}
+
+	// same json it'd save with, just a new name
+	nlohmann::json objectJson = pScene->gameObjectToJson(mp_selectedGameObject);
+	objectJson["name"] = newName;
+
+	Craig::GameObject* pCopy = pScene->createGameObjectFromJson(objectJson);
+	if (pCopy == nullptr)
+	{
+		return;
+	}
+
+	Craig::Logger::scene().info("Duplicated '{}' as '{}'", mp_selectedGameObject->getName(), newName);
+	selectGameObject(pCopy);
+	m_undoHistory.scanSoon();
+}
+
+void Craig::ImguiEditor::focusOnSelected()
+{
+	glm::vec3 target;
+	float size = 1.0f;
+	if (mp_selectedCollider != nullptr)
+	{
+		target = glm::vec3(mp_selectedCollider->getGizmoMatrix()[3]);
+	}
+	else if (mp_selectedGameObject != nullptr)
+	{
+		target = mp_selectedGameObject->getPosition();
+		const glm::vec3& scale = mp_selectedGameObject->getScale();
+		size = glm::max(scale.x, glm::max(scale.y, scale.z));
+	}
+	else
+	{
+		return;
+	}
+
+	// keep looking the same way, just back off from the target along it
+	// no bounds on models yet so the distance is a guess off the scale
+	Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
+	const float distance = glm::max(3.0f, size * 5.0f);
+	camera.setPosition(target - getCameraLookDir(camera) * distance);
 }
 
 void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
@@ -481,7 +682,8 @@ void Craig::ImguiEditor::showSceneDetails(const float& deltaTime)
 	 			ImGui::SeparatorEx(ImGuiSeparatorFlags_Horizontal, 4.0f);
 
 	 			// We have to push a different ID to each node as we're using the same ID otherwise.
-	 			ImGui::PushID(pGameObject);
+	 			// name not pointer, undo remakes the object and a new pointer = node closes on you
+	 			ImGui::PushID(pGameObject->getName().c_str());
 	 			if (ImGui::TreeNode("##TreeNode", "%s", pGameObject->getName().c_str()))
 	 			{
 	 				// Allow the user to select the game object.
@@ -761,18 +963,7 @@ void Craig::ImguiEditor::updateImGuizmo()
 	if (mp_selectedGameObject != nullptr && isEditing())
 	{
 		// Use hotkeys to update the current transformation.
-		if (ImGui::IsKeyPressed(ImGuiKey_T))
-		{
-			m_CurrentOperation = ImGuizmo::TRANSLATE;
-		}
-		if (ImGui::IsKeyPressed(ImGuiKey_R))
-		{
-			m_CurrentOperation = ImGuizmo::ROTATE;
-		}
-		if (ImGui::IsKeyPressed(ImGuiKey_E))
-		{
-			m_CurrentOperation = ImGuizmo::SCALE;
-		}
+		handleGizmoHotkeys(true);
 
 		// Set the screen rect and tell ImGuizmo how to project.
 		ImGuizmo::SetOrthographic(false);
@@ -875,6 +1066,28 @@ void Craig::ImguiEditor::deselectAllColliders()
 	mp_selectedCollider = nullptr;
 }
 
+void Craig::ImguiEditor::handleGizmoHotkeys(bool canRotate)
+{
+	// otherwise typing "tree" in a name box flips through every mode
+	if (ImGui::GetIO().WantTextInput)
+	{
+		return;
+	}
+
+	if (ImGui::IsKeyPressed(ImGuiKey_T))
+	{
+		m_CurrentOperation = ImGuizmo::TRANSLATE;
+	}
+	if (ImGui::IsKeyPressed(ImGuiKey_R) && canRotate)
+	{
+		m_CurrentOperation = ImGuizmo::ROTATE;
+	}
+	if (ImGui::IsKeyPressed(ImGuiKey_E))
+	{
+		m_CurrentOperation = ImGuizmo::SCALE;
+	}
+}
+
 void Craig::ImguiEditor::updateImGuizmoCollider()
 {
 	// Looked up fresh every frame instead of keeping the pointer around, so it can't dangle when the
@@ -903,18 +1116,7 @@ void Craig::ImguiEditor::updateImGuizmoCollider()
 	}
 
 	// Use hotkeys to update the current transformation.
-	if (ImGui::IsKeyPressed(ImGuiKey_T))
-	{
-		m_CurrentOperation = ImGuizmo::TRANSLATE;
-	}
-	if (ImGui::IsKeyPressed(ImGuiKey_R) && mp_selectedCollider->canRotate())
-	{
-		m_CurrentOperation = ImGuizmo::ROTATE;
-	}
-	if (ImGui::IsKeyPressed(ImGuiKey_E))
-	{
-		m_CurrentOperation = ImGuizmo::SCALE;
-	}
+	handleGizmoHotkeys(mp_selectedCollider->canRotate());
 	// Still in rotate from something else, fall back to move for shapes that can't rotate
 	const ImGuizmo::OPERATION operation = (m_CurrentOperation == ImGuizmo::ROTATE && !mp_selectedCollider->canRotate())
 		? ImGuizmo::TRANSLATE : m_CurrentOperation;

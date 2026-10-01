@@ -26,6 +26,10 @@ namespace Craig {
 		CraigError save();
 		// the whole scene in the layout init() reads
 		nlohmann::json toJson() const;
+		// one object's block in that layout, undo diffs these
+		nlohmann::json gameObjectToJson(const Craig::GameObject* pObject) const;
+		// makes an object from its block, nullptr if the name's missing or taken
+		Craig::GameObject* createGameObjectFromJson(const nlohmann::json& objectJson);
 
 		const std::string& getName() const { return m_name; }
 		const std::string& getScenePath() const { return m_scenePath; }

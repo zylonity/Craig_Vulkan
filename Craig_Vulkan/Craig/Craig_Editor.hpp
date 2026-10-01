@@ -10,6 +10,7 @@
 #include "Components/Craig_Collider.hpp"
 #include "Craig_Logger.hpp"
 #include "Craig_EngineModes.hpp"
+#include "Craig_UndoHistory.hpp"
 
 namespace Craig {
 	class GameObject;
@@ -66,6 +67,16 @@ namespace Craig {
 		std::string m_sceneLoadError;
 
 		void saveCurrentScene();
+
+		Craig::UndoHistory m_undoHistory;
+
+		// ctrl z, ctrl d, delete, f etc. the edit menu calls the same functions
+		// runs before the windows so nothing's looping over the objects when stuff gets deleted
+		void handleShortcuts();
+		void undoOrRedo(bool undo);
+		void deleteSelected();
+		void duplicateSelectedGameObject();
+		void focusOnSelected();
 		std::string m_saveStatus;
 		ImVec4 m_saveStatusColour;
 		double m_saveStatusTime = 0.0; // When the status was set, so it can fade out
@@ -112,6 +123,8 @@ namespace Craig {
 
 		// Works for any collider shape, each one handles its own gizmo matrix and outline
 		void updateImGuizmoCollider();
+		// T/R/E, shared by the object and collider gizmos
+		void handleGizmoHotkeys(bool canRotate);
 		void drawColliderOutlines();
 		ImGuizmo::OPERATION m_CurrentOperation = ImGuizmo::OPERATION::TRANSLATE;
 

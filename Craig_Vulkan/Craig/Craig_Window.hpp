@@ -33,6 +33,8 @@ namespace Craig {
 
 		//Setters
 		void setCameraRef(Camera* camera) { m_currentCamera = camera; }
+		// tab toggles it, locked = mouse drives the camera and the editor can't see it
+		void setMouseLocked(bool locked);
 	private:
 		SDL_Window* mp_SDL_Window = nullptr; // SDL Window handle
 		unsigned m_SDL_ExtensionCount; // Number of elements in the extension array (Number of extensions in use?)
@@ -42,6 +44,7 @@ namespace Craig {
 
 		bool m_resizeNeeded = false;
 		bool m_mouseLocked = false;
+		bool m_rightClickFlying = false; // locked by holding right click, so letting go unlocks (tab locks stay locked)
 
 
 	};

@@ -18,6 +18,9 @@
 #include "Components/Craig_ConvexCollider.hpp"
 #include "Components/Craig_RigidBody.hpp"
 
+#include <string_view>
+#include <unordered_map>
+
 CraigError Craig::GameObject::init(std::string name, Craig::Scene* scenePtr) {
 
 	CraigError ret = CRAIG_SUCCESS;
@@ -170,9 +173,13 @@ void Craig::GameObject::displayComponents(bool editable)
 	// Can't remove mid-loop or we'd invalidate the iterator, so remember it and do it after
 	Components::Component* pComponentToRemove = nullptr;
 
+	// ids are type + which one of that type, the pointer changes whenever undo remakes the object
+	std::unordered_map<std::string_view, int> typeCounts;
+
 	for (const std::unique_ptr<Components::Component>& pComponent : mv_components)
 	{
-		ImGui::PushID(pComponent.get());
+		ImGui::PushID(pComponent->getJsonKey());
+		ImGui::PushID(typeCounts[pComponent->getJsonKey()]++);
 		// starts closed, ImGui remembers it once you open one
 		if (ImGui::TreeNodeEx("##Component", ImGuiTreeNodeFlags_None, "%s", pComponent->getTypeName()))
 		{
@@ -187,6 +194,7 @@ void Craig::GameObject::displayComponents(bool editable)
 			ImGui::EndDisabled();
 			ImGui::TreePop();
 		}
+		ImGui::PopID();
 		ImGui::PopID();
 	}
 

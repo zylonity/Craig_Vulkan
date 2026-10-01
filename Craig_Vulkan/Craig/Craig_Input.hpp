@@ -18,6 +18,9 @@ namespace Craig {
 		// went down this frame, so holding a key doesn't fire every frame
 		bool wasKeyPressed(SDL_Scancode key) const;
 
+		// typing in an editor text box shouldn't also pause the game (or lock the mouse)
+		bool isTypingInEditor() const;
+
 		//===============================================================================
 		// Singleton Implementations
 		static Input& getInstance()
@@ -35,9 +38,6 @@ namespace Craig {
 		// Singleton Implementations (Banned functions to prevent a new instance)
 		Input() {}	// Default Constructor private so can only be called from within
 		//===============================================================================
-
-		// typing in an editor text box shouldn't also pause the game
-		bool isTypingInEditor() const;
 
 		std::array<bool, SDL_SCANCODE_COUNT> m_currentKeys{};
 		std::array<bool, SDL_SCANCODE_COUNT> m_previousKeys{};

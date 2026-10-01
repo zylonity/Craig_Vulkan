@@ -60,11 +60,50 @@ CraigError Craig::Window::update(const float& deltaTime) {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+	// imgui's answer from last frame, it doesn't change while we pump events anyway
+	bool mouseOverEditor = false;
+#if defined(IMGUI_ENABLED)
+	mouseOverEditor = ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureMouse;
+#endif
+
 	SDL_Event event;
 	while (SDL_PollEvent(&event)) {
 		m_currentCamera->processSDLEvent(event, mp_SDL_Window);
+
+		bool hideFromImGui = false;
+
+		// tab locks the mouse, unless you're typing then it's imgui's (next field)
+		if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_TAB && !Craig::Input::getInstance().isTypingInEditor())
+		{
+			if (!event.key.repeat)
+			{
+				setMouseLocked(!m_mouseLocked);
+			}
+			hideFromImGui = true; // or imgui tabs through every widget as well
+		}
+
+		// hold right click over the scene to fly, let go to get the cursor back
+		if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_RIGHT && !m_mouseLocked && !mouseOverEditor)
+		{
+			setMouseLocked(true);
+			m_rightClickFlying = true;
+		}
+		else if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_RIGHT && m_rightClickFlying)
+		{
+			setMouseLocked(false);
+			m_rightClickFlying = false;
+		}
+
 #if defined(IMGUI_ENABLED)
-		ImGui_ImplSDL3_ProcessEvent(&event);
+		// locked = flying, imgui shouldn't see the mouse wandering around and clicking stuff
+		// wheel still goes through so scrolling works while flying
+		const bool isMouseEvent = event.type == SDL_EVENT_MOUSE_MOTION
+			|| event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
+			|| event.type == SDL_EVENT_MOUSE_BUTTON_UP;
+		if (!hideFromImGui && !(m_mouseLocked && isMouseEvent))
+		{
+			ImGui_ImplSDL3_ProcessEvent(&event);
+		}
 #endif
 
 		switch (event.type) {
@@ -86,14 +125,6 @@ CraigError Craig::Window::update(const float& deltaTime) {
 			m_resizeNeeded = false;
 			continue;
 
-		case SDL_EVENT_KEY_UP:
-			if (event.key.key == SDLK_TAB) {
-				m_mouseLocked = !m_mouseLocked;
-				SDL_SetWindowRelativeMouseMode(mp_SDL_Window, m_mouseLocked);
-				Craig::Logger::engine().debug("Mouse {}", m_mouseLocked ? "locked" : "unlocked");
-			}
-			continue;
-
 		default:
 
 			continue;
@@ -104,6 +135,35 @@ CraigError Craig::Window::update(const float& deltaTime) {
 	Craig::Input::getInstance().update();
 
 	return ret;
+}
+
+void Craig::Window::setMouseLocked(bool locked) {
+
+	m_mouseLocked = locked;
+	SDL_SetWindowRelativeMouseMode(mp_SDL_Window, locked);
+
+	// camera only hears keys while locked, so a WASD release after unlocking never reaches it and you drift forever
+	if (m_currentCamera != nullptr)
+	{
+		m_currentCamera->getVelocity() = glm::vec3(0.0f);
+	}
+
+#if defined(IMGUI_ENABLED)
+	// NoMouse stops whatever was under the cursor staying hovered
+	// NoMouseCursorChange stops imgui's backend un-hiding the cursor every frame
+	ImGuiIO& io = ImGui::GetIO();
+	constexpr ImGuiConfigFlags kMouseFlags = ImGuiConfigFlags_NoMouse | ImGuiConfigFlags_NoMouseCursorChange;
+	if (locked)
+	{
+		io.ConfigFlags |= kMouseFlags;
+	}
+	else
+	{
+		io.ConfigFlags &= ~kMouseFlags;
+	}
+#endif
+
+	Craig::Logger::engine().debug("Mouse {}", locked ? "locked" : "unlocked");
 }
 
 Craig::Window::WindowExtent Craig::Window::getDrawableExtent() const {

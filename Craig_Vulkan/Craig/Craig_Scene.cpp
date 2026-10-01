@@ -55,28 +55,8 @@ CraigError Craig::Scene::initFromJson(const nlohmann::json& sceneJson, const std
 	// game objects
 	for (const nlohmann::json& objectJson : sceneJson.value("gameObjects", nlohmann::json::array()))
 	{
-		const std::string objectName = objectJson.value("name", "");
-
-		// skip anything broken instead of crashing the whole scene
-		if (objectName.empty() || findObject(objectName) != nullptr)
-		{
-			Craig::Logger::scene().warn("Skipping game object '{}' in {} (no name or duplicate name)", objectName, scenePath);
-			continue;
-		}
-
-		Craig::GameObject* pObject = new Craig::GameObject;
-		pObject->init(objectName, this);
-		pObject->setPosition(Utilities::readJsonVec3(objectJson, "position", glm::vec3(0.0f)));
-		pObject->setRotation(Utilities::readJsonVec3(objectJson, "rotation", glm::vec3(0.0f))); // in degrees
-		pObject->setScale(Utilities::readJsonVec3(objectJson, "scale", glm::vec3(1.0f)));
-		mpv_Gameobjects.push_back(pObject);
-
-		loadComponentsFromJson(pObject, objectJson.value("components", nlohmann::json::object()));
-		Craig::Logger::scene().debug("Loaded '{}' with {} component(s)", objectName, pObject->getComponents().size());
+		createGameObjectFromJson(objectJson);
 	}
-
-	// Sort the editor game object list by alphabetical order.
-	Utilities::sortGameObjectsByName(mpv_Gameobjects);
 
 	// whoever loads the scene builds the buffers for it, so nothing's dirty yet
 	m_geometryDirty = false;
@@ -103,33 +83,65 @@ nlohmann::json Craig::Scene::toJson() const {
 	sceneJson["gameObjects"] = nlohmann::json::array();
 	for (const Craig::GameObject* pObject : mpv_Gameobjects)
 	{
-		nlohmann::json objectJson;
-		objectJson["name"] = pObject->getName();
-		Utilities::writeJsonVec3(objectJson, "position", pObject->getPosition());
-		Utilities::writeJsonVec3(objectJson, "rotation", pObject->getRotation()); // in degrees
-		Utilities::writeJsonVec3(objectJson, "scale", pObject->getScale());
-
-		objectJson["components"] = nlohmann::json::object();
-		for (const std::unique_ptr<Components::Component>& pComponent : pObject->getComponents())
-		{
-			nlohmann::json componentJson = nlohmann::json::object();
-			pComponent->saveToJson(componentJson);
-
-			// types that can have more then one (colliders) get an array under their key
-			if (pComponent->allowMultiple())
-			{
-				objectJson["components"][pComponent->getJsonKey()].push_back(componentJson);
-			}
-			else
-			{
-				objectJson["components"][pComponent->getJsonKey()] = componentJson;
-			}
-		}
-
-		sceneJson["gameObjects"].push_back(objectJson);
+		sceneJson["gameObjects"].push_back(gameObjectToJson(pObject));
 	}
 
 	return sceneJson;
+}
+
+nlohmann::json Craig::Scene::gameObjectToJson(const Craig::GameObject* pObject) const {
+
+	nlohmann::json objectJson;
+	objectJson["name"] = pObject->getName();
+	Utilities::writeJsonVec3(objectJson, "position", pObject->getPosition());
+	Utilities::writeJsonVec3(objectJson, "rotation", pObject->getRotation()); // in degrees
+	Utilities::writeJsonVec3(objectJson, "scale", pObject->getScale());
+
+	objectJson["components"] = nlohmann::json::object();
+	for (const std::unique_ptr<Components::Component>& pComponent : pObject->getComponents())
+	{
+		nlohmann::json componentJson = nlohmann::json::object();
+		pComponent->saveToJson(componentJson);
+
+		// types that can have more then one (colliders) get an array under their key
+		if (pComponent->allowMultiple())
+		{
+			objectJson["components"][pComponent->getJsonKey()].push_back(componentJson);
+		}
+		else
+		{
+			objectJson["components"][pComponent->getJsonKey()] = componentJson;
+		}
+	}
+
+	return objectJson;
+}
+
+Craig::GameObject* Craig::Scene::createGameObjectFromJson(const nlohmann::json& objectJson) {
+
+	const std::string objectName = objectJson.value("name", "");
+
+	// skip anything broken instead of crashing the whole scene
+	if (objectName.empty() || findObject(objectName) != nullptr)
+	{
+		Craig::Logger::scene().warn("Skipping game object '{}' in {} (no name or duplicate name)", objectName, m_scenePath);
+		return nullptr;
+	}
+
+	Craig::GameObject* pObject = new Craig::GameObject;
+	pObject->init(objectName, this);
+	pObject->setPosition(Utilities::readJsonVec3(objectJson, "position", glm::vec3(0.0f)));
+	pObject->setRotation(Utilities::readJsonVec3(objectJson, "rotation", glm::vec3(0.0f))); // in degrees
+	pObject->setScale(Utilities::readJsonVec3(objectJson, "scale", glm::vec3(1.0f)));
+	mpv_Gameobjects.push_back(pObject);
+
+	loadComponentsFromJson(pObject, objectJson.value("components", nlohmann::json::object()));
+	Craig::Logger::scene().debug("Loaded '{}' with {} component(s)", objectName, pObject->getComponents().size());
+
+	// Sort the editor game object list by alphabetical order.
+	Utilities::sortGameObjectsByName(mpv_Gameobjects);
+
+	return pObject;
 }
 
 CraigError Craig::Scene::save() {
