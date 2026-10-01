@@ -75,10 +75,11 @@ namespace Craig {
 		struct LightData
 		{
 			glm::vec4 lightDir;
-			glm::vec4 lightColour;
-			glm::vec4 ambientColour;
+			glm::vec4 lightColour; // w is intensity
+			glm::vec4 skyColour;
+			glm::vec4 groundColour;
 		};
-		static_assert(sizeof(LightData) == 48, "LightData has to match the shader's LightData block");
+		static_assert(sizeof(LightData) == 64, "LightData has to match the shader's LightData block");
 
 		// struct UniformBufferObject {
 		// 	glm::mat4 model;

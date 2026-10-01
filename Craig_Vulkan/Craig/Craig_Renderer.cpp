@@ -918,15 +918,17 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
     if (pSun != nullptr)
     {
         lightData.lightDir = glm::vec4(pSun->getLightDir(), 0.0f);
-        lightData.lightColour = glm::vec4(pSun->getLightColour(), 0.0f);
-        lightData.ambientColour = glm::vec4(pSun->getAmbientColour(), 0.0f);
+        lightData.lightColour = glm::vec4(pSun->getLightColour(), pSun->getIntensity());
+        lightData.skyColour = glm::vec4(pSun->getSkyColour(), 0.0f);
+        lightData.groundColour = glm::vec4(pSun->getGroundColour(), 0.0f);
     }
     else
     {
         // No sun means no directional light, keep a bit of ambient so the scene isn't pitch black
         lightData.lightDir = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
         lightData.lightColour = glm::vec4(0.0f);
-        lightData.ambientColour = glm::vec4(0.05f, 0.05f, 0.08f, 0.0f);
+        lightData.skyColour = glm::vec4(0.05f, 0.05f, 0.08f, 0.0f);
+        lightData.groundColour = lightData.skyColour;
     }
     memcpy(mv_lightUboMap[currentImage], &lightData, sizeof(lightData));
 

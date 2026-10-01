@@ -23,8 +23,9 @@ layout(set = 0, binding = 0) uniform CameraData
 layout(set = 0, binding = 2) uniform LightData
 {
     vec4 lightDir;     // xyz points towards the sun
-    vec4 lightColour;
-    vec4 ambientColour;
+    vec4 lightColour;  // w is intensity
+    vec4 skyColour;
+    vec4 groundColour;
 };
 
 layout(location = 0) in vec3 inColor;
@@ -43,7 +44,11 @@ void main()
     vec3 N = normalize(inNormal);
     vec3 L = normalize(lightDir.xyz);
     float NdotL = max(dot(N, L), 0.0);
-    vec3 lit = ambientColour.rgb + lightColour.rgb * NdotL;
+
+    // hemisphere ambient, facing up gets sky, facing down gets ground
+    vec3 ambient = mix(groundColour.rgb, skyColour.rgb, N.y * 0.5 + 0.5);
+
+    vec3 lit = ambient + lightColour.rgb * lightColour.w * NdotL;
 
     outColor = vec4(lit * texColor.rgb, texColor.a);
 }
