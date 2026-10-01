@@ -35,6 +35,9 @@ namespace Craig {
 			// rough blackbody colour, 2000K is sunset orange, 6500K is about white
 			static glm::vec3 kelvinToColour(float kelvin);
 
+			// moves the sun along a fake day and sets colour, intensity + ambient to match
+			void applyTimeOfDay();
+
 			// degrees, elevation is height above the horizon and azimuth spins around Y
 			float m_elevation = 60.8f;
 			float m_azimuth = 63.4f;
@@ -47,6 +50,9 @@ namespace Craig {
 
 			// just an editor helper for picking the colour, not saved
 			float m_temperature = 5500.0f;
+
+			// hours, 6 is sunrise and 18 is sunset. Only does anything when the slider moves
+			float m_timeOfDay = 12.0f;
 		};
 	}
 

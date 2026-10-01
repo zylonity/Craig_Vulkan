@@ -3,6 +3,7 @@
 #include "imgui.h"
 
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/constants.hpp>
 #include <cmath>
 #include <algorithm>
 
@@ -33,6 +34,7 @@ CraigError Craig::Components::Sun::loadFromJson(const nlohmann::json& json) {
 	CraigError ret = CRAIG_SUCCESS;
 
 	// Missing keys keep the defaults
+	m_timeOfDay = json.value("timeOfDay", m_timeOfDay);
 	m_elevation = json.value("elevation", m_elevation);
 	m_azimuth = json.value("azimuth", m_azimuth);
 	mv3_lightColour = Utilities::readJsonVec3(json, "colour", mv3_lightColour);
@@ -62,6 +64,7 @@ CraigError Craig::Components::Sun::loadFromJson(const nlohmann::json& json) {
 
 void Craig::Components::Sun::saveToJson(nlohmann::json& json) const {
 
+	json["timeOfDay"] = m_timeOfDay;
 	json["elevation"] = m_elevation;
 	json["azimuth"] = m_azimuth;
 	Utilities::writeJsonVec3(json, "colour", mv3_lightColour);
@@ -72,6 +75,12 @@ void Craig::Components::Sun::saveToJson(nlohmann::json& json) const {
 
 void Craig::Components::Sun::displayImGuiAttributes()
 {
+	if (ImGui::SliderFloat("Time of Day", &m_timeOfDay, 0.0f, 24.0f, "%.1f h"))
+	{
+		applyTimeOfDay();
+	}
+	ImGui::SetItemTooltip("Sets everything below except the temperature slider, you can still tweak them after");
+
 	// negative elevation puts the sun under the floor, handy for night
 	ImGui::SliderFloat("Elevation", &m_elevation, -90.0f, 90.0f, "%.1f deg");
 	ImGui::SliderFloat("Azimuth", &m_azimuth, -180.0f, 180.0f, "%.1f deg");
@@ -131,4 +140,42 @@ glm::vec3 Craig::Components::Sun::kelvinToColour(float kelvin) {
 
 	// the fit gives sRGB, lighting happens in linear so undo the gamma
 	return glm::pow(colour, glm::vec3(2.2f));
+}
+
+void Craig::Components::Sun::applyTimeOfDay() {
+
+	// how high the sun gets at noon, 90 would be straight overhead
+	const float maxElevation = 70.0f;
+
+	// one full sine over 24h, peaks at noon and bottoms out at midnight
+	float dayAngle = (m_timeOfDay - 6.0f) / 12.0f * glm::pi<float>();
+	m_elevation = maxElevation * std::sin(dayAngle);
+
+	// rises in the east (+x), sets in the west
+	m_azimuth = 180.0f - m_timeOfDay * 15.0f;
+	if (m_azimuth < -180.0f)
+		m_azimuth += 360.0f;
+
+	float height = std::sin(glm::radians(m_elevation));
+
+	// fades out just after it dips under the horizon instead of snapping off
+	m_intensity = glm::smoothstep(-0.05f, 0.25f, height);
+
+	// orange near the horizon, whiter as it climbs
+	m_temperature = glm::mix(2000.0f, 6500.0f, glm::smoothstep(0.0f, 0.6f, height));
+	mv3_lightColour = kelvinToColour(m_temperature);
+
+	// ambient goes from dark blue night to the normal day colours
+	const glm::vec3 daySky = { 0.12f, 0.15f, 0.22f };
+	const glm::vec3 dayGround = { 0.06f, 0.05f, 0.04f };
+	const glm::vec3 nightSky = { 0.01f, 0.012f, 0.025f };
+	const glm::vec3 nightGround = { 0.005f, 0.005f, 0.006f };
+	const glm::vec3 duskTint = { 0.10f, 0.05f, 0.02f };
+
+	float day = glm::smoothstep(-0.2f, 0.3f, height);
+	// bit of warm glow in the sky around sunrise/sunset
+	float dusk = 1.0f - glm::smoothstep(0.0f, 0.25f, std::abs(height));
+
+	mv3_skyColour = glm::mix(nightSky, daySky, day) + duskTint * dusk;
+	mv3_groundColour = glm::mix(nightGround, dayGround, day);
 }
