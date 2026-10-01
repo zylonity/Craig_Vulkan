@@ -435,6 +435,8 @@ bool Craig::ResourceManager::loadModel(std::string modelPath) {
     }
 
     newModel.subMeshesCount = (uint32_t)newModel.subMeshes.size();
+    // picking and colliders want this a lot, no point walking every vertex each time
+    newModel.hasBounds = newModel.calculateBounds(newModel.boundsMin, newModel.boundsMax);
 
     size_t vertexCount = 0;
     size_t indexCount = 0;

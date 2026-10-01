@@ -54,7 +54,7 @@ bool Craig::Components::Collider::fitToModel() {
 	}
 
 	glm::vec3 min, max;
-	if (!resources.getModel(pModelComponent->getModelPath()).calculateBounds(min, max))
+	if (!resources.getModel(pModelComponent->getModelPath()).getBounds(min, max))
 	{
 		return false;
 	}

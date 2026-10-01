@@ -594,10 +594,9 @@ void Craig::ImguiEditor::pickGameObjectUnderMouse()
 			continue;
 		}
 
-		// TODO cache these per model, this walks every vertex on every click
 		const Craig::Model& model = resources.getModel(pModelComponent->getModelPath());
 		glm::vec3 boxMin, boxMax;
-		if (!model.calculateBounds(boxMin, boxMax))
+		if (!model.getBounds(boxMin, boxMax))
 		{
 			continue;
 		}

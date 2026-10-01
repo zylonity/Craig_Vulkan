@@ -133,6 +133,8 @@ Craig::GameObject* Craig::Scene::createGameObjectFromJson(const nlohmann::json& 
 	pObject->setPosition(Utilities::readJsonVec3(objectJson, "position", glm::vec3(0.0f)));
 	pObject->setRotation(Utilities::readJsonVec3(objectJson, "rotation", glm::vec3(0.0f))); // in degrees
 	pObject->setScale(Utilities::readJsonVec3(objectJson, "scale", glm::vec3(1.0f)));
+	// undo/duplicate make objects after the scene's updated, without this it gets drawn at the origin for a frame
+	pObject->updateModelMatrix();
 	mpv_Gameobjects.push_back(pObject);
 
 	loadComponentsFromJson(pObject, objectJson.value("components", nlohmann::json::object()));

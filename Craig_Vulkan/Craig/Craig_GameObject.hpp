@@ -95,10 +95,10 @@ namespace Craig {
 
 		// editable = false shows everything but nothing can be changed (for playing)
 		void displayImGuiAttributes(bool editable);
+		// public so anything that makes an object outside update() can sort the matrix out straight away
+		void updateModelMatrix();
 	private:
 		void displayComponents(bool editable);
-
-		void updateModelMatrix();
 
 		glm::vec3 mv3_position{};
 		glm::vec3 mv3_rotation{};

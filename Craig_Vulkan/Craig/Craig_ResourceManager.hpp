@@ -107,7 +107,13 @@ namespace Craig {
 		Craig::Texture& getMaterialImage(const Craig::Material& material);
 		// box around every vertex with the node transforms applied, in the model's own space
 		// false if there's no geometry
+		// walks every vertex so it's slow, use getBounds() unless the mesh changed
 		bool calculateBounds(glm::vec3& min, glm::vec3& max) const;
+		// same box, worked out once when the model loads
+		bool getBounds(glm::vec3& min, glm::vec3& max) const { min = boundsMin; max = boundsMax; return hasBounds; }
+		glm::vec3 boundsMin = glm::vec3(0.0f);
+		glm::vec3 boundsMax = glm::vec3(0.0f);
+		bool hasBounds = false;
 		// Every vertex position with the node transforms applied, in the model's own space (same as calculateBounds)
 		void collectPoints(std::vector<glm::vec3>& outPoints) const;
 		// ray vs every triangle, ray's in the model's own space (same as calculateBounds)
