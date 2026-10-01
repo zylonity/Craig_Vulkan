@@ -90,16 +90,23 @@ glm::mat4 Craig::Node::getWorldMatrix() const {
 }
 
 const Craig::Material& Craig::Model::getMaterial(int32_t materialIndex) const {
-    static const Craig::Material kDefaultMaterial{}; // White, no texture
     if (materialIndex < 0 || materialIndex >= (int32_t)materials.size()) {
-        return kDefaultMaterial;
+        return defaultMaterial;
     }
     return materials[materialIndex];
 }
 
 Craig::Texture& Craig::Model::getMaterialImage(const Craig::Material& material) {
+    return getImageForTexture(material.baseColorTextureIndex);
+}
+
+// white works as a fallback here too, the factors just get multiplied by 1
+Craig::Texture& Craig::Model::getMetallicRoughnessImage(const Craig::Material& material) {
+    return getImageForTexture(material.metallicRoughnessTextureIndex);
+}
+
+Craig::Texture& Craig::Model::getImageForTexture(int32_t textureIndex) {
     // The fallback is always last, so the real images are 0 -> size - 2
-    const int32_t textureIndex = material.baseColorTextureIndex;
     if (textureIndex >= 0 && textureIndex < (int32_t)textures.size()) {
         const int32_t imageIndex = textures[textureIndex].imageIndex;
         if (imageIndex >= 0 && imageIndex < (int32_t)images.size() - 1) {
@@ -198,6 +205,19 @@ bool Craig::Model::raycast(const glm::vec3& origin, const glm::vec3& dir, float&
 static void loadImages(const tinygltf::Model& input, Craig::Model& outModel, Craig::Renderer* renderer) {
     static const uint8_t kWhitePixel[4] = { 255, 255, 255, 255 };
 
+    // Colour textures are sRGB, data ones (metallic/roughness, normals later) have to be UNORM
+    // or the sampler "un-gammas" numbers that were never gamma'd. Images don't know what they're for, the materials do
+    std::vector<bool> isColour(input.images.size(), false);
+    for (const tinygltf::Material& material : input.materials) {
+        int32_t textureIndex = material.pbrMetallicRoughness.baseColorTexture.index;
+        if (textureIndex >= 0 && textureIndex < (int32_t)input.textures.size()) {
+            int32_t imageIndex = input.textures[textureIndex].source;
+            if (imageIndex >= 0 && imageIndex < (int32_t)isColour.size()) {
+                isColour[imageIndex] = true;
+            }
+        }
+    }
+
     outModel.images.resize(input.images.size() + 1);
     for (size_t i = 0; i < input.images.size(); i++) {
         const tinygltf::Image& glTFImage = input.images[i];
@@ -208,7 +228,7 @@ static void loadImages(const tinygltf::Model& input, Craig::Model& outModel, Cra
             renderer->createTextureImage2(kWhitePixel, 1, 1, 4, &outModel.images[i]);
             continue;
         }
-        renderer->createTextureImage2(glTFImage.image.data(), glTFImage.width, glTFImage.height, glTFImage.component, &outModel.images[i]);
+        renderer->createTextureImage2(glTFImage.image.data(), glTFImage.width, glTFImage.height, glTFImage.component, &outModel.images[i], isColour[i]);
     }
 
     // fallback for primitives with no texture, so they don't bind garbage
@@ -233,6 +253,7 @@ static void loadMaterials(const tinygltf::Model& input, Craig::Model& outModel) 
         outModel.materials[i].baseColorTextureIndex = pbr.baseColorTexture.index;
         outModel.materials[i].metallicFactor = static_cast<float>(pbr.metallicFactor);
         outModel.materials[i].roughnessFactor = static_cast<float>(pbr.roughnessFactor);
+        outModel.materials[i].metallicRoughnessTextureIndex = pbr.metallicRoughnessTexture.index;
     }
 }
 

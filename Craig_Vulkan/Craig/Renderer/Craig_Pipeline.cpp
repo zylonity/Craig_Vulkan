@@ -383,7 +383,17 @@ void Craig::Pipeline::createDescriptorSetLayout() {
         .setPImmutableSamplers(nullptr)
         .setStageFlags(vk::ShaderStageFlagBits::eFragment);
 
-    std::array<vk::DescriptorSetLayoutBinding, 1> perObjectBindings = { samplerLayoutBinding };
+    // metallic (B) + roughness (G), glTF packs them into one texture
+    vk::DescriptorSetLayoutBinding metallicRoughnessLayoutBinding{};
+    metallicRoughnessLayoutBinding
+        .setBinding(1)
+        .setDescriptorCount(1)
+        .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
+        .setPImmutableSamplers(nullptr)
+        .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+
+    // one of these per material really, not per object
+    std::array<vk::DescriptorSetLayoutBinding, 2> perObjectBindings = { samplerLayoutBinding, metallicRoughnessLayoutBinding };
 
     vk::DescriptorSetLayoutCreateInfo perObjectLayoutInfo{};
     perObjectLayoutInfo

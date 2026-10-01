@@ -43,7 +43,8 @@ namespace Craig {
 
 		bool& getVSyncState() { return m_swapChain.m_vsyncEnabled; };
 		void refreshSwapChain() { recreateSwapChain(); };
-		void createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels, Texture* outTexture);
+		// srgb for colour textures, false for data ones like metallic/roughness
+		void createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels, Texture* outTexture, bool srgb = true);
 
 		void updateMinLOD(int minLOD);
 

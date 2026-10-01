@@ -6,8 +6,10 @@
 // grabbed at commit 41a4410243fca7640a2dd0115a5ff5cb9a29494b
 // Anything changed from the original is marked with "CRAIG:"
 
-// Set 1, binding 0 - per-object texture. Rebinds each draw.
+// Set 1 - per-material textures. Rebinds each draw.
 layout(set = 1, binding = 0) uniform sampler2D texSampler;
+// UNORM, not sRGB. White if the material doesn't have one so the factors pass straight through
+layout(set = 1, binding = 1) uniform sampler2D metallicRoughnessMap;
 
 // Push constants, has to match the vertex shader + PushConstantData in Craig_ResourceManager.hpp
 layout(push_constant) uniform PushConstants
@@ -119,9 +121,11 @@ void main()
 	vec3 V = normalize(camPos.xyz - inWorldPos);
 	vec3 R = reflect(-V, N);
 
-	// CRAIG: original samples metallic/roughness textures, we only load the glTF factors for now
-	float metallic = pc.metallicFactor;
-	float roughness = pc.roughnessFactor;
+	// CRAIG: original samples separate metallicMap/roughnessMap (.r each), glTF packs both into one texture
+	// (roughness in G, metallic in B) and multiplies them by the material's factors
+	vec4 metallicRoughness = texture(metallicRoughnessMap, inTexCoord);
+	float metallic = pc.metallicFactor * metallicRoughness.b;
+	float roughness = pc.roughnessFactor * metallicRoughness.g;
 
 	vec3 F0 = vec3(0.04);
 	F0 = mix(F0, ALBEDO, metallic);

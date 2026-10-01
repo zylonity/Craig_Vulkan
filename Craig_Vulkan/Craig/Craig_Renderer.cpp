@@ -467,7 +467,7 @@ void Craig::Renderer::drawNode(vk::CommandBuffer commandBuffer, Craig::Model& mo
         {
             if (submesh->indexCount == 0) continue;
 
-            // Each primitive can have its own material, so push its colour + bind its texture
+            // Each primitive can have its own material, so push its colour + bind its textures
             const Craig::Material& material = model.getMaterial(submesh->materialIndex);
             pushData.baseColorFactor = material.baseColorFactor;
             pushData.metallicFactor = material.metallicFactor;
@@ -485,7 +485,7 @@ void Craig::Renderer::drawNode(vk::CommandBuffer commandBuffer, Craig::Model& mo
                 vk::PipelineBindPoint::eGraphics,
                 m_pipeline.getPipelineLayout(),
                 1, // set 1
-                model.getMaterialImage(material).m_VK_descriptorSet,
+                material.m_VK_descriptorSet,
                 nullptr);
 
             commandBuffer.drawIndexed(
@@ -698,7 +698,7 @@ void Craig::Renderer::createDescriptorPool() {
         .setDescriptorCount(kMaxFramesInFlight);
     poolSizes[3]
         .setType(vk::DescriptorType::eCombinedImageSampler)
-        .setDescriptorCount(kMaxNumObjects);
+        .setDescriptorCount(kMaxNumObjects * 2); // 2 per material set, base colour + metallic/roughness
 
 
     vk::DescriptorPoolCreateInfo poolInfo{};
@@ -770,36 +770,40 @@ void Craig::Renderer::createDescriptorSets() {
     createModelDescriptorSets();
 }
 
-// One texture set per model image, only makes sets for images that don't have one yet
+// One texture set per material (plus each model's default one), only makes sets for materials that don't have one yet
 void Craig::Renderer::createModelDescriptorSets() {
 
-    std::vector<Craig::Texture*> newImages;
+    std::vector<Craig::Material*> newMaterials;
     for (auto& [modelPath, model] : Craig::ResourceManager::getInstance().getLoadedModels())
     {
-        for (Craig::Texture& image : model.images)
+        for (Craig::Material& material : model.materials)
         {
-            if (!image.m_VK_descriptorSet)
+            if (!material.m_VK_descriptorSet)
             {
-                newImages.push_back(&image);
+                newMaterials.push_back(&material);
             }
+        }
+        if (!model.defaultMaterial.m_VK_descriptorSet)
+        {
+            newMaterials.push_back(&model.defaultMaterial);
         }
     }
 
     // allocating 0 sets is invalid in Vulkan
-    if (newImages.empty()) {
+    if (newMaterials.empty()) {
         return;
     }
 
-    std::vector<vk::DescriptorSetLayout> imageLayouts(newImages.size(), m_pipeline.getPerObjectDescriptorSetLayout());
+    std::vector<vk::DescriptorSetLayout> materialLayouts(newMaterials.size(), m_pipeline.getPerObjectDescriptorSetLayout());
 
-    vk::DescriptorSetAllocateInfo imageAllocInfo{};
-    imageAllocInfo.setDescriptorPool(m_VK_descriptorPool)
-        .setSetLayouts(imageLayouts);
+    vk::DescriptorSetAllocateInfo materialAllocInfo{};
+    materialAllocInfo.setDescriptorPool(m_VK_descriptorPool)
+        .setSetLayouts(materialLayouts);
 
-    std::vector<vk::DescriptorSet> imageSets = m_Devices.getLogicalDevice().allocateDescriptorSets(imageAllocInfo);
-    for (size_t i = 0; i < newImages.size(); i++)
+    std::vector<vk::DescriptorSet> materialSets = m_Devices.getLogicalDevice().allocateDescriptorSets(materialAllocInfo);
+    for (size_t i = 0; i < newMaterials.size(); i++)
     {
-        newImages[i]->m_VK_descriptorSet = imageSets[i];
+        newMaterials[i]->m_VK_descriptorSet = materialSets[i];
     }
 
     updateDescriptorSets();
@@ -808,28 +812,38 @@ void Craig::Renderer::createModelDescriptorSets() {
 void Craig::Renderer::updateDescriptorSets() {
 
     // called when sets are made or the sampler is recreated (e.g. LOD change)
-    // Sets aren't duplicated per frame, so one pass rewriting every image's set is enough
+    // Sets aren't duplicated per frame, so one pass rewriting every material's set is enough
     for (auto& [modelPath, model] : Craig::ResourceManager::getInstance().getLoadedModels())
     {
-        for (Craig::Texture& image : model.images)
+        auto writeMaterial = [&](const Craig::Material& material)
         {
-            vk::DescriptorImageInfo imageInfo{};
-            imageInfo
-                .setImageView(image.m_VK_textureImageView)
+            std::array<vk::DescriptorImageInfo, 2> imageInfos{};
+            imageInfos[0]
+                .setImageView(model.getMaterialImage(material).m_VK_textureImageView)
+                .setSampler(m_VK_textureSampler)
+                .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+            imageInfos[1]
+                .setImageView(model.getMetallicRoughnessImage(material).m_VK_textureImageView)
                 .setSampler(m_VK_textureSampler)
                 .setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
 
+            // bindings 0 and 1 are next to each other so one write with a count of 2 fills both
             vk::WriteDescriptorSet descriptorWrite{};
             descriptorWrite
-                .setDstSet(image.m_VK_descriptorSet)
+                .setDstSet(material.m_VK_descriptorSet)
                 .setDstBinding(0)
                 .setDstArrayElement(0)
                 .setDescriptorType(vk::DescriptorType::eCombinedImageSampler)
-                .setDescriptorCount(1)
-                .setImageInfo(imageInfo);
+                .setImageInfo(imageInfos);
 
             m_Devices.getLogicalDevice().updateDescriptorSets(descriptorWrite, nullptr);
+        };
+
+        for (const Craig::Material& material : model.materials)
+        {
+            writeMaterial(material);
         }
+        writeMaterial(model.defaultMaterial);
     }
 
 }
@@ -942,8 +956,9 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
 
 }
 
-void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels, Craig::Texture* outTexture) { // VmaAllocation* textureMemoryAlloc, vk::Image* outTextureImage, vk::ImageView* outTextureImageView) {
+void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels, Craig::Texture* outTexture, bool srgb) { // VmaAllocation* textureMemoryAlloc, vk::Image* outTextureImage, vk::ImageView* outTextureImageView) {
     vk::DeviceSize imageSize = texWidth * texHeight * 4;
+    const vk::Format format = srgb ? vk::Format::eR8G8B8A8Srgb : vk::Format::eR8G8B8A8Unorm;
 
     if (!pixels) {
         Craig::Logger::renderer().critical("Tried to make a texture with no pixels");
@@ -970,18 +985,18 @@ void Craig::Renderer::createTextureImage2(const uint8_t* pixels, int texWidth, i
 
     //stbi_image_free(pixels);
 
-    outTexture->m_VK_textureImage = ImageHelpers::createImage(m_Devices.getPhysicalDevice(), m_instance.getVkSurface(), texWidth, texHeight, outTexture->m_VK_mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_Devices.getVmaAllocator(),outTexture->m_VMA_textureImageAllocation);
+    outTexture->m_VK_textureImage = ImageHelpers::createImage(m_Devices.getPhysicalDevice(), m_instance.getVkSurface(), texWidth, texHeight, outTexture->m_VK_mipLevels, vk::SampleCountFlagBits::e1, format, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, m_Devices.getVmaAllocator(),outTexture->m_VMA_textureImageAllocation);
 
-    Craig::ImageHelpers::transitionImageLayout(m_commandManager ,outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, true, outTexture->m_VK_mipLevels);
+    Craig::ImageHelpers::transitionImageLayout(m_commandManager ,outTexture->m_VK_textureImage, format, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, true, outTexture->m_VK_mipLevels);
     Craig::ImageHelpers::copyBufferToImage(m_commandManager, stagingBuffer, outTexture->m_VK_textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
     //transitionImageLayout(m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, false, m_VK_mipLevels); <- now done when generating mipMaps
 
     vmaDestroyBuffer(m_Devices.getVmaAllocator(), stagingBuffer, stagingAlloc);
 
-    Craig::ImageHelpers::generateMipMaps(m_commandManager, m_Devices.getPhysicalDevice().getFormatProperties(vk::Format::eR8G8B8A8Srgb), outTexture->m_VK_textureImage, texWidth, texHeight, outTexture->m_VK_mipLevels, false);
+    Craig::ImageHelpers::generateMipMaps(m_commandManager, m_Devices.getPhysicalDevice().getFormatProperties(format), outTexture->m_VK_textureImage, texWidth, texHeight, outTexture->m_VK_mipLevels, false);
 
-    outTexture->m_VK_textureImageView = Craig::ImageHelpers::createImageView(m_Devices.getLogicalDevice(), outTexture->m_VK_textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor, outTexture->m_VK_mipLevels);
+    outTexture->m_VK_textureImageView = Craig::ImageHelpers::createImageView(m_Devices.getLogicalDevice(), outTexture->m_VK_textureImage, format, vk::ImageAspectFlagBits::eColor, outTexture->m_VK_mipLevels);
 
 }
 

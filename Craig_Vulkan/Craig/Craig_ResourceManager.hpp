@@ -65,8 +65,6 @@ namespace Craig {
 		VmaAllocation m_VMA_textureImageAllocation;
 
 		vk::ImageView m_VK_textureImageView;
-
-		vk::DescriptorSet m_VK_descriptorSet; // Made by the renderer, null until then
 	};
 
 	// A glTF texture just points at an image, images can be shared between textures
@@ -82,6 +80,11 @@ namespace Craig {
 		// glTF defaults are 1 and 1 too
 		float metallicFactor = 1.0f;
 		float roughnessFactor = 1.0f;
+		// glTF packs both in one texture, roughness in G and metallic in B
+		int32_t metallicRoughnessTextureIndex = -1;
+
+		// binding 0 base colour, binding 1 metallic/roughness. Made by the renderer, null until then
+		vk::DescriptorSet m_VK_descriptorSet;
 	};
 
 	// An object in the glTF scene graph, its matrix is relative to its parent
@@ -105,11 +108,15 @@ namespace Craig {
 		std::vector<Craig::Texture> images; // every glTF image + a 1x1 white fallback at the end
 		std::vector<Craig::GltfTexture> textures;
 		std::vector<Craig::Material> materials;
+		// plain white, for primitives with no material. Lives on the model cos it needs its own descriptor set
+		Craig::Material defaultMaterial;
 
-		// Falls back to a plain white material if the index is -1 or out of range
+		// Falls back to defaultMaterial if the index is -1 or out of range
 		const Craig::Material& getMaterial(int32_t materialIndex) const;
 		// Follows texture -> image, gives the white fallback if there isn't one
 		Craig::Texture& getMaterialImage(const Craig::Material& material);
+		Craig::Texture& getMetallicRoughnessImage(const Craig::Material& material);
+		Craig::Texture& getImageForTexture(int32_t textureIndex);
 		// box around every vertex with the node transforms applied, in the model's own space
 		// false if there's no geometry
 		// walks every vertex so it's slow, use getBounds() unless the mesh changed
