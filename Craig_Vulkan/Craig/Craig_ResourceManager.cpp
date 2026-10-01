@@ -7,6 +7,8 @@
 #include "Craig_Logger.hpp"
 #include "../External/tiny_gltf.h"
 #include <glm/gtc/type_ptr.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/intersect.hpp>
 #include <limits>
 
 vk::VertexInputBindingDescription Craig::Vertex::getBindingDescription() {
@@ -149,6 +151,47 @@ void Craig::Model::collectPoints(std::vector<glm::vec3>& outPoints) const {
     for (const Craig::Node* node : nodes) {
         collectPointsByNode(node, outPoints);
     }
+}
+
+// Checks every triangle under this node, then its children, keeping the closest hit in outDistance
+static void raycastNode(const Craig::Node* node, const glm::vec3& origin, const glm::vec3& dir, float& outDistance, bool& hit) {
+    // move the ray into the node's space instead of moving every vertex out, t stays the same either way
+    const glm::mat4 invNodeMatrix = glm::inverse(node->getWorldMatrix());
+    const glm::vec3 nodeOrigin = glm::vec3(invNodeMatrix * glm::vec4(origin, 1.0f));
+    const glm::vec3 nodeDir = glm::vec3(invNodeMatrix * glm::vec4(dir, 0.0f));
+
+    for (const Craig::SubMesh* subMesh : node->subMeshes) {
+        const std::vector<Craig::Vertex>& vertices = subMesh->m_vertices;
+        const std::vector<uint32_t>& indices = subMesh->m_indices;
+        // indices are triangle lists, 3 per triangle
+        for (size_t i = 0; i + 2 < indices.size(); i += 3) {
+            // Möller-Trumbore, glm ships Tomas Möller's own version
+            // https://github.com/g-truc/glm/blob/master/glm/gtx/intersect.inl
+            // http://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/raytri/
+            // hits both sides of the triangle, and gives hits behind the ray too so those get skipped
+            glm::vec2 barycentric;
+            float distance;
+            if (glm::intersectRayTriangle(nodeOrigin, nodeDir,
+                    vertices[indices[i]].m_pos, vertices[indices[i + 1]].m_pos, vertices[indices[i + 2]].m_pos,
+                    barycentric, distance)
+                && distance >= 0.0f && distance < outDistance) {
+                outDistance = distance;
+                hit = true;
+            }
+        }
+    }
+    for (const Craig::Node* child : node->children) {
+        raycastNode(child, origin, dir, outDistance, hit);
+    }
+}
+
+bool Craig::Model::raycast(const glm::vec3& origin, const glm::vec3& dir, float& outDistance) const {
+    outDistance = std::numeric_limits<float>::max();
+    bool hit = false;
+    for (const Craig::Node* node : nodes) {
+        raycastNode(node, origin, dir, outDistance, hit);
+    }
+    return hit;
 }
 
 // images can be stored inside the glTF, so we grab them from tinygltf and upload them

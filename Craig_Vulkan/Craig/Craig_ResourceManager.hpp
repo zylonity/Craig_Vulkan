@@ -110,6 +110,9 @@ namespace Craig {
 		bool calculateBounds(glm::vec3& min, glm::vec3& max) const;
 		// Every vertex position with the node transforms applied, in the model's own space (same as calculateBounds)
 		void collectPoints(std::vector<glm::vec3>& outPoints) const;
+		// ray vs every triangle, ray's in the model's own space (same as calculateBounds)
+		// distance is in units of dir, so leave dir unnormalised if you want it to match the caller's space
+		bool raycast(const glm::vec3& origin, const glm::vec3& dir, float& outDistance) const;
 	};
 
 	

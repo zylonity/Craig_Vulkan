@@ -27,6 +27,10 @@
 #include <fstream>
 
 #include "Components/Craig_Collider.hpp"
+#include "Components/Craig_Model.hpp"
+#include "Craig_ResourceManager.hpp"
+
+#include <limits>
 
 CraigError Craig::ImguiEditor::editorInit() {
 
@@ -86,6 +90,8 @@ CraigError Craig::ImguiEditor::editorMain(const float& deltaTime) {
 	showLog();
 	updateImGuizmo();
 	updateImGuizmoCollider();
+	// after the gizmos so clicking one doesn't also pick whatever's behind it
+	pickGameObjectUnderMouse();
 	drawColliderOutlines();
 
 	// making a scene loads it, which would screw up the play snapshot
@@ -497,6 +503,130 @@ void Craig::ImguiEditor::focusOnSelected()
 	Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
 	const float distance = glm::max(3.0f, size * 5.0f);
 	camera.setPosition(target - getCameraLookDir(camera) * distance);
+}
+
+// slab test, how far along the ray it hits the box (or false if it misses)
+// 0 if the ray starts inside, nothing in the box can be closer than this so it's a safe early out
+static bool rayHitsBox(const glm::vec3& origin, const glm::vec3& dir, const glm::vec3& boxMin, const glm::vec3& boxMax, float& outDistance)
+{
+	float tEnter = -std::numeric_limits<float>::max();
+	float tExit = std::numeric_limits<float>::max();
+
+	for (int axis = 0; axis < 3; axis++)
+	{
+		// parallel to this slab, so it's either between the two planes or never will be
+		if (glm::abs(dir[axis]) < 1e-8f)
+		{
+			if (origin[axis] < boxMin[axis] || origin[axis] > boxMax[axis])
+			{
+				return false;
+			}
+			continue;
+		}
+
+		float t1 = (boxMin[axis] - origin[axis]) / dir[axis];
+		float t2 = (boxMax[axis] - origin[axis]) / dir[axis];
+		if (t1 > t2)
+		{
+			std::swap(t1, t2);
+		}
+		tEnter = glm::max(tEnter, t1);
+		tExit = glm::min(tExit, t2);
+		if (tEnter > tExit)
+		{
+			return false;
+		}
+	}
+
+	// box is behind the camera
+	if (tExit < 0.0f)
+	{
+		return false;
+	}
+
+	outDistance = glm::max(tEnter, 0.0f);
+	return true;
+}
+
+void Craig::ImguiEditor::pickGameObjectUnderMouse()
+{
+	const ImGuiIO& io = ImGui::GetIO();
+	// only clicks on the scene, not the editor windows (right click flying hides the mouse from imgui so that's covered too)
+	if (!isEditing() || !ImGui::IsMouseClicked(ImGuiMouseButton_Left) || io.WantCaptureMouse)
+	{
+		return;
+	}
+	// clicking the gizmo is for dragging it, not picking
+	const bool gizmoShowing = mp_selectedGameObject != nullptr || mp_selectedCollider != nullptr;
+	if (gizmoShowing && (ImGuizmo::IsOver() || ImGuizmo::IsUsing()))
+	{
+		return;
+	}
+
+	// mouse -> NDC, imgui's mouse pos and DisplaySize are in the same units so high DPI doesn't matter
+	// no y flip here, the projection already flips it for vulkan so screen down = NDC down
+	const glm::vec2 ndc = {
+		(io.MousePos.x / io.DisplaySize.x) * 2.0f - 1.0f,
+		(io.MousePos.y / io.DisplaySize.y) * 2.0f - 1.0f
+	};
+
+	// unproject a point on the near plane and one on the far plane, the ray goes through both
+	const Craig::Camera& camera = mp_sceneManager->getCurrentScene()->getCamera();
+	const glm::mat4 invViewProj = glm::inverse(camera.getProj() * camera.getView());
+	glm::vec4 nearPoint = invViewProj * glm::vec4(ndc, 0.0f, 1.0f);
+	glm::vec4 farPoint = invViewProj * glm::vec4(ndc, 1.0f, 1.0f);
+	nearPoint /= nearPoint.w;
+	farPoint /= farPoint.w;
+
+	const glm::vec3 rayOrigin = glm::vec3(nearPoint);
+	const glm::vec3 rayDir = glm::normalize(glm::vec3(farPoint) - glm::vec3(nearPoint));
+
+	Craig::ResourceManager& resources = Craig::ResourceManager::getInstance();
+	Craig::GameObject* pClosest = nullptr;
+	float closestDistance = std::numeric_limits<float>::max();
+
+	for (Craig::GameObject* pGameObject : mp_sceneManager->getCurrentScene()->getGameObjects())
+	{
+		const Components::Model* pModelComponent = pGameObject->getComponent<Components::Model>();
+		// getModel would add an empty entry if it wasn't loaded, so check first
+		if (pModelComponent == nullptr || !pModelComponent->hasModel() || !resources.isModelLoaded(pModelComponent->getModelPath()))
+		{
+			continue;
+		}
+
+		// TODO cache these per model, this walks every vertex on every click
+		const Craig::Model& model = resources.getModel(pModelComponent->getModelPath());
+		glm::vec3 boxMin, boxMax;
+		if (!model.calculateBounds(boxMin, boxMax))
+		{
+			continue;
+		}
+
+		// move the ray into the model's space instead of moving the box out, then the box stays axis aligned
+		// dir isn't normalised after this on purpose, that way t is still a world space distance and objects compare fairly
+		const glm::mat4 invModel = glm::inverse(pGameObject->calculateModelMatrix());
+		const glm::vec3 localOrigin = glm::vec3(invModel * glm::vec4(rayOrigin, 1.0f));
+		const glm::vec3 localDir = glm::vec3(invModel * glm::vec4(rayDir, 0.0f));
+
+		// box first since it's cheap, then the actual triangles to see if we really clicked the mesh and not the air around it
+		float distance;
+		if (!rayHitsBox(localOrigin, localDir, boxMin, boxMax, distance) || distance >= closestDistance)
+		{
+			continue;
+		}
+		if (model.raycast(localOrigin, localDir, distance) && distance < closestDistance)
+		{
+			closestDistance = distance;
+			pClosest = pGameObject;
+		}
+	}
+
+	// clicking nothing deselects, same as most editors
+	selectGameObject(pClosest);
+	if (pClosest != nullptr)
+	{
+		Craig::Logger::scene().debug("Clicked on '{}'", pClosest->getName());
+	}
 }
 
 void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {

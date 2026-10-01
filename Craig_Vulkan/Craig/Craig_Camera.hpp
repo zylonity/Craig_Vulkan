@@ -1,6 +1,8 @@
 #pragma once
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+// vulkan depth is 0 to 1, without this perspective() gives GL's -1 to 1 and the near plane ends up twice as far out
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <SDL3/SDL.h>

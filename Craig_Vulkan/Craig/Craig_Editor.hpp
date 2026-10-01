@@ -77,6 +77,8 @@ namespace Craig {
 		void deleteSelected();
 		void duplicateSelectedGameObject();
 		void focusOnSelected();
+		// left click in the scene selects whatever model's under the mouse (box then triangles)
+		void pickGameObjectUnderMouse();
 		std::string m_saveStatus;
 		ImVec4 m_saveStatusColour;
 		double m_saveStatusTime = 0.0; // When the status was set, so it can fade out
