@@ -114,11 +114,15 @@ set(SHADER_DIR ${CMAKE_SOURCE_DIR}/Craig_Vulkan/data/shaders)
 
 compile_glsl(${SHADER_DIR}/vert.spv ${SHADER_DIR}/VertexShader.vert)
 compile_glsl(${SHADER_DIR}/frag.spv ${SHADER_DIR}/FragmentShader.frag)
+compile_glsl(${SHADER_DIR}/skyVert.spv ${SHADER_DIR}/SkyVertexShader.vert)
+compile_glsl(${SHADER_DIR}/skyFrag.spv ${SHADER_DIR}/SkyFragmentShader.frag)
 
 add_custom_target(Shaders ALL
         DEPENDS
         ${SHADER_DIR}/vert.spv
         ${SHADER_DIR}/frag.spv
+        ${SHADER_DIR}/skyVert.spv
+        ${SHADER_DIR}/skyFrag.spv
 )
 
 # Make the main program depend on shaders

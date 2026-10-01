@@ -12,6 +12,7 @@ CraigError Craig::Pipeline::init(const PipelineInitInfo& info) {
 
     createDescriptorSetLayout();
     createGraphicsPipeline();
+    createSkyPipeline();
 
 	return ret;
 }
@@ -175,11 +176,148 @@ void Craig::Pipeline::createGraphicsPipeline() {
 
 }
 
+// Mostly the same as the main pipeline, the differences are:
+// no vertex buffer (the triangle comes from gl_VertexIndex), no culling, and depth is test only at LessOrEqual
+void Craig::Pipeline::createSkyPipeline() {
+
+    m_VK_skyVertShaderModule = Craig::ShaderCompilation::LoadShaderModule(mPipe_device, "data/shaders/skyVert.spv");
+    m_VK_skyFragShaderModule = Craig::ShaderCompilation::LoadShaderModule(mPipe_device, "data/shaders/skyFrag.spv");
+
+    vk::PipelineShaderStageCreateInfo vertShaderStageInfo{};
+    vertShaderStageInfo
+        .setStage(vk::ShaderStageFlagBits::eVertex)
+        .setModule(m_VK_skyVertShaderModule)
+        .setPName("main");
+
+    vk::PipelineShaderStageCreateInfo fragShaderStageInfo{};
+    fragShaderStageInfo
+        .setStage(vk::ShaderStageFlagBits::eFragment)
+        .setModule(m_VK_skyFragShaderModule)
+        .setPName("main");
+
+    vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+    // nothing to feed in, the vert shader makes its own 3 corners
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
+
+    vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly
+        .setTopology(vk::PrimitiveTopology::eTriangleList)
+        .setPrimitiveRestartEnable(vk::False);
+
+    vk::PipelineViewportStateCreateInfo viewportState{};
+    viewportState
+        .setViewportCount(1)
+        .setScissorCount(1);
+
+    vk::PipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer
+        .setDepthClampEnable(vk::False)
+        .setPolygonMode(vk::PolygonMode::eFill)
+        .setLineWidth(1.0f)
+        .setCullMode(vk::CullModeFlagBits::eNone)
+        .setFrontFace(vk::FrontFace::eCounterClockwise)
+        .setDepthBiasEnable(false);
+
+    // has to match the main pipeline, they draw into the same attachments
+    vk::PipelineMultisampleStateCreateInfo multisampling{};
+    multisampling
+        .setSampleShadingEnable(vk::False)
+        .setRasterizationSamples(*mPipe_msaaSamples);
+
+    // The sky sits at depth 1 and depth gets cleared to 1, so with plain Less it'd never pass
+    // No writing either, it's the background
+    vk::PipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil
+        .setDepthTestEnable(true)
+        .setDepthWriteEnable(false)
+        .setDepthCompareOp(vk::CompareOp::eLessOrEqual)
+        .setDepthBoundsTestEnable(false)
+        .setStencilTestEnable(false);
+
+    vk::PipelineColorBlendAttachmentState colourBlendAttachment{};
+    colourBlendAttachment
+        .setColorWriteMask(
+        vk::ColorComponentFlagBits::eR |
+        vk::ColorComponentFlagBits::eG |
+        vk::ColorComponentFlagBits::eB |
+        vk::ColorComponentFlagBits::eA)
+        .setBlendEnable(vk::False);
+
+    vk::PipelineColorBlendStateCreateInfo colourBlending{};
+    colourBlending
+        .setLogicOpEnable(vk::False)
+        .setLogicOp(vk::LogicOp::eCopy)
+        .setAttachmentCount(1)
+        .setPAttachments(&colourBlendAttachment);
+
+    std::vector<vk::DynamicState> dynamicStates = {
+        vk::DynamicState::eViewport,
+        vk::DynamicState::eScissor
+    };
+
+    vk::PipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState
+        .setDynamicStateCount(static_cast<uint32_t>(dynamicStates.size()))
+        .setPDynamicStates(dynamicStates.data());
+
+    vk::Format colorFormat = mPipe_colorFormat;
+    vk::Format depthFormat = mPipe_depthFormat;
+
+    vk::PipelineRenderingCreateInfo renderingInfo{};
+    renderingInfo
+        .setColorAttachmentCount(1)
+        .setPColorAttachmentFormats(&colorFormat)
+        .setDepthAttachmentFormat(depthFormat);
+
+    // same layout as the main pipeline, so set 0 (camera + sun) stays bound between them
+    vk::GraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo
+        .setPNext(&renderingInfo)
+        .setStageCount(2)
+        .setPStages(shaderStages)
+        .setPVertexInputState(&vertexInputInfo)
+        .setPInputAssemblyState(&inputAssembly)
+        .setPViewportState(&viewportState)
+        .setPRasterizationState(&rasterizer)
+        .setPMultisampleState(&multisampling)
+        .setPDepthStencilState(&depthStencil)
+        .setPColorBlendState(&colourBlending)
+        .setPDynamicState(&dynamicState)
+        .setLayout(m_VK_pipelineLayout)
+        .setRenderPass(VK_NULL_HANDLE);
+
+    auto result = mPipe_device.createGraphicsPipeline(VK_NULL_HANDLE, pipelineInfo);
+
+    if (result.result != vk::Result::eSuccess) {
+        Craig::Logger::renderer().critical("Failed to create the sky pipeline: {}", vk::to_string(result.result));
+        throw std::runtime_error("Failed to create sky pipeline!");
+    }
+    m_VK_skyPipeline = result.value;
+
+    Craig::Logger::renderer().info("Sky pipeline made");
+}
+
 void Craig::Pipeline::cleanupGraphicsPipeline() {
 
     if (m_VK_graphicsPipeline) {
         mPipe_device.destroyPipeline(m_VK_graphicsPipeline);
         m_VK_graphicsPipeline = nullptr;
+    }
+
+    if (m_VK_skyPipeline) {
+        mPipe_device.destroyPipeline(m_VK_skyPipeline);
+        m_VK_skyPipeline = nullptr;
+    }
+
+    if (m_VK_skyVertShaderModule) {
+        mPipe_device.destroyShaderModule(m_VK_skyVertShaderModule);
+        m_VK_skyVertShaderModule = nullptr;
+    }
+
+    if (m_VK_skyFragShaderModule) {
+        mPipe_device.destroyShaderModule(m_VK_skyFragShaderModule);
+        m_VK_skyFragShaderModule = nullptr;
     }
 
     if (m_VK_pipelineLayout) {
@@ -273,6 +411,7 @@ void Craig::Pipeline::recreate()
     Craig::Logger::renderer().debug("Recreating the graphics pipeline");
     cleanupGraphicsPipeline();
     createGraphicsPipeline();
+    createSkyPipeline();
 }
 
 

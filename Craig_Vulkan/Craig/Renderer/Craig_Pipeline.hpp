@@ -27,6 +27,7 @@ namespace Craig {
 		void recreate();
 
 		const vk::Pipeline getGraphicsPipeline() const { return m_VK_graphicsPipeline; }
+		const vk::Pipeline getSkyPipeline() const { return m_VK_skyPipeline; }
 		const vk::DescriptorSetLayout getPerFrameDescriptorSetLayout() const { return m_VK_perFrameSetLayout; }
 		const vk::DescriptorSetLayout getPerObjectDescriptorSetLayout() const { return m_VK_perObjectSetLayout; }
 		const vk::PipelineLayout getPipelineLayout() const { return m_VK_pipelineLayout; }
@@ -41,12 +42,18 @@ namespace Craig {
 		vk::PipelineLayout      m_VK_pipelineLayout;
 		vk::Pipeline            m_VK_graphicsPipeline;
 
+		// Sky, fullscreen triangle drawn behind everything. Shares the layout above
+		vk::ShaderModule       m_VK_skyVertShaderModule;
+		vk::ShaderModule       m_VK_skyFragShaderModule;
+		vk::Pipeline           m_VK_skyPipeline;
+
 		vk::Device		mPipe_device;
 		vk::Format		mPipe_colorFormat;
 		vk::Format		mPipe_depthFormat;
 		vk::SampleCountFlagBits* mPipe_msaaSamples;
 
 		void createGraphicsPipeline();
+		void createSkyPipeline();
 		void cleanupGraphicsPipeline();
 		void createDescriptorSetLayout();
 

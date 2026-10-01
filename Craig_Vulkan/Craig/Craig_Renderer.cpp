@@ -427,6 +427,11 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
         }
     }
 
+    // Sky goes after the models so the depth test skips every pixel they already cover, the shader's expensive
+    // Same pipeline layout so set 0 is still bound, and 3 verts with no buffer is the fullscreen triangle
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_pipeline.getSkyPipeline());
+    commandBuffer.draw(3, 1, 0, 0);
+
 #if defined(IMGUI_ENABLED)
     // ImGui used to have its own pass after this one, but with vsync off macOS can show the image in between the two passes
     // (the scene without the UI, looked like horizontal cuts across the imgui windows). Same pass = the image only gets written once
