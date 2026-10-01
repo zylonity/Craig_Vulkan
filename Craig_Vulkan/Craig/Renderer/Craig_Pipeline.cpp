@@ -212,7 +212,7 @@ void Craig::Pipeline::createDescriptorSetLayout() {
         .setBinding(0)
         .setDescriptorType(vk::DescriptorType::eUniformBuffer)
         .setDescriptorCount(1)
-        .setStageFlags(vk::ShaderStageFlagBits::eVertex);
+        .setStageFlags(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment); // frag needs camPos
 
     vk::DescriptorSetLayoutBinding storageBufferLayoutBinding{};
     storageBufferLayoutBinding

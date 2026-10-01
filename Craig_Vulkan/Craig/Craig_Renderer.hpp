@@ -64,17 +64,21 @@ namespace Craig {
 			glm::mat4 model;
 		};
 
+		// Everything's a vec4 so std140 can't sneak padding in, w is free if it's not mentioned
 		struct CameraData {
 			glm::mat4 view;
 			glm::mat4 proj;
+			glm::vec4 camPos;
 		};
+		static_assert(sizeof(CameraData) == 144, "CameraData has to match the shader's CameraData block");
 
 		struct LightData
 		{
-			alignas(16) glm::vec3 lightDir;
-			alignas(16) glm::vec3 lightColour;
-			alignas(16) glm::vec3 ambientColour;
+			glm::vec4 lightDir;
+			glm::vec4 lightColour;
+			glm::vec4 ambientColour;
 		};
+		static_assert(sizeof(LightData) == 48, "LightData has to match the shader's LightData block");
 
 		// struct UniformBufferObject {
 		// 	glm::mat4 model;

@@ -5,6 +5,7 @@ layout(set = 0, binding = 0) uniform CameraData
 {
     mat4 view;
     mat4 proj;
+    vec4 camPos; // only the frag uses this
 };
 
 // Set 0, binding 1 - big array of per-object transforms. We index into it using the push constant.
@@ -36,16 +37,22 @@ layout(location = 3) in vec2 inTexCoord;
 layout(location = 0) out vec3 outColor;
 layout(location = 1) out vec3 outNormal;
 layout(location = 2) out vec2 outTexCoord;
+layout(location = 3) out vec3 outWorldPos;
 
 void main()
 {
     // Grab this object's model matrix from the SSBO using the push-constant index, then put the node inside it
     mat4 model = transforms[pc.objectIndex].model * pc.nodeMatrix;
 
+    vec4 worldPos = model * vec4(inPos, 1.0);
+
     // Apply MVP
-    gl_Position = proj * view * model * vec4(inPos, 1.0);
+    gl_Position = proj * view * worldPos;
 
     outColor = inColor;
-    outNormal = normalize(mat3(model) * inNormal);
+    // inverse transpose keeps normals right when something's scaled unevenly, plain mat3(model) bends them the wrong way
+    // a 3x3 inverse per vertex is fine for now, could move it to the CPU later
+    outNormal = normalize(transpose(inverse(mat3(model))) * inNormal);
     outTexCoord = inTexCoord;
+    outWorldPos = worldPos.xyz;
 }

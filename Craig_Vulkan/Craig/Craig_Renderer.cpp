@@ -910,22 +910,23 @@ void Craig::Renderer::updateUniformBuffer(uint32_t currentImage, const float& de
     CameraData viewProjUbo;
     viewProjUbo.view = camera.getView();
     viewProjUbo.proj = camera.getProj();
+    viewProjUbo.camPos = glm::vec4(camera.getPosition(), 1.0f);
     memcpy(mv_viewProjUboMap[currentImage], &viewProjUbo, sizeof(viewProjUbo));
 
     LightData lightData;
     const Craig::Components::Sun* pSun = mp_SceneManager->getCurrentScene()->getSun();
     if (pSun != nullptr)
     {
-        lightData.lightDir = pSun->getLightDir();
-        lightData.lightColour = pSun->getLightColour();
-        lightData.ambientColour = pSun->getAmbientColour();
+        lightData.lightDir = glm::vec4(pSun->getLightDir(), 0.0f);
+        lightData.lightColour = glm::vec4(pSun->getLightColour(), 0.0f);
+        lightData.ambientColour = glm::vec4(pSun->getAmbientColour(), 0.0f);
     }
     else
     {
         // No sun means no directional light, keep a bit of ambient so the scene isn't pitch black
-        lightData.lightDir = glm::vec3(0.0f, 1.0f, 0.0f);
-        lightData.lightColour = glm::vec3(0.0f);
-        lightData.ambientColour = glm::vec3(0.05f, 0.05f, 0.08f);
+        lightData.lightDir = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+        lightData.lightColour = glm::vec4(0.0f);
+        lightData.ambientColour = glm::vec4(0.05f, 0.05f, 0.08f, 0.0f);
     }
     memcpy(mv_lightUboMap[currentImage], &lightData, sizeof(lightData));
 
