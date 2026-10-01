@@ -231,6 +231,8 @@ static void loadMaterials(const tinygltf::Model& input, Craig::Model& outModel) 
             outModel.materials[i].baseColorFactor = glm::vec4(glm::make_vec4(pbr.baseColorFactor.data()));
         }
         outModel.materials[i].baseColorTextureIndex = pbr.baseColorTexture.index;
+        outModel.materials[i].metallicFactor = static_cast<float>(pbr.metallicFactor);
+        outModel.materials[i].roughnessFactor = static_cast<float>(pbr.roughnessFactor);
     }
 }
 

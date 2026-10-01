@@ -92,7 +92,7 @@ void Craig::Components::Sun::displayImGuiAttributes()
 	}
 	ImGui::SetItemTooltip("Sets the colour, 2000K is a sunset and 6500K is midday");
 
-	// anything over 1 just clips until there's HDR
+	// highlights clip to white without HDR, that's expected
 	ImGui::DragFloat("Intensity", &m_intensity, 0.01f, 0.0f, 100.0f);
 
 	ImGui::ColorEdit3("Sky Ambient", glm::value_ptr(mv3_skyColour));
@@ -146,6 +146,7 @@ void Craig::Components::Sun::applyTimeOfDay() {
 
 	// how high the sun gets at noon, 90 would be straight overhead
 	const float maxElevation = 70.0f;
+	const float noonIntensity = 3.0f;
 
 	// one full sine over 24h, peaks at noon and bottoms out at midnight
 	float dayAngle = (m_timeOfDay - 6.0f) / 12.0f * glm::pi<float>();
@@ -159,7 +160,7 @@ void Craig::Components::Sun::applyTimeOfDay() {
 	float height = std::sin(glm::radians(m_elevation));
 
 	// fades out just after it dips under the horizon instead of snapping off
-	m_intensity = glm::smoothstep(-0.05f, 0.25f, height);
+	m_intensity = noonIntensity * glm::smoothstep(-0.05f, 0.25f, height);
 
 	// orange near the horizon, whiter as it climbs
 	m_temperature = glm::mix(2000.0f, 6500.0f, glm::smoothstep(0.0f, 0.6f, height));

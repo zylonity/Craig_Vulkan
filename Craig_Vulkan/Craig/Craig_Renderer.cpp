@@ -465,6 +465,8 @@ void Craig::Renderer::drawNode(vk::CommandBuffer commandBuffer, Craig::Model& mo
             // Each primitive can have its own material, so push its colour + bind its texture
             const Craig::Material& material = model.getMaterial(submesh->materialIndex);
             pushData.baseColorFactor = material.baseColorFactor;
+            pushData.metallicFactor = material.metallicFactor;
+            pushData.roughnessFactor = material.roughnessFactor;
 
             commandBuffer.pushConstants(
                 m_pipeline.getPipelineLayout(),

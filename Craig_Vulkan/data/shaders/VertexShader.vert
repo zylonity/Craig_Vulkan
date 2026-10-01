@@ -25,6 +25,8 @@ layout(push_constant) uniform PushConstants
     mat4 nodeMatrix;      // The glTF node's transform inside the model
     vec4 baseColorFactor; // Material colour, only the fragment shader uses it
     uint objectIndex;     // Which slot of the transforms array to read for this draw
+    float metallicFactor; // frag only
+    float roughnessFactor;
 } pc;
 
 // Locations have to match the attribute descriptions in Craig_ResourceManager.cpp

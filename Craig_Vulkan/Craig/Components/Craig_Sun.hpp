@@ -42,7 +42,8 @@ namespace Craig {
 			float m_elevation = 60.8f;
 			float m_azimuth = 63.4f;
 			glm::vec3 mv3_lightColour = { 1.0f, 0.98f, 0.95f };
-			float m_intensity = 1.0f;
+			// PBR diffuse divides by pi, so ~3 looks about as bright as the old 1
+			float m_intensity = 3.0f;
 
 			// Ambient is a blend between these two based on which way a surface faces
 			glm::vec3 mv3_skyColour = { 0.12f, 0.15f, 0.22f };

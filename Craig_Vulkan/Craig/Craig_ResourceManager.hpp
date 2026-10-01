@@ -36,6 +36,8 @@ namespace Craig {
 		glm::mat4 nodeMatrix;       // The node's transform inside the model
 		glm::vec4 baseColorFactor;  // Material colour, multiplied into the texture
 		uint32_t  objectIndex;      // Which slot of the transforms SSBO to read
+		float     metallicFactor;   // PBR stuff, only the frag uses these
+		float     roughnessFactor;
 	};
 
 	// The glTF structure below is adapted from Sascha Willems' gltfloading example (MIT)
@@ -77,6 +79,9 @@ namespace Craig {
 	{
 		glm::vec4 baseColorFactor = glm::vec4(1.0f);
 		int32_t baseColorTextureIndex = -1;
+		// glTF defaults are 1 and 1 too
+		float metallicFactor = 1.0f;
+		float roughnessFactor = 1.0f;
 	};
 
 	// An object in the glTF scene graph, its matrix is relative to its parent
