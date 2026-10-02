@@ -43,6 +43,7 @@ namespace Craig {
 
 		bool& getVSyncState() { return m_swapChain.m_vsyncEnabled; };
 		void refreshSwapChain() { recreateSwapChain(); };
+		bool& getSkyEnabled() { return m_skyEnabled; };
 		// srgb for colour textures, false for data ones like metallic/roughness
 		void createTextureImage2(const uint8_t* pixels, int texWidth, int texHeight, int texChannels, Texture* outTexture, bool srgb = true);
 
@@ -184,6 +185,7 @@ namespace Craig {
 
 
 		uint32_t m_minLODLevel = 0;        // User-selected min LOD clamp
+		bool m_skyEnabled = true;          // off = you just see the clear colour behind everything
 
 		RenderingAttachments m_renderingAttachments; //Contains stuff for MSAA, vsync and mipmap levels
 		

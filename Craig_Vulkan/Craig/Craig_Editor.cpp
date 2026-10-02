@@ -654,6 +654,8 @@ void Craig::ImguiEditor::showRenderProperties(const float& deltaTime) {
 			Craig::Logger::renderer().info("VSync {}", mp_renderer->getVSyncState() ? "on" : "off");
 			mp_renderer->refreshSwapChain();
 		}
+		ImGui::Checkbox("Sky", &mp_renderer->getSkyEnabled());
+		ImGui::SetItemTooltip("Turns the sky off, you'll just get the clear colour behind everything");
 		ImGui::SeparatorText("Camera");
 		ImGui::DragFloat3("Cam Pos", glm::value_ptr(mp_camera->getPosition()));
 		ImGui::DragFloat2("Cam Rot", glm::value_ptr(mp_camera->getRotation()));
