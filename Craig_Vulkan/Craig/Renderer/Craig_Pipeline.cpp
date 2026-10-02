@@ -177,7 +177,7 @@ void Craig::Pipeline::createGraphicsPipeline() {
 }
 
 // Mostly the same as the main pipeline, the differences are:
-// no vertex buffer (the triangle comes from gl_VertexIndex), no culling, and depth is test only at LessOrEqual
+// no vertex buffer (the dome comes from gl_VertexIndex), no culling, and depth is test only at LessOrEqual
 void Craig::Pipeline::createSkyPipeline() {
 
     m_VK_skyVertShaderModule = Craig::ShaderCompilation::LoadShaderModule(mPipe_device, "data/shaders/skyVert.spv");
@@ -197,7 +197,7 @@ void Craig::Pipeline::createSkyPipeline() {
 
     vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-    // nothing to feed in, the vert shader makes its own 3 corners
+    // nothing to feed in, the vert shader makes its own sphere
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -364,7 +364,7 @@ void Craig::Pipeline::createDescriptorSetLayout() {
         .setBinding(2)
         .setDescriptorType(vk::DescriptorType::eUniformBuffer)
         .setDescriptorCount(1)
-        .setStageFlags(vk::ShaderStageFlagBits::eFragment);
+        .setStageFlags(vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment); // sky vert needs the sun
 
     std::array<vk::DescriptorSetLayoutBinding, 3> perFrameBindings = { cameraLayoutBinding, storageBufferLayoutBinding, lightBinding };
 

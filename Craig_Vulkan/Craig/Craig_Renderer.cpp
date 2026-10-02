@@ -427,11 +427,13 @@ void Craig::Renderer::recordCommandBuffer(vk::CommandBuffer commandBuffer, uint3
         }
     }
 
-    // Sky goes after the models so the depth test skips every pixel they already cover, the shader's expensive
-    // Same pipeline layout so set 0 is still bound, and 3 verts with no buffer is the fullscreen triangle
+    // Sky goes after the models so the depth test skips every pixel they already cover
+    // Same pipeline layout so set 0 is still bound. No vertex buffer, the dome gets built from gl_VertexIndex
     if (m_skyEnabled) {
+        // has to match SEGMENTS * RINGS * 6 in SkyVertexShader.vert
+        constexpr uint32_t kSkyDomeVertexCount = 64 * 32 * 6;
         commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, m_pipeline.getSkyPipeline());
-        commandBuffer.draw(3, 1, 0, 0);
+        commandBuffer.draw(kSkyDomeVertexCount, 1, 0, 0);
     }
 
 #if defined(IMGUI_ENABLED)
