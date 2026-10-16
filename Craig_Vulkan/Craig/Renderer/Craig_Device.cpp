@@ -39,8 +39,9 @@ Craig::Device::QueueFamilyIndices Craig::Device::findQueueFamilies(const vk::Phy
 
 
 	//Find at least one queue family that supports graphics operations
-    uint32_t i = 0;
-    for (const auto& queueFamily : queueFamilies) {
+    //Used to be a range for with i++ at the bottom, so the continue below skipped the i++ and every index after it was off by one
+    for (uint32_t i = 0; i < queueFamilies.size(); i++) {
+        const auto& queueFamily = queueFamilies[i];
         //Skip if the queuecount is 0
         if (queueFamily.queueCount == 0) continue;
 
@@ -66,7 +67,6 @@ Craig::Device::QueueFamilyIndices Craig::Device::findQueueFamilies(const vk::Phy
 			break; // If we already found a suitable family, no need to keep searching
         }
 
-        i++;
     }
 
     // Fallback: if no dedicated transfer, use graphics (it�s implicitly transfer-capable)
