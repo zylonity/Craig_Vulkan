@@ -15,6 +15,8 @@ CraigError Craig::Device::init(DeviceInitInfo& initInfo) {
     mv_DVC_deviceExtensions = initInfo.deviceExtensionsVector;
 
     pickPhysicalDevice();
+    //Find them once here and keep them, createBufferVMA used to look them up for every single buffer
+    m_DVC_queueFamilyIndices = findQueueFamilies(m_VK_physicalDevice, m_DVC_surface);
     createLogicalDevice();
     initVMA();
 
@@ -164,8 +166,8 @@ bool Craig::Device::checkDeviceExtensionSupport(const vk::PhysicalDevice& device
 }
 
 void Craig::Device::createLogicalDevice() {
-    // Query the queue families that support graphics and presentation
-    Device::QueueFamilyIndices indices = Device::findQueueFamilies(m_VK_physicalDevice, m_DVC_surface);
+    //Found in init, before we get here
+    Device::QueueFamilyIndices& indices = m_DVC_queueFamilyIndices;
 
     std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
     // Use a set to avoid duplicating queue create info if graphics == presentation
@@ -279,12 +281,17 @@ void Craig::Device::createBufferVMA(
     bi.usage = static_cast<VkBufferUsageFlags>(usage);
     bi.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    // If you truly need concurrent:
-    if (auto idx = Device::findQueueFamilies(m_VK_physicalDevice, m_DVC_surface); idx.hasDedicatedTransfer()) {
-        uint32_t q[2] = { idx.graphicsFamily.value(), idx.transferFamily.value() };
+    //This array used to live inside the if, so the pointer was dead by the time vmaCreateBuffer read it
+    //It has to stay alive until vmaCreateBuffer returns
+    uint32_t queueFamilies[2] = {
+        m_DVC_queueFamilyIndices.graphicsFamily.value(), m_DVC_queueFamilyIndices.transferFamily.value()
+    };
+
+    //If the transfer queue is its own family the buffer gets shared between both
+    if (m_DVC_queueFamilyIndices.hasDedicatedTransfer()) {
         bi.sharingMode = VK_SHARING_MODE_CONCURRENT;
         bi.queueFamilyIndexCount = 2;
-        bi.pQueueFamilyIndices = q;
+        bi.pQueueFamilyIndices = queueFamilies;
     }
 
     VkBuffer raw{};

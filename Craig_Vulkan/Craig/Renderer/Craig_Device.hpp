@@ -43,6 +43,7 @@ namespace Craig {
 		const vk::Queue getTransferQueue() const { return m_VK_transferQueue; }
 
 		const VmaAllocator getVmaAllocator() const { return m_VMA_allocator; }
+		const QueueFamilyIndices& getQueueFamilyIndices() const { return m_DVC_queueFamilyIndices; }
 
 		void createBufferVMA(vk::DeviceSize size,
 			vk::BufferUsageFlags usage,
@@ -55,6 +56,7 @@ namespace Craig {
 		vk::SurfaceKHR m_DVC_surface;
 		vk::Instance   m_DVC_instance;
 		std::vector<const char*> mv_DVC_deviceExtensions;
+		QueueFamilyIndices m_DVC_queueFamilyIndices; //Found once in init
 
 		vk::Queue m_VK_graphicsQueue;
 		vk::Queue m_VK_presentationQueue;
