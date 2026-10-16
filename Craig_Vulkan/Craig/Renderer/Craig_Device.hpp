@@ -30,6 +30,22 @@ namespace Craig {
 			bool hasDedicatedTransfer() { return graphicsFamily && transferFamily && transferFamily != graphicsFamily; }
 		};
 
+		//Everything sound propagation needs to fire rays with ray queries
+		struct RayQuerySupport {
+			bool accelerationStructureExtension = false;
+			bool rayQueryExtension = false;
+			bool deferredHostOperationsExtension = false;
+			bool bufferDeviceAddress = false;
+			bool accelerationStructure = false;
+			bool rayQuery = false;
+			bool graphicsQueueCompute = false; //We run the rays on the graphics queue for now so it needs compute
+
+			bool isSupported() const {
+				return accelerationStructureExtension && rayQueryExtension && deferredHostOperationsExtension &&
+					bufferDeviceAddress && accelerationStructure && rayQuery && graphicsQueueCompute;
+			}
+		};
+
 		static QueueFamilyIndices findQueueFamilies(const vk::PhysicalDevice& device, const vk::SurfaceKHR& surface);
 
 		CraigError init(DeviceInitInfo& initInfo);
@@ -44,6 +60,7 @@ namespace Craig {
 
 		const VmaAllocator getVmaAllocator() const { return m_VMA_allocator; }
 		const QueueFamilyIndices& getQueueFamilyIndices() const { return m_DVC_queueFamilyIndices; }
+		const RayQuerySupport& getRayQuerySupport() const { return m_DVC_rayQuerySupport; }
 
 		void createBufferVMA(vk::DeviceSize size,
 			vk::BufferUsageFlags usage,
@@ -57,6 +74,7 @@ namespace Craig {
 		vk::Instance   m_DVC_instance;
 		std::vector<const char*> mv_DVC_deviceExtensions;
 		QueueFamilyIndices m_DVC_queueFamilyIndices; //Found once in init
+		RayQuerySupport m_DVC_rayQuerySupport;
 
 		vk::Queue m_VK_graphicsQueue;
 		vk::Queue m_VK_presentationQueue;
@@ -72,6 +90,7 @@ namespace Craig {
 		bool isDeviceSuitable(const vk::PhysicalDevice& device);
 		bool checkDeviceExtensionSupport(const vk::PhysicalDevice& device);
 
+		void queryRayQuerySupport(); // Checks what the GPU has for ray queries, doesn't turn anything on
 		void createLogicalDevice(); // Create vk::Device + queues
 
 		void initVMA(); // VMA allocator setup

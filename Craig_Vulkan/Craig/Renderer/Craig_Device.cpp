@@ -17,6 +17,7 @@ CraigError Craig::Device::init(DeviceInitInfo& initInfo) {
     pickPhysicalDevice();
     //Find them once here and keep them, createBufferVMA used to look them up for every single buffer
     m_DVC_queueFamilyIndices = findQueueFamilies(m_VK_physicalDevice, m_DVC_surface);
+    queryRayQuerySupport();
     createLogicalDevice();
     initVMA();
 
@@ -141,7 +142,11 @@ bool Craig::Device::isDeviceSuitable(const vk::PhysicalDevice& device) {
     Craig::Logger::renderer().debug("  Extensions (Like swapchain/double buffers) are supported: {}", extensionsSupported);
     Craig::Logger::renderer().debug("  The swapchain extension is adequate for our use: {}", swapChainAdequate);
 
-    return indices.isComplete() && extensionsSupported && swapChainAdequate;
+    //The instance and VMA are both on 1.4 already, so the device has to be too
+    const bool apiSupported = properties.apiVersion >= VK_API_VERSION_1_4;
+    Craig::Logger::renderer().debug("  Vulkan 1.4 device API supported: {}", apiSupported);
+
+    return apiSupported && indices.isComplete() && extensionsSupported && swapChainAdequate;
 }
 
 
@@ -163,6 +168,56 @@ bool Craig::Device::checkDeviceExtensionSupport(const vk::PhysicalDevice& device
     }
 
     return requiredExtensions.empty();
+}
+
+void Craig::Device::queryRayQuerySupport() {
+    m_DVC_rayQuerySupport = {};
+
+    //Check the extensions first
+    for (const vk::ExtensionProperties& extension : m_VK_physicalDevice.enumerateDeviceExtensionProperties()) {
+        if (std::strcmp(extension.extensionName, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) == 0) {
+            m_DVC_rayQuerySupport.accelerationStructureExtension = true;
+        }
+        if (std::strcmp(extension.extensionName, VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0) {
+            m_DVC_rayQuerySupport.rayQueryExtension = true;
+        }
+        if (std::strcmp(extension.extensionName, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME) == 0) {
+            m_DVC_rayQuerySupport.deferredHostOperationsExtension = true;
+        }
+    }
+
+    //Then the features, chained off the 1.2 struct
+    vk::PhysicalDeviceFeatures2 features{};
+    vk::PhysicalDeviceVulkan12Features v12{};
+    vk::PhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructure{};
+    vk::PhysicalDeviceRayQueryFeaturesKHR rayQuery{};
+    features.setPNext(&v12);
+
+    //Only chain the extension structs if the driver actually has the extension
+    if (m_DVC_rayQuerySupport.accelerationStructureExtension) {
+        accelerationStructure.setPNext(v12.pNext);
+        v12.setPNext(&accelerationStructure);
+    }
+    if (m_DVC_rayQuerySupport.rayQueryExtension) {
+        rayQuery.setPNext(v12.pNext);
+        v12.setPNext(&rayQuery);
+    }
+    m_VK_physicalDevice.getFeatures2(&features);
+
+    m_DVC_rayQuerySupport.bufferDeviceAddress = v12.bufferDeviceAddress;
+    m_DVC_rayQuerySupport.accelerationStructure = accelerationStructure.accelerationStructure;
+    m_DVC_rayQuerySupport.rayQuery = rayQuery.rayQuery;
+
+    const auto queueFamilies = m_VK_physicalDevice.getQueueFamilyProperties();
+    m_DVC_rayQuerySupport.graphicsQueueCompute = static_cast<bool>(
+        queueFamilies[m_DVC_queueFamilyIndices.graphicsFamily.value()].queueFlags & vk::QueueFlagBits::eCompute);
+
+    Craig::Logger::renderer().info("RT extensions supported: acceleration structure {}, ray query {}, deferred host operations {}",
+        m_DVC_rayQuerySupport.accelerationStructureExtension, m_DVC_rayQuerySupport.rayQueryExtension,
+        m_DVC_rayQuerySupport.deferredHostOperationsExtension);
+    Craig::Logger::renderer().info("RT features supported: buffer device address {}, acceleration structure {}, ray query {}, graphics queue compute {}",
+        m_DVC_rayQuerySupport.bufferDeviceAddress, m_DVC_rayQuerySupport.accelerationStructure,
+        m_DVC_rayQuerySupport.rayQuery, m_DVC_rayQuerySupport.graphicsQueueCompute);
 }
 
 void Craig::Device::createLogicalDevice() {
