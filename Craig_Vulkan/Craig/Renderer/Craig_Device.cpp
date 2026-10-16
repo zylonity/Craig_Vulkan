@@ -248,11 +248,11 @@ void Craig::Device::createLogicalDevice() {
     v13.setDynamicRendering(true);
     v13.setSynchronization2(true);
 
-    //Enable the timeline semaphore feature
-    vk::PhysicalDeviceTimelineSemaphoreFeatures timelineFeatures;
-    timelineFeatures.setTimelineSemaphore(true);
-
-    timelineFeatures.setPNext(&v13);
+    //Timeline semaphores live in the 1.2 struct now, the spec doesn't let you chain the 1.2 struct
+    //alongside the separate timeline/buffer device address structs (VUID-VkDeviceCreateInfo-pNext-02830)
+    vk::PhysicalDeviceVulkan12Features v12{};
+    v12.setTimelineSemaphore(true);
+    v12.setPNext(&v13);
 
     std::vector<const char*> enabledExtensions = mv_DVC_deviceExtensions;
 
@@ -273,7 +273,7 @@ void Craig::Device::createLogicalDevice() {
         .setQueueCreateInfos(queueCreateInfos)
         .setPEnabledFeatures(&deviceFeatures)
         .setPEnabledExtensionNames(enabledExtensions)
-        .setPNext(&timelineFeatures);
+        .setPNext(&v12);
 
     for (const char* extension : enabledExtensions) {
         Craig::Logger::renderer().debug("Device extension on: {}", extension);
