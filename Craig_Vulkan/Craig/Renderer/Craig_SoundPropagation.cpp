@@ -7,6 +7,7 @@
 
 #include "Craig_CommandManager.hpp"
 #include "Craig/Craig_Logger.hpp"
+#include "Craig/Craig_ShaderCompilation.hpp"
 
 //Acceleration structure building adapted from Sascha Willems' rayquery example
 //Copyright (C) 2020-2025 Sascha Willems, MIT - https://github.com/SaschaWillems/Vulkan/tree/master/examples/rayquery
@@ -154,6 +155,45 @@ void Craig::SoundPropagation::destroyAccelerationStructure(AccelerationStructure
     accelerationStructure = {};
 }
 
+void Craig::SoundPropagation::createTestPipeline() {
+    const vk::Device device = mp_Device->getLogicalDevice();
+
+    //0 = TLAS, 1 = rays in, 2 = results out
+    const std::array<vk::DescriptorSetLayoutBinding, 3> bindings = {{
+        {0, vk::DescriptorType::eAccelerationStructureKHR, 1, vk::ShaderStageFlagBits::eCompute},
+        {1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute},
+        {2, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute}
+    }};
+    m_VK_descriptorSetLayout = device.createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo().setBindings(bindings));
+
+    const std::array<vk::DescriptorPoolSize, 2> sizes = {{
+        {vk::DescriptorType::eAccelerationStructureKHR, 1},
+        {vk::DescriptorType::eStorageBuffer, 2}
+    }};
+    m_VK_descriptorPool = device.createDescriptorPool(vk::DescriptorPoolCreateInfo().setMaxSets(1).setPoolSizes(sizes));
+    m_VK_descriptorSet = device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo()
+        .setDescriptorPool(m_VK_descriptorPool).setSetLayouts(m_VK_descriptorSetLayout))[0];
+
+    //The ray count goes in as a push constant
+    const vk::PushConstantRange range(vk::ShaderStageFlagBits::eCompute, 0, sizeof(uint32_t));
+    m_VK_pipelineLayout = device.createPipelineLayout(vk::PipelineLayoutCreateInfo()
+        .setSetLayouts(m_VK_descriptorSetLayout).setPushConstantRanges(range));
+
+    const vk::ShaderModule shader = ShaderCompilation::LoadShaderModule(device, "data/shaders/rayQueryTest.spv");
+    vk::PipelineShaderStageCreateInfo stage{};
+    stage.setStage(vk::ShaderStageFlagBits::eCompute).setModule(shader).setPName("main");
+
+    //Destroy the module even if the pipeline throws
+    try {
+        m_VK_pipeline = device.createComputePipeline({}, vk::ComputePipelineCreateInfo().setStage(stage).setLayout(m_VK_pipelineLayout)).value;
+    }
+    catch (...) {
+        device.destroyShaderModule(shader);
+        throw;
+    }
+    device.destroyShaderModule(shader);
+}
+
 CraigError Craig::SoundPropagation::runTriangleTest() {
     //One triangle facing +Z, sat at z = 0 around the origin
     const std::array<std::array<float, 3>, 3> positions = {{
@@ -197,7 +237,72 @@ CraigError Craig::SoundPropagation::runTriangleTest() {
     instances.geometry.instances.data.deviceAddress = getBufferAddress(m_testInstances);
     buildAccelerationStructure(vk::AccelerationStructureTypeKHR::eTopLevel, instances, m_testTLAS, 1);
 
-    return CRAIG_SUCCESS;
+    //All +Z, tmin 0.001
+    //0: starts at z = -1, goes 2 units, goes straight through the triangle -> hit
+    //1: same but 2 units to the right, the triangle's not there -> miss
+    //2: points at the triangle but tmax is 0.5 so it stops before it gets there -> miss
+    const std::array<Ray, 3> rays = {{
+        {{0.0f, 0.0f, -1.0f, 0.001f}, {0.0f, 0.0f, 1.0f, 2.0f}},
+        {{2.0f, 0.0f, -1.0f, 0.001f}, {0.0f, 0.0f, 1.0f, 2.0f}},
+        {{0.0f, 0.0f, -1.0f, 0.001f}, {0.0f, 0.0f, 1.0f, 0.5f}}
+    }};
+    const std::array<uint32_t, 3> expected = {1, 0, 0};
+    const uint32_t rayCount = static_cast<uint32_t>(rays.size());
+
+    createBuffer(m_testRays, sizeof(rays), vk::BufferUsageFlagBits::eStorageBuffer, true);
+    createBuffer(m_testResults, sizeof(uint32_t) * rayCount, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, true);
+    uploadBuffer(m_testRays, rays.data(), sizeof(rays));
+
+    createTestPipeline();
+
+    vk::WriteDescriptorSetAccelerationStructureKHR tlasWrite{};
+    tlasWrite.setAccelerationStructures(m_testTLAS.handle);
+    const vk::DescriptorBufferInfo rayInfo(m_testRays.buffer, 0, VK_WHOLE_SIZE);
+    const vk::DescriptorBufferInfo resultInfo(m_testResults.buffer, 0, VK_WHOLE_SIZE);
+    std::array<vk::WriteDescriptorSet, 3> writes{};
+    writes[0].setDstSet(m_VK_descriptorSet).setDstBinding(0).setDescriptorType(vk::DescriptorType::eAccelerationStructureKHR)
+        .setDescriptorCount(1).setPNext(&tlasWrite);
+    writes[1].setDstSet(m_VK_descriptorSet).setDstBinding(1).setDescriptorType(vk::DescriptorType::eStorageBuffer).setBufferInfo(rayInfo);
+    writes[2].setDstSet(m_VK_descriptorSet).setDstBinding(2).setDescriptorType(vk::DescriptorType::eStorageBuffer).setBufferInfo(resultInfo);
+    mp_Device->getLogicalDevice().updateDescriptorSets(writes, {});
+
+    vk::CommandBuffer commandBuffer = mp_CommandManager->buffer_beginSingleTimeCommandsGFX();
+
+    //Fill the results with garbage first, so if the shader never runs we don't read back zeros and think they're misses
+    commandBuffer.fillBuffer(m_testResults.buffer, 0, VK_WHOLE_SIZE, 0xffffffff);
+    vk::MemoryBarrier2 resetBarrier{};
+    resetBarrier.setSrcStageMask(vk::PipelineStageFlagBits2::eTransfer).setSrcAccessMask(vk::AccessFlagBits2::eTransferWrite)
+        .setDstStageMask(vk::PipelineStageFlagBits2::eComputeShader).setDstAccessMask(vk::AccessFlagBits2::eShaderWrite);
+    commandBuffer.pipelineBarrier2(vk::DependencyInfo().setMemoryBarriers(resetBarrier));
+
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, m_VK_pipeline);
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, m_VK_pipelineLayout, 0, m_VK_descriptorSet, {});
+    commandBuffer.pushConstants(m_VK_pipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(rayCount), &rayCount);
+    commandBuffer.dispatch((rayCount + 63) / 64, 1, 1);
+
+    //CPU reads the results after this
+    vk::MemoryBarrier2 readbackBarrier{};
+    readbackBarrier.setSrcStageMask(vk::PipelineStageFlagBits2::eComputeShader).setSrcAccessMask(vk::AccessFlagBits2::eShaderWrite)
+        .setDstStageMask(vk::PipelineStageFlagBits2::eHost).setDstAccessMask(vk::AccessFlagBits2::eHostRead);
+    commandBuffer.pipelineBarrier2(vk::DependencyInfo().setMemoryBarriers(readbackBarrier));
+
+    mp_CommandManager->buffer_endSingleTimeCommandsGFX(commandBuffer);
+
+    if (vmaInvalidateAllocation(mp_Device->getVmaAllocator(), m_testResults.allocation, 0, VK_WHOLE_SIZE) != VK_SUCCESS) {
+        throw std::runtime_error("ray-query readback invalidation failed");
+    }
+
+    const auto* results = static_cast<const uint32_t*>(m_testResults.pMapped);
+    CraigError ret = CRAIG_SUCCESS;
+    for (uint32_t i = 0; i < rayCount; i++) {
+        const bool passed = results[i] == expected[i];
+        Logger::renderer().info("Ray-query test ray {}: got {}, expected {} - {}", i, results[i], expected[i], passed ? "pass" : "FAIL");
+        if (!passed) {
+            ret = CRAIG_FAIL;
+        }
+    }
+
+    return ret;
 }
 
 void Craig::SoundPropagation::destroyBuffer(Buffer& buffer) {
@@ -213,8 +318,16 @@ CraigError Craig::SoundPropagation::terminate() {
         return CRAIG_SUCCESS;
     }
 
-    mp_Device->getLogicalDevice().waitIdle();
+    const vk::Device device = mp_Device->getLogicalDevice();
+    device.waitIdle();
 
+    device.destroyPipeline(m_VK_pipeline);
+    device.destroyPipelineLayout(m_VK_pipelineLayout);
+    device.destroyDescriptorPool(m_VK_descriptorPool);
+    device.destroyDescriptorSetLayout(m_VK_descriptorSetLayout);
+
+    destroyBuffer(m_testRays);
+    destroyBuffer(m_testResults);
     destroyAccelerationStructure(m_testTLAS);
     destroyAccelerationStructure(m_testBLAS);
     destroyBuffer(m_testInstances);

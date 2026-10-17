@@ -43,6 +43,7 @@ namespace Craig {
 		void buildAccelerationStructure(vk::AccelerationStructureTypeKHR type, const VkAccelerationStructureGeometryKHR& geometry,
 			AccelerationStructure& accelerationStructure, uint32_t primitiveCount);
 		void destroyAccelerationStructure(AccelerationStructure& accelerationStructure);
+		void createTestPipeline();
 
 		Device* mp_Device = nullptr;
 		CommandManager* mp_CommandManager = nullptr;
@@ -55,6 +56,14 @@ namespace Craig {
 		Buffer m_testInstances;
 		AccelerationStructure m_testBLAS;
 		AccelerationStructure m_testTLAS;
+		Buffer m_testRays;
+		Buffer m_testResults;
+
+		vk::DescriptorPool m_VK_descriptorPool;
+		vk::DescriptorSetLayout m_VK_descriptorSetLayout;
+		vk::DescriptorSet m_VK_descriptorSet;
+		vk::PipelineLayout m_VK_pipelineLayout;
+		vk::Pipeline m_VK_pipeline;
 
 		//The KHR acceleration structure functions aren't guaranteed to be exported by the loader, so we grab them off the device
 		PFN_vkCreateAccelerationStructureKHR m_vkCreateAccelerationStructureKHR = nullptr;
