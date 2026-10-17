@@ -254,7 +254,24 @@ void Craig::Device::createLogicalDevice() {
     v12.setTimelineSemaphore(true);
     v12.setPNext(&v13);
 
+    //Feature list for ray queries is from Khronos' Basic ray queries sample (Apache-2.0)
+    //https://github.com/KhronosGroup/Vulkan-Samples/tree/main/samples/extensions/ray_queries
+    //Only turned on if the GPU has all of it, normal rendering still works without
+    const bool enableRayQueries = m_DVC_rayQuerySupport.isSupported();
+    vk::PhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructure{};
+    vk::PhysicalDeviceRayQueryFeaturesKHR rayQuery{};
+
     std::vector<const char*> enabledExtensions = mv_DVC_deviceExtensions;
+    if (enableRayQueries) {
+        enabledExtensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+        enabledExtensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+        enabledExtensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+        v12.setBufferDeviceAddress(true);
+        accelerationStructure.setAccelerationStructure(true);
+        rayQuery.setRayQuery(true);
+        v13.setPNext(&accelerationStructure);
+        accelerationStructure.setPNext(&rayQuery);
+    }
 
 #if defined(__APPLE__)
     // MoltenVK has the portability subset and it has to be enabled if it's there, KosmicKrisp doesn't have it at all
@@ -281,6 +298,13 @@ void Craig::Device::createLogicalDevice() {
 
     // Create the logical device for the selected physical device
     m_VK_logicalDevice = m_VK_physicalDevice.createDevice(createInfo);
+    m_DVC_rayQueryEnabled = enableRayQueries;
+    //deviceFeatures is everything getFeatures() reported, so this was already the case, just logging it now
+    Craig::Logger::renderer().info("Core 1.0 feature policy: enable all reported features (sampler anisotropy required)");
+    Craig::Logger::renderer().info("Ray queries enabled: {} (buffer device address: {})", m_DVC_rayQueryEnabled, m_DVC_rayQueryEnabled);
+    if (!m_DVC_rayQueryEnabled) {
+        Craig::Logger::renderer().info("GPU sound propagation unavailable on this device; normal rendering remains enabled");
+    }
 
     Craig::Logger::renderer().info("Queue families: graphics {}, present {}, transfer {}{}",
         indices.graphicsFamily.value(), indices.presentFamily.value(), indices.transferFamily.value(),
@@ -307,6 +331,10 @@ void Craig::Device::initVMA() {
     vmaCreateInfo.physicalDevice = m_VK_physicalDevice;
     vmaCreateInfo.device = m_VK_logicalDevice;
     vmaCreateInfo.vulkanApiVersion = VK_API_VERSION_1_4;
+    //Acceleration structures need buffer device addresses, it's a flag for the whole allocator not per allocation
+    if (m_DVC_rayQueryEnabled) {
+        vmaCreateInfo.flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+    }
 
     VmaVulkanFunctions vmaFunctions{};
     vmaFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;

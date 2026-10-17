@@ -61,6 +61,7 @@ namespace Craig {
 		const VmaAllocator getVmaAllocator() const { return m_VMA_allocator; }
 		const QueueFamilyIndices& getQueueFamilyIndices() const { return m_DVC_queueFamilyIndices; }
 		const RayQuerySupport& getRayQuerySupport() const { return m_DVC_rayQuerySupport; }
+		bool isRayQueryEnabled() const { return m_DVC_rayQueryEnabled; }
 
 		void createBufferVMA(vk::DeviceSize size,
 			vk::BufferUsageFlags usage,
@@ -75,6 +76,7 @@ namespace Craig {
 		std::vector<const char*> mv_DVC_deviceExtensions;
 		QueueFamilyIndices m_DVC_queueFamilyIndices; //Found once in init
 		RayQuerySupport m_DVC_rayQuerySupport;
+		bool m_DVC_rayQueryEnabled = false; //Only true if the device was actually created with them
 
 		vk::Queue m_VK_graphicsQueue;
 		vk::Queue m_VK_presentationQueue;
