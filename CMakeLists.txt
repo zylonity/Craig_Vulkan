@@ -97,11 +97,12 @@ target_link_libraries(Craig_Vulkan PUBLIC
 # glslc picks the shader stage from the file extension (.vert / .frag)
 find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/bin $ENV{VULKAN_SDK}/Bin REQUIRED)
 
+#anything after INPUT gets passed straight to glslc (ARGN), e.g. --target-env for ray queries
 function(compile_glsl OUTPUT INPUT)
     message(STATUS "Shader: ${INPUT} -> ${OUTPUT}")
     add_custom_command(
             OUTPUT ${OUTPUT}
-            COMMAND ${GLSLC}
+            COMMAND ${GLSLC} ${ARGN}
             -o ${OUTPUT}
             ${INPUT}
             DEPENDS ${INPUT}
@@ -116,6 +117,8 @@ compile_glsl(${SHADER_DIR}/vert.spv ${SHADER_DIR}/VertexShader.vert)
 compile_glsl(${SHADER_DIR}/frag.spv ${SHADER_DIR}/FragmentShader.frag)
 compile_glsl(${SHADER_DIR}/skyVert.spv ${SHADER_DIR}/SkyVertexShader.vert)
 compile_glsl(${SHADER_DIR}/skyFrag.spv ${SHADER_DIR}/SkyFragmentShader.frag)
+#the ray query shader targets vulkan1.2, the rest stay on the default
+compile_glsl(${SHADER_DIR}/rayQueryTest.spv ${SHADER_DIR}/RayQueryTest.comp --target-env=vulkan1.2)
 
 add_custom_target(Shaders ALL
         DEPENDS
@@ -123,6 +126,7 @@ add_custom_target(Shaders ALL
         ${SHADER_DIR}/frag.spv
         ${SHADER_DIR}/skyVert.spv
         ${SHADER_DIR}/skyFrag.spv
+        ${SHADER_DIR}/rayQueryTest.spv
 )
 
 # Make the main program depend on shaders
