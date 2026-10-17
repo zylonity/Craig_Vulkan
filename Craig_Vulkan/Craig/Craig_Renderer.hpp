@@ -25,6 +25,7 @@
 #include "Renderer/Craig_Pipeline.hpp"
 #include "Renderer/Craig_RenderingAttachments.hpp"
 #include "Renderer/Craig_SyncManager.hpp"
+#include "Renderer/Craig_SoundPropagation.hpp"
 
 namespace Craig {
 
@@ -153,6 +154,7 @@ namespace Craig {
 		
 		// Commands
 		Craig::CommandManager m_commandManager;
+		Craig::SoundPropagation m_soundPropagation;
 
 		
 		// Sync

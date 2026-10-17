@@ -34,6 +34,9 @@ constexpr uint32_t kMaxEditorLogLines = 5000; // oldest lines get dropped after 
 // Jolt's scratch memory per step, going over it aborts ("TempAllocator: Out of memory")
 constexpr uint32_t kPhysicsTempAllocatorSize = 10 * 1024 * 1024; // 10 MB
 
+//Sound propagation
+constexpr bool kRunRayQueryTest = true; // fires a few test rays at a triangle on startup and logs if they hit
+
 enum CraigError {
 	CRAIG_SUCCESS = 0,
 	CRAIG_FAIL = 1,
