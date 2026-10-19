@@ -243,7 +243,7 @@ CraigError Craig::Renderer::initSceneResources() {
 
     //Quick startup check that ray queries actually work before building anything bigger on them
     if (kRunRayQueryTest && m_Devices.isRayQueryEnabled()) {
-        if (m_soundPropagation.init(&m_Devices, &m_commandManager) == CRAIG_SUCCESS) {
+        if (m_soundPropagation.init(&m_Devices, &m_commandManager, mp_SceneManager->getCurrentScene()) == CRAIG_SUCCESS) {
             m_soundPropagation.runTriangleTest();
         }
         m_soundPropagation.terminate();

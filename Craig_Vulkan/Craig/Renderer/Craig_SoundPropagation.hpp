@@ -2,11 +2,15 @@
 
 #include "Craig_Device.hpp"
 #include <array>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace Craig {
 
 	class CommandManager;
+	class Scene;
+	struct Model;
 
 	//Fires rays through the scene with ray queries so we can work out how sound gets from a source to the listener
 	class SoundPropagation {
@@ -16,7 +20,8 @@ namespace Craig {
 			std::array<float, 4> direction; // w is tmax, xyz is normalised
 		};
 
-		CraigError init(Device* pDevice, CommandManager* pCommandManager);
+		//Builds a BLAS for every model in the scene that blocks sound
+		CraigError init(Device* pDevice, CommandManager* pCommandManager, Scene* pScene);
 		//Test: one triangle at z = 0, fires a ray that hits it, one that misses and one that stops before it
 		CraigError runTriangleTest();
 		CraigError terminate();
@@ -35,6 +40,13 @@ namespace Craig {
 			vk::DeviceAddress address = 0;
 		};
 
+		//Each model gets its own copy of its triangles, separate from the raster vertex/index buffers
+		struct ModelGeometry {
+			Buffer vertices;
+			Buffer indices;
+			AccelerationStructure blas;
+		};
+
 		void loadEntryPoints();
 		void createBuffer(Buffer& buffer, vk::DeviceSize size, vk::BufferUsageFlags usage, bool hostVisible = false);
 		void uploadBuffer(Buffer& buffer, const void* pData, size_t size);
@@ -44,11 +56,15 @@ namespace Craig {
 			AccelerationStructure& accelerationStructure, uint32_t primitiveCount);
 		void destroyAccelerationStructure(AccelerationStructure& accelerationStructure);
 		void createTestPipeline();
+		void createModelGeometry(const Model& model, ModelGeometry& geometry);
+		void collectSceneInstances(Scene& scene, std::vector<VkAccelerationStructureInstanceKHR>& instances);
 
 		Device* mp_Device = nullptr;
 		CommandManager* mp_CommandManager = nullptr;
 		Buffer m_scratchBuffer; //Only alive while a build is happening
 		vk::DeviceSize m_scratchAlignment = 1;
+		std::unordered_map<std::string, ModelGeometry> m_modelGeometry; //By model path, so instances of the same model share one BLAS
+		std::vector<VkAccelerationStructureInstanceKHR> mv_instanceSnapshot;
 
 		//Test triangle
 		Buffer m_testVertices;

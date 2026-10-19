@@ -2,12 +2,17 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 
 #include "Craig_CommandManager.hpp"
 #include "Craig/Craig_Logger.hpp"
 #include "Craig/Craig_ShaderCompilation.hpp"
+#include "Craig/Craig_ResourceManager.hpp"
+#include "Craig/Craig_Scene.hpp"
+#include "Craig/Components/Craig_Model.hpp"
 
 //Acceleration structure building adapted from Sascha Willems' rayquery example
 //Copyright (C) 2020-2025 Sascha Willems, MIT - https://github.com/SaschaWillems/Vulkan/tree/master/examples/rayquery
@@ -15,8 +20,8 @@
 //The shader reads rays as two vec4s, so this has to stay 32 bytes
 static_assert(sizeof(Craig::SoundPropagation::Ray) == 32);
 
-CraigError Craig::SoundPropagation::init(Device* pDevice, CommandManager* pCommandManager) {
-    assert(pDevice != nullptr && pCommandManager != nullptr);
+CraigError Craig::SoundPropagation::init(Device* pDevice, CommandManager* pCommandManager, Scene* pScene) {
+    assert(pDevice != nullptr && pCommandManager != nullptr && pScene != nullptr);
 
     //No CPU fallback, if the device didn't get ray queries turned on we just don't do sound propagation
     if (!pDevice->isRayQueryEnabled()) {
@@ -38,6 +43,8 @@ CraigError Craig::SoundPropagation::init(Device* pDevice, CommandManager* pComma
         throw std::runtime_error("R32G32B32_SFLOAT acceleration-structure vertices unsupported");
     }
 
+    collectSceneInstances(*pScene, mv_instanceSnapshot);
+    Logger::renderer().info("Acoustic scene prepared: {} instances, {} cached models", mv_instanceSnapshot.size(), m_modelGeometry.size());
     return CRAIG_SUCCESS;
 }
 
@@ -194,6 +201,125 @@ void Craig::SoundPropagation::createTestPipeline() {
     device.destroyShaderModule(shader);
 }
 
+namespace {
+    //Walks the model's nodes the same way drawNode does, and bakes each node's matrix into the positions
+    void collectAcousticTriangles(const Craig::Node& node, std::vector<std::array<float, 3>>& positions, std::vector<uint32_t>& indices) {
+        //Same accumulated matrix the raster shader gets pushed
+        const glm::mat4 nodeMatrix = node.getWorldMatrix();
+
+        for (const Craig::SubMesh* pMesh : node.subMeshes) {
+            if (pMesh->indexCount == 0) continue;
+
+            if (pMesh->indexCount > pMesh->m_indices.size() || pMesh->indexCount % 3 != 0 ||
+                positions.size() + pMesh->m_vertices.size() > std::numeric_limits<uint32_t>::max()) {
+                throw std::runtime_error("invalid acoustic triangle list");
+            }
+
+            for (const Craig::Vertex& vertex : pMesh->m_vertices) {
+                const glm::vec3 position(nodeMatrix * glm::vec4(vertex.m_pos, 1.0f));
+                if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) {
+                    throw std::runtime_error("non-finite acoustic vertex");
+                }
+                positions.push_back({position.x, position.y, position.z});
+            }
+            for (uint32_t i = 0; i < pMesh->indexCount; i++) {
+                if (pMesh->m_indices[i] >= pMesh->m_vertices.size()) {
+                    throw std::runtime_error("acoustic index outside vertex buffer");
+                }
+                indices.push_back(pMesh->m_indices[i]);
+            }
+        }
+
+        for (const Craig::Node* pChild : node.children) {
+            collectAcousticTriangles(*pChild, positions, indices);
+        }
+    }
+
+    //A scale of 0 (or NaNs) would squash the instance flat, so those get skipped
+    bool validAcousticTransform(const glm::mat4& transform) {
+        for (int column = 0; column < 4; column++) {
+            for (int row = 0; row < 4; row++) {
+                if (!std::isfinite(transform[column][row])) return false;
+            }
+        }
+        const float determinant = glm::determinant(glm::mat3(transform));
+        return std::isfinite(determinant) && determinant != 0.0f;
+    }
+}
+
+void Craig::SoundPropagation::createModelGeometry(const Model& model, ModelGeometry& geometry) {
+    std::vector<std::array<float, 3>> positions;
+    std::vector<uint32_t> indices;
+    for (const Node* pNode : model.nodes) {
+        collectAcousticTriangles(*pNode, positions, indices);
+    }
+    if (indices.empty()) return;
+    if (indices.size() / 3 > std::numeric_limits<uint32_t>::max()) {
+        throw std::runtime_error("too many acoustic triangles");
+    }
+
+    const vk::BufferUsageFlags usage = vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eShaderDeviceAddress;
+    createBuffer(geometry.vertices, positions.size() * sizeof(positions[0]), usage, true);
+    createBuffer(geometry.indices, indices.size() * sizeof(indices[0]), usage, true);
+    uploadBuffer(geometry.vertices, positions.data(), positions.size() * sizeof(positions[0]));
+    uploadBuffer(geometry.indices, indices.data(), indices.size() * sizeof(indices[0]));
+
+    VkAccelerationStructureGeometryKHR triangles{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+    triangles.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+    triangles.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
+    triangles.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+    triangles.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+    triangles.geometry.triangles.vertexData.deviceAddress = getBufferAddress(geometry.vertices);
+    triangles.geometry.triangles.vertexStride = sizeof(positions[0]);
+    triangles.geometry.triangles.maxVertex = static_cast<uint32_t>(positions.size() - 1);
+    triangles.geometry.triangles.indexType = VK_INDEX_TYPE_UINT32;
+    triangles.geometry.triangles.indexData.deviceAddress = getBufferAddress(geometry.indices);
+    buildAccelerationStructure(vk::AccelerationStructureTypeKHR::eBottomLevel, triangles, geometry.blas,
+        static_cast<uint32_t>(indices.size() / 3));
+
+    Logger::renderer().info("Acoustic model cached: {} ({} triangles, node transforms baked)", model.modelPath, indices.size() / 3);
+}
+
+void Craig::SoundPropagation::collectSceneInstances(Scene& scene, std::vector<VkAccelerationStructureInstanceKHR>& instances) {
+    instances.clear();
+    const auto& objects = scene.getGameObjects();
+    ResourceManager& resources = ResourceManager::getInstance();
+
+    for (size_t objectIndex = 0; objectIndex < objects.size(); objectIndex++) {
+        GameObject* pObject = objects[objectIndex];
+        const auto* pModel = pObject->getComponent<Components::Model>();
+        if (!pModel || !pModel->hasModel() || !pModel->isAcousticBlocker()) continue;
+
+        const glm::mat4 transform = pObject->GetModelMatrix();
+        if (!validAcousticTransform(transform)) {
+            Logger::renderer().warn("Skipping acoustic instance '{}': transform is singular or non-finite", pObject->getName());
+            continue;
+        }
+
+        //Only build the BLAS the first time we see a model
+        const std::string& path = pModel->getModelPath();
+        auto entry = m_modelGeometry.find(path);
+        if (entry == m_modelGeometry.end()) {
+            entry = m_modelGeometry.try_emplace(path).first;
+            createModelGeometry(resources.getModel(path), entry->second);
+        }
+        if (!entry->second.blas.handle) continue; //No triangles
+
+        VkAccelerationStructureInstanceKHR instance{};
+        //glm indexes columns first, Vulkan's instance matrix is 3x4 rows first, so it gets flipped round
+        for (int row = 0; row < 3; row++) {
+            for (int column = 0; column < 4; column++) {
+                instance.transform.matrix[row][column] = transform[column][row];
+            }
+        }
+        instance.mask = 0xff;
+        //Negative scales flip the winding, sound doesn't care which side it hits
+        instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+        instance.accelerationStructureReference = entry->second.blas.address;
+        instances.push_back(instance);
+    }
+}
+
 CraigError Craig::SoundPropagation::runTriangleTest() {
     //One triangle facing +Z, sat at z = 0 around the origin
     const std::array<std::array<float, 3>, 3> positions = {{
@@ -333,6 +459,12 @@ CraigError Craig::SoundPropagation::terminate() {
     destroyBuffer(m_testInstances);
     destroyBuffer(m_testIndices);
     destroyBuffer(m_testVertices);
+    for (auto& [path, geometry] : m_modelGeometry) {
+        destroyAccelerationStructure(geometry.blas);
+        destroyBuffer(geometry.vertices);
+        destroyBuffer(geometry.indices);
+    }
+    m_modelGeometry.clear();
     destroyBuffer(m_scratchBuffer);
 
     //Reset everything so init can be called again later
