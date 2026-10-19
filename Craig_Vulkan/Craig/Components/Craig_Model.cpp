@@ -38,12 +38,15 @@ CraigError Craig::Components::Model::terminate() {
 
 CraigError Craig::Components::Model::loadFromJson(const nlohmann::json& json) {
 
+	//Old scenes don't have it, so everything blocks by default
+	setAcousticBlocker(json.value("acousticBlocker", true));
 	return setModelPath(json.value("path", ""));
 }
 
 void Craig::Components::Model::saveToJson(nlohmann::json& json) const {
 
 	json["path"] = m_modelPath;
+	json["acousticBlocker"] = m_acousticBlocker;
 }
 
 CraigError Craig::Components::Model::setModelPath(const std::string& modelPath) {
@@ -80,6 +83,16 @@ CraigError Craig::Components::Model::setModelPath(const std::string& modelPath) 
 	return ret;
 }
 
+void Craig::Components::Model::setAcousticBlocker(bool blocker)
+{
+	if (m_acousticBlocker != blocker)
+	{
+		m_acousticBlocker = blocker;
+		//Sound geometry gets built from the scene's geometry, so it has to rebuild too
+		markSceneGeometryDirty();
+	}
+}
+
 void Craig::Components::Model::markSceneGeometryDirty()
 {
 	if (mp_owner != nullptr && mp_owner->getScene() != nullptr)
@@ -90,6 +103,12 @@ void Craig::Components::Model::markSceneGeometryDirty()
 
 void Craig::Components::Model::displayImGuiAttributes()
 {
+	bool acousticBlocker = m_acousticBlocker;
+	if (ImGui::Checkbox("Acoustic blocker", &acousticBlocker))
+	{
+		setAcousticBlocker(acousticBlocker);
+	}
+
 	// edit a copy so we only try loading once the user's done typing
 	std::string tempPath = m_modelPath;
 	ImGui::InputText("Path", &tempPath);

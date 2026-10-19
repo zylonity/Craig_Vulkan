@@ -32,11 +32,15 @@ namespace Craig {
 			CraigError setModelPath(const std::string& modelPath);
 			const std::string& getModelPath() const { return m_modelPath; }
 			bool hasModel() const { return !m_modelPath.empty(); }
+			//Whether sound rays hit this, so markers like the listener/source cubes can be visible without blocking anything
+			bool isAcousticBlocker() const { return m_acousticBlocker; }
+			void setAcousticBlocker(bool blocker);
 
 		private:
 			void markSceneGeometryDirty();
 
 			std::string m_modelPath;
+			bool m_acousticBlocker = true;
 
 			// editor only
 			std::string m_modelPathError;
