@@ -215,6 +215,8 @@ namespace {
                 throw std::runtime_error("invalid acoustic triangle list");
             }
 
+            //Submesh indices start at 0, so they get moved up past everything already in the buffer
+            const uint32_t baseVertex = static_cast<uint32_t>(positions.size());
             for (const Craig::Vertex& vertex : pMesh->m_vertices) {
                 const glm::vec3 position(nodeMatrix * glm::vec4(vertex.m_pos, 1.0f));
                 if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) {
@@ -226,7 +228,7 @@ namespace {
                 if (pMesh->m_indices[i] >= pMesh->m_vertices.size()) {
                     throw std::runtime_error("acoustic index outside vertex buffer");
                 }
-                indices.push_back(pMesh->m_indices[i]);
+                indices.push_back(baseVertex + pMesh->m_indices[i]);
             }
         }
 
