@@ -369,22 +369,30 @@ CraigError Craig::SoundPropagation::runTriangleTest() {
     //0: starts at z = -1, goes 2 units, goes straight through the triangle -> hit
     //1: same but 2 units to the right, the triangle's not there -> miss
     //2: points at the triangle but tmax is 0.5 so it stops before it gets there -> miss
-    const std::array<Ray, 3> rays = {{
+    const std::vector<Ray> rays = {
         {{0.0f, 0.0f, -1.0f, 0.001f}, {0.0f, 0.0f, 1.0f, 2.0f}},
         {{2.0f, 0.0f, -1.0f, 0.001f}, {0.0f, 0.0f, 1.0f, 2.0f}},
         {{0.0f, 0.0f, -1.0f, 0.001f}, {0.0f, 0.0f, 1.0f, 0.5f}}
-    }};
-    const std::array<uint32_t, 3> expected = {1, 0, 0};
+    };
+    return checkTestResults("Triangle", traceTestRays(m_testTLAS, rays), {1, 0, 0});
+}
+
+std::vector<uint32_t> Craig::SoundPropagation::traceTestRays(const AccelerationStructure& tlas, const std::vector<Ray>& rays) {
     const uint32_t rayCount = static_cast<uint32_t>(rays.size());
 
-    createBuffer(m_testRays, sizeof(rays), vk::BufferUsageFlagBits::eStorageBuffer, true);
+    //Fresh buffers every call, it's only a test
+    destroyBuffer(m_testRays);
+    destroyBuffer(m_testResults);
+    createBuffer(m_testRays, sizeof(Ray) * rayCount, vk::BufferUsageFlagBits::eStorageBuffer, true);
     createBuffer(m_testResults, sizeof(uint32_t) * rayCount, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, true);
-    uploadBuffer(m_testRays, rays.data(), sizeof(rays));
+    uploadBuffer(m_testRays, rays.data(), sizeof(Ray) * rayCount);
 
-    createTestPipeline();
+    if (!m_VK_pipeline) {
+        createTestPipeline();
+    }
 
     vk::WriteDescriptorSetAccelerationStructureKHR tlasWrite{};
-    tlasWrite.setAccelerationStructures(m_testTLAS.handle);
+    tlasWrite.setAccelerationStructures(tlas.handle);
     const vk::DescriptorBufferInfo rayInfo(m_testRays.buffer, 0, VK_WHOLE_SIZE);
     const vk::DescriptorBufferInfo resultInfo(m_testResults.buffer, 0, VK_WHOLE_SIZE);
     std::array<vk::WriteDescriptorSet, 3> writes{};
@@ -421,16 +429,50 @@ CraigError Craig::SoundPropagation::runTriangleTest() {
     }
 
     const auto* results = static_cast<const uint32_t*>(m_testResults.pMapped);
+    return std::vector<uint32_t>(results, results + rayCount);
+}
+
+CraigError Craig::SoundPropagation::checkTestResults(const char* testName, const std::vector<uint32_t>& results, const std::vector<uint32_t>& expected) {
     CraigError ret = CRAIG_SUCCESS;
-    for (uint32_t i = 0; i < rayCount; i++) {
+    for (size_t i = 0; i < results.size(); i++) {
         const bool passed = results[i] == expected[i];
-        Logger::renderer().info("Ray-query test ray {}: got {}, expected {} - {}", i, results[i], expected[i], passed ? "pass" : "FAIL");
+        Logger::renderer().info("Ray-query {} test ray {}: got {}, expected {} - {}", testName, i, results[i], expected[i], passed ? "pass" : "FAIL");
         if (!passed) {
             ret = CRAIG_FAIL;
         }
     }
-
     return ret;
+}
+
+CraigError Craig::SoundPropagation::runSceneTest(Scene& scene) {
+    if (!scene.findObject("Listener") || !scene.findObject("Source") || !scene.findObject("Reference wall")) {
+        Logger::renderer().warn("Ray-query scene test skipped, the current scene isn't the reference scene");
+        return CRAIG_FAIL;
+    }
+
+    //TLAS out of the instances init collected
+    const vk::BufferUsageFlags inputUsage = vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eShaderDeviceAddress;
+    createBuffer(m_sceneInstances, std::max<size_t>(1, mv_instanceSnapshot.size()) * sizeof(VkAccelerationStructureInstanceKHR), inputUsage, true);
+    uploadBuffer(m_sceneInstances, mv_instanceSnapshot.data(), mv_instanceSnapshot.size() * sizeof(VkAccelerationStructureInstanceKHR));
+
+    VkAccelerationStructureGeometryKHR instances{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+    instances.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+    instances.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+    instances.geometry.instances.data.deviceAddress = getBufferAddress(m_sceneInstances);
+    buildAccelerationStructure(vk::AccelerationStructureTypeKHR::eTopLevel, instances, m_sceneTLAS, static_cast<uint32_t>(mv_instanceSnapshot.size()));
+
+    //Listener's at (0, 2, -3), Source at (0, 2, 3), the wall covers x -2 to 2 around z = 0, floor's top is at y = 0
+    //0: listener straight to the source -> wall
+    //1: same line but 4 to the right, past the end of the wall -> clear
+    //2: from inside the listener cube going backwards, the cube isn't a blocker so -> clear
+    //3: from the listener straight down -> floor
+    const std::vector<Ray> rays = {
+        {{0.0f, 2.0f, -3.0f, 0.001f}, {0.0f, 0.0f, 1.0f, 6.0f}},
+        {{4.0f, 2.0f, -3.0f, 0.001f}, {0.0f, 0.0f, 1.0f, 6.0f}},
+        {{0.0f, 2.0f, -3.0f, 0.001f}, {0.0f, 0.0f, -1.0f, 1.0f}},
+        {{0.0f, 2.0f, -3.0f, 0.001f}, {0.0f, -1.0f, 0.0f, 3.0f}}
+    };
+    return checkTestResults("Scene", traceTestRays(m_sceneTLAS, rays), {1, 0, 0, 1});
 }
 
 void Craig::SoundPropagation::destroyBuffer(Buffer& buffer) {
@@ -457,6 +499,8 @@ CraigError Craig::SoundPropagation::terminate() {
     destroyBuffer(m_testRays);
     destroyBuffer(m_testResults);
     destroyAccelerationStructure(m_testTLAS);
+    destroyAccelerationStructure(m_sceneTLAS);
+    destroyBuffer(m_sceneInstances);
     destroyAccelerationStructure(m_testBLAS);
     destroyBuffer(m_testInstances);
     destroyBuffer(m_testIndices);

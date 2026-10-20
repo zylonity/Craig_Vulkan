@@ -1,0 +1,12 @@
+{
+  "name": "Sound propagation — geometric references",
+  "camera": {"position": [8.0, 6.0, 10.0], "rotation": [-22.0, 38.0]},
+  "gameObjects": [
+    {"name": "Reference wall", "position": [0.0, 2.0, 0.0], "scale": [2.0, 3.0, 0.12], "components": {"model": {"path": "data/models/BlankBox.glb"}}},
+    {"name": "Floor", "position": [0.0, -0.15, 0.0], "scale": [8.0, 0.15, 5.0], "components": {"model": {"path": "data/models/BlankBox.glb"}}},
+    {"name": "Listener", "position": [0.0, 2.0, -3.0], "scale": [0.15, 0.15, 0.15], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticBlocker": false}}},
+    {"name": "Source", "position": [0.0, 2.0, 3.0], "scale": [0.15, 0.15, 0.15], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticBlocker": false}}},
+    {"name": "Query segment", "position": [0.0, 2.0, 0.0], "scale": [0.015, 0.015, 3.0], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticBlocker": false}}},
+    {"name": "Sun", "rotation": [45.0, -30.0, 0.0], "components": {"sun": {"intensity": 2.0}}}
+  ]
+}

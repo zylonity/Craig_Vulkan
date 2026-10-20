@@ -24,7 +24,7 @@ constexpr uint32_t kVertexAttributeDescriptors = 4;
 
 //Scenes
 constexpr char kScenesDirectory[] = "data/scenes";
-constexpr char kDefaultScenePath[] = "data/scenes/TestScene1.json"; // Scene loaded on startup
+constexpr char kDefaultScenePath[] = "data/scenes/SoundPropagationReference.json"; // Scene loaded on startup
 
 //Logging
 constexpr char kLogFilePath[] = "logs/Craig.log"; // overwritten every run (logs/ is gitignored)

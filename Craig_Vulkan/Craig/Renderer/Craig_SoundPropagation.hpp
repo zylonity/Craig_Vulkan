@@ -24,6 +24,8 @@ namespace Craig {
 		CraigError init(Device* pDevice, CommandManager* pCommandManager, Scene* pScene);
 		//Test: one triangle at z = 0, fires a ray that hits it, one that misses and one that stops before it
 		CraigError runTriangleTest();
+		//Test: fires rays around the reference scene (Listener, Source and a wall between them) and checks what they hit
+		CraigError runSceneTest(Scene& scene);
 		CraigError terminate();
 
 	private:
@@ -56,6 +58,9 @@ namespace Craig {
 			AccelerationStructure& accelerationStructure, uint32_t primitiveCount);
 		void destroyAccelerationStructure(AccelerationStructure& accelerationStructure);
 		void createTestPipeline();
+		//Blocking, waits for the GPU, only for the startup tests
+		std::vector<uint32_t> traceTestRays(const AccelerationStructure& tlas, const std::vector<Ray>& rays);
+		CraigError checkTestResults(const char* testName, const std::vector<uint32_t>& results, const std::vector<uint32_t>& expected);
 		void createModelGeometry(const Model& model, ModelGeometry& geometry);
 		void collectSceneInstances(Scene& scene, std::vector<VkAccelerationStructureInstanceKHR>& instances);
 
@@ -72,6 +77,8 @@ namespace Craig {
 		Buffer m_testInstances;
 		AccelerationStructure m_testBLAS;
 		AccelerationStructure m_testTLAS;
+		Buffer m_sceneInstances;
+		AccelerationStructure m_sceneTLAS;
 		Buffer m_testRays;
 		Buffer m_testResults;
 
