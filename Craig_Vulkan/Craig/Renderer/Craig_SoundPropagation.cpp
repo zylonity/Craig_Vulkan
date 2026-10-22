@@ -43,7 +43,9 @@ CraigError Craig::SoundPropagation::init(Device* pDevice, CommandManager* pComma
         throw std::runtime_error("R32G32B32_SFLOAT acceleration-structure vertices unsupported");
     }
 
-    collectSceneInstances(*pScene, mv_instanceSnapshot);
+    collectSceneInstances(*pScene, mv_instanceSnapshot, true);
+    createPipeline();
+    createResultSlots(static_cast<uint32_t>(pScene->getGameObjects().size()));
     Logger::renderer().info("Acoustic scene prepared: {} instances, {} cached models", mv_instanceSnapshot.size(), m_modelGeometry.size());
     return CRAIG_SUCCESS;
 }
@@ -171,20 +173,20 @@ void Craig::SoundPropagation::createTestPipeline() {
         {1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute},
         {2, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute}
     }};
-    m_VK_descriptorSetLayout = device.createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo().setBindings(bindings));
+    m_VK_testDescriptorSetLayout = device.createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo().setBindings(bindings));
 
     const std::array<vk::DescriptorPoolSize, 2> sizes = {{
         {vk::DescriptorType::eAccelerationStructureKHR, 1},
         {vk::DescriptorType::eStorageBuffer, 2}
     }};
-    m_VK_descriptorPool = device.createDescriptorPool(vk::DescriptorPoolCreateInfo().setMaxSets(1).setPoolSizes(sizes));
-    m_VK_descriptorSet = device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo()
-        .setDescriptorPool(m_VK_descriptorPool).setSetLayouts(m_VK_descriptorSetLayout))[0];
+    m_VK_testDescriptorPool = device.createDescriptorPool(vk::DescriptorPoolCreateInfo().setMaxSets(1).setPoolSizes(sizes));
+    m_VK_testDescriptorSet = device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo()
+        .setDescriptorPool(m_VK_testDescriptorPool).setSetLayouts(m_VK_testDescriptorSetLayout))[0];
 
     //The ray count goes in as a push constant
     const vk::PushConstantRange range(vk::ShaderStageFlagBits::eCompute, 0, sizeof(uint32_t));
-    m_VK_pipelineLayout = device.createPipelineLayout(vk::PipelineLayoutCreateInfo()
-        .setSetLayouts(m_VK_descriptorSetLayout).setPushConstantRanges(range));
+    m_VK_testPipelineLayout = device.createPipelineLayout(vk::PipelineLayoutCreateInfo()
+        .setSetLayouts(m_VK_testDescriptorSetLayout).setPushConstantRanges(range));
 
     const vk::ShaderModule shader = ShaderCompilation::LoadShaderModule(device, "data/shaders/rayQueryTest.spv");
     vk::PipelineShaderStageCreateInfo stage{};
@@ -192,7 +194,7 @@ void Craig::SoundPropagation::createTestPipeline() {
 
     //Destroy the module even if the pipeline throws
     try {
-        m_VK_pipeline = device.createComputePipeline({}, vk::ComputePipelineCreateInfo().setStage(stage).setLayout(m_VK_pipelineLayout)).value;
+        m_VK_testPipeline = device.createComputePipeline({}, vk::ComputePipelineCreateInfo().setStage(stage).setLayout(m_VK_testPipelineLayout)).value;
     }
     catch (...) {
         device.destroyShaderModule(shader);
@@ -282,7 +284,8 @@ void Craig::SoundPropagation::createModelGeometry(const Model& model, ModelGeome
     Logger::renderer().info("Acoustic model cached: {} ({} triangles, node transforms baked)", model.modelPath, indices.size() / 3);
 }
 
-void Craig::SoundPropagation::collectSceneInstances(Scene& scene, std::vector<VkAccelerationStructureInstanceKHR>& instances) {
+//prepareGeometry is only true when the scene's being prepared, the per frame path can't block on building new BLASes
+bool Craig::SoundPropagation::collectSceneInstances(Scene& scene, std::vector<VkAccelerationStructureInstanceKHR>& instances, bool prepareGeometry) {
     instances.clear();
     const auto& objects = scene.getGameObjects();
     ResourceManager& resources = ResourceManager::getInstance();
@@ -294,14 +297,19 @@ void Craig::SoundPropagation::collectSceneInstances(Scene& scene, std::vector<Vk
 
         const glm::mat4 transform = pObject->GetModelMatrix();
         if (!validAcousticTransform(transform)) {
-            Logger::renderer().warn("Skipping acoustic instance '{}': transform is singular or non-finite", pObject->getName());
+            //Only warn once when preparing, not every frame
+            if (prepareGeometry) Logger::renderer().warn("Skipping acoustic instance '{}': transform is singular or non-finite", pObject->getName());
             continue;
         }
+        //The instance custom index only has 24 bits
+        if (objectIndex > 0xffffff) throw std::runtime_error("too many acoustic instances");
 
         //Only build the BLAS the first time we see a model
         const std::string& path = pModel->getModelPath();
         auto entry = m_modelGeometry.find(path);
         if (entry == m_modelGeometry.end()) {
+            //A model that wasn't there when we prepared, the scene has to be reloaded to pick it up
+            if (!prepareGeometry) return false;
             entry = m_modelGeometry.try_emplace(path).first;
             createModelGeometry(resources.getModel(path), entry->second);
         }
@@ -318,8 +326,60 @@ void Craig::SoundPropagation::collectSceneInstances(Scene& scene, std::vector<Vk
         //Negative scales flip the winding, sound doesn't care which side it hits
         instance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
         instance.accelerationStructureReference = entry->second.blas.address;
+        //Slots are sized for the object count at prepare time
+        if (!prepareGeometry && instances.size() == m_instanceCapacity) return false;
         instances.push_back(instance);
     }
+    return true;
+}
+
+void Craig::SoundPropagation::createPipeline() {
+    const vk::Device device = mp_Device->getLogicalDevice();
+
+    //0 = TLAS, 1 = rays in, 2 = results out, one set per slot
+    const std::array<vk::DescriptorSetLayoutBinding, 3> bindings = {{
+        {0, vk::DescriptorType::eAccelerationStructureKHR, 1, vk::ShaderStageFlagBits::eCompute},
+        {1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute},
+        {2, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute}
+    }};
+    m_VK_descriptorSetLayout = device.createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo().setBindings(bindings));
+
+    const std::array<vk::DescriptorPoolSize, 2> sizes = {{
+        {vk::DescriptorType::eAccelerationStructureKHR, kResultSlotCount},
+        {vk::DescriptorType::eStorageBuffer, 2 * kResultSlotCount}
+    }};
+    m_VK_descriptorPool = device.createDescriptorPool(vk::DescriptorPoolCreateInfo().setMaxSets(kResultSlotCount).setPoolSizes(sizes));
+
+    const vk::PushConstantRange range(vk::ShaderStageFlagBits::eCompute, 0, sizeof(uint32_t));
+    m_VK_pipelineLayout = device.createPipelineLayout(vk::PipelineLayoutCreateInfo()
+        .setSetLayouts(m_VK_descriptorSetLayout).setPushConstantRanges(range));
+
+    //Same shader as the startup test for now, it only needs to know if the direct path is blocked
+    const vk::ShaderModule shader = ShaderCompilation::LoadShaderModule(device, "data/shaders/rayQueryTest.spv");
+    vk::PipelineShaderStageCreateInfo stage{};
+    stage.setStage(vk::ShaderStageFlagBits::eCompute).setModule(shader).setPName("main");
+    try {
+        m_VK_pipeline = device.createComputePipeline({}, vk::ComputePipelineCreateInfo().setStage(stage).setLayout(m_VK_pipelineLayout)).value;
+    }
+    catch (...) {
+        device.destroyShaderModule(shader);
+        throw;
+    }
+    device.destroyShaderModule(shader);
+}
+
+void Craig::SoundPropagation::writeQueryDescriptors(const ResultSlot& slot) {
+    vk::WriteDescriptorSetAccelerationStructureKHR accelerationStructure{};
+    accelerationStructure.setAccelerationStructures(slot.tlas.handle);
+    const vk::DescriptorBufferInfo rayInfo(slot.rays.buffer, 0, sizeof(Ray) * kMaxRayCount);
+    const vk::DescriptorBufferInfo resultInfo(slot.results.buffer, 0, sizeof(uint32_t) * kMaxRayCount);
+
+    std::array<vk::WriteDescriptorSet, 3> writes{};
+    writes[0].setDstSet(slot.descriptorSet).setDstBinding(0).setDescriptorType(vk::DescriptorType::eAccelerationStructureKHR)
+        .setDescriptorCount(1).setPNext(&accelerationStructure);
+    writes[1].setDstSet(slot.descriptorSet).setDstBinding(1).setDescriptorType(vk::DescriptorType::eStorageBuffer).setBufferInfo(rayInfo);
+    writes[2].setDstSet(slot.descriptorSet).setDstBinding(2).setDescriptorType(vk::DescriptorType::eStorageBuffer).setBufferInfo(resultInfo);
+    mp_Device->getLogicalDevice().updateDescriptorSets(writes, {});
 }
 
 CraigError Craig::SoundPropagation::runTriangleTest() {
@@ -387,7 +447,7 @@ std::vector<uint32_t> Craig::SoundPropagation::traceTestRays(const AccelerationS
     createBuffer(m_testResults, sizeof(uint32_t) * rayCount, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, true);
     uploadBuffer(m_testRays, rays.data(), sizeof(Ray) * rayCount);
 
-    if (!m_VK_pipeline) {
+    if (!m_VK_testPipeline) {
         createTestPipeline();
     }
 
@@ -396,10 +456,10 @@ std::vector<uint32_t> Craig::SoundPropagation::traceTestRays(const AccelerationS
     const vk::DescriptorBufferInfo rayInfo(m_testRays.buffer, 0, VK_WHOLE_SIZE);
     const vk::DescriptorBufferInfo resultInfo(m_testResults.buffer, 0, VK_WHOLE_SIZE);
     std::array<vk::WriteDescriptorSet, 3> writes{};
-    writes[0].setDstSet(m_VK_descriptorSet).setDstBinding(0).setDescriptorType(vk::DescriptorType::eAccelerationStructureKHR)
+    writes[0].setDstSet(m_VK_testDescriptorSet).setDstBinding(0).setDescriptorType(vk::DescriptorType::eAccelerationStructureKHR)
         .setDescriptorCount(1).setPNext(&tlasWrite);
-    writes[1].setDstSet(m_VK_descriptorSet).setDstBinding(1).setDescriptorType(vk::DescriptorType::eStorageBuffer).setBufferInfo(rayInfo);
-    writes[2].setDstSet(m_VK_descriptorSet).setDstBinding(2).setDescriptorType(vk::DescriptorType::eStorageBuffer).setBufferInfo(resultInfo);
+    writes[1].setDstSet(m_VK_testDescriptorSet).setDstBinding(1).setDescriptorType(vk::DescriptorType::eStorageBuffer).setBufferInfo(rayInfo);
+    writes[2].setDstSet(m_VK_testDescriptorSet).setDstBinding(2).setDescriptorType(vk::DescriptorType::eStorageBuffer).setBufferInfo(resultInfo);
     mp_Device->getLogicalDevice().updateDescriptorSets(writes, {});
 
     vk::CommandBuffer commandBuffer = mp_CommandManager->buffer_beginSingleTimeCommandsGFX();
@@ -411,9 +471,9 @@ std::vector<uint32_t> Craig::SoundPropagation::traceTestRays(const AccelerationS
         .setDstStageMask(vk::PipelineStageFlagBits2::eComputeShader).setDstAccessMask(vk::AccessFlagBits2::eShaderWrite);
     commandBuffer.pipelineBarrier2(vk::DependencyInfo().setMemoryBarriers(resetBarrier));
 
-    commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, m_VK_pipeline);
-    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, m_VK_pipelineLayout, 0, m_VK_descriptorSet, {});
-    commandBuffer.pushConstants(m_VK_pipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(rayCount), &rayCount);
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, m_VK_testPipeline);
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, m_VK_testPipelineLayout, 0, m_VK_testDescriptorSet, {});
+    commandBuffer.pushConstants(m_VK_testPipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(rayCount), &rayCount);
     commandBuffer.dispatch((rayCount + 63) / 64, 1, 1);
 
     //CPU reads the results after this
@@ -491,13 +551,27 @@ CraigError Craig::SoundPropagation::terminate() {
     const vk::Device device = mp_Device->getLogicalDevice();
     device.waitIdle();
 
+    device.destroyPipeline(m_VK_testPipeline);
+    device.destroyPipelineLayout(m_VK_testPipelineLayout);
+    device.destroyDescriptorPool(m_VK_testDescriptorPool);
+    device.destroyDescriptorSetLayout(m_VK_testDescriptorSetLayout);
+
+    destroyBuffer(m_testRays);
+    destroyBuffer(m_testResults);
     device.destroyPipeline(m_VK_pipeline);
     device.destroyPipelineLayout(m_VK_pipelineLayout);
     device.destroyDescriptorPool(m_VK_descriptorPool);
     device.destroyDescriptorSetLayout(m_VK_descriptorSetLayout);
+    device.destroySemaphore(m_VK_completionTimeline);
+    for (auto& slot : m_slots) {
+        device.destroyCommandPool(slot.commandPool);
+        destroyAccelerationStructure(slot.tlas);
+        destroyBuffer(slot.instances);
+        destroyBuffer(slot.scratch);
+        destroyBuffer(slot.rays);
+        destroyBuffer(slot.results);
+    }
 
-    destroyBuffer(m_testRays);
-    destroyBuffer(m_testResults);
     destroyAccelerationStructure(m_testTLAS);
     destroyAccelerationStructure(m_sceneTLAS);
     destroyBuffer(m_sceneInstances);
