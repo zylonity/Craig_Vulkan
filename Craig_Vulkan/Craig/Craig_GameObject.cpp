@@ -25,6 +25,9 @@ CraigError Craig::GameObject::init(std::string name, Craig::Scene* scenePtr) {
 
 	CraigError ret = CRAIG_SUCCESS;
 
+	//Gameobjects only get made on the main thread (including restoring the edit snapshot), so a plain static counter is fine
+	static uint64_t nextInstanceId = 0;
+	m_instanceId = ++nextInstanceId;
 	m_name = name;
 	mp_scene = scenePtr;
 

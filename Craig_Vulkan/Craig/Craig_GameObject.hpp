@@ -7,6 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <memory>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <vulkan/vulkan.hpp>
@@ -41,6 +42,8 @@ namespace Craig {
 		void setRotationQuat(const glm::quat& q);
 
 		const std::string& getName() const { return m_name; }
+		//Not saved, only for this run. Names can be reused and so can the memory address when an object gets deleted and remade
+		uint64_t getInstanceId() const { return m_instanceId; }
 		Craig::Scene* getScene() const { return mp_scene; }
 
 		// Returns the component of type T, or nullptr if this object doesn't have one
@@ -109,6 +112,7 @@ namespace Craig {
 		glm::mat4 m_inverseModelMatrix{};
 
 		std::string m_name;
+		uint64_t m_instanceId = 0;
 
 		std::vector<std::unique_ptr<Components::Component>> mv_components;
 
