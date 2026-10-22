@@ -4,6 +4,9 @@
 #include <cassert>
 #include <stdexcept>
 
+#include "Craig/Craig_Scene.hpp"
+#include "Craig/Craig_Logger.hpp"
+
 //Slot/timeline setup adapted from Sascha Willems' timelinesemaphore example
 //Copyright (C) 2024-2025 Sascha Willems, MIT - https://github.com/SaschaWillems/Vulkan/tree/master/examples/timelinesemaphore
 //TLAS allocation adapted from his rayquery example - https://github.com/SaschaWillems/Vulkan/tree/master/examples/rayquery
@@ -68,4 +71,197 @@ void Craig::SoundPropagation::createResultSlots(uint32_t instanceCapacity) {
             .setDescriptorPool(m_VK_descriptorPool).setSetLayouts(m_VK_descriptorSetLayout))[0];
         writeQueryDescriptors(slot);
     }
+}
+
+void Craig::SoundPropagation::setContext(uint64_t sceneGeneration, uint64_t sourceId) {
+    stop();
+    m_sceneGeneration = sceneGeneration;
+    m_sourceId = sourceId;
+    m_acceptRequests = true;
+}
+
+void Craig::SoundPropagation::stop() {
+    m_acceptRequests = false;
+    //Bumped even if the scene/source IDs stay the same, otherwise a pause and resume could let old results back in
+    m_contextVersion++;
+    m_latestSequence.reset();
+    if (m_readyResult) m_statistics.discarded++;
+    m_readyResult.reset();
+}
+
+Craig::SoundPropagation::SubmitStatus Craig::SoundPropagation::trySubmit(Scene& scene, const Request& request) {
+    assert(request.rayCount > 0 && request.rayCount <= kMaxRayCount);
+    m_statistics.requested++;
+    collectCompleted();
+
+    if (!m_acceptRequests || !m_VK_completionTimeline || request.sceneGeneration != m_sceneGeneration || request.sourceId != m_sourceId) {
+        m_statistics.skipped++;
+        return SubmitStatus::Inactive;
+    }
+
+    //If all three are still on the GPU we just skip this frame, we never wait
+    auto available = std::find_if(m_slots.begin(), m_slots.end(), [](const ResultSlot& slot) { return !slot.inFlight; });
+    if (available == m_slots.end()) {
+        m_statistics.skipped++;
+        return SubmitStatus::Busy;
+    }
+
+    if (!collectSceneInstances(scene, mv_instanceSnapshot, false)) {
+        m_statistics.skipped++;
+        return SubmitStatus::GeometryNotReady;
+    }
+
+    //Everything was allocated up front, and only a finished slot gets written to
+    submitSlot(*available, request);
+    m_statistics.submitted++;
+    return SubmitStatus::Submitted;
+}
+
+void Craig::SoundPropagation::submitSlot(ResultSlot& slot, const Request& request) {
+    const vk::Device device = mp_Device->getLogicalDevice();
+    if (!mv_instanceSnapshot.empty()) {
+        uploadBuffer(slot.instances, mv_instanceSnapshot.data(), mv_instanceSnapshot.size() * sizeof(mv_instanceSnapshot[0]));
+    }
+    uploadBuffer(slot.rays, request.rays.data(), sizeof(Ray) * request.rayCount);
+
+    device.resetCommandPool(slot.commandPool);
+    slot.commandBuffer.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+
+    //Rebuild the TLAS with where everything is this frame, the BLASes stay the same
+    VkAccelerationStructureGeometryKHR geometry{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
+    geometry.geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR;
+    geometry.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+    geometry.geometry.instances.data.deviceAddress = getBufferAddress(slot.instances);
+
+    VkAccelerationStructureBuildGeometryInfoKHR build{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR};
+    build.type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+    build.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+    build.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+    build.geometryCount = 1;
+    build.pGeometries = &geometry;
+    build.dstAccelerationStructure = slot.tlas.handle;
+    const vk::DeviceAddress scratch = getBufferAddress(slot.scratch);
+    build.scratchData.deviceAddress = (scratch + m_scratchAlignment - 1) & ~(m_scratchAlignment - 1);
+
+    VkAccelerationStructureBuildRangeInfoKHR range{};
+    range.primitiveCount = static_cast<uint32_t>(mv_instanceSnapshot.size());
+    const VkAccelerationStructureBuildRangeInfoKHR* pRange = &range;
+    m_vkCmdBuildAccelerationStructuresKHR(slot.commandBuffer, 1, &build, &pRange);
+
+    vk::MemoryBarrier2 barrier{};
+    barrier.setSrcStageMask(vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR)
+        .setSrcAccessMask(vk::AccessFlagBits2::eAccelerationStructureWriteKHR)
+        .setDstStageMask(vk::PipelineStageFlagBits2::eComputeShader).setDstAccessMask(vk::AccessFlagBits2::eAccelerationStructureReadKHR);
+    slot.commandBuffer.pipelineBarrier2(vk::DependencyInfo().setMemoryBarriers(barrier));
+
+    recordQuery(slot.commandBuffer, slot, request);
+    slot.commandBuffer.end();
+
+    //Signals the timeline when it's done, nothing waits on it, we just check the value next frame
+    const uint64_t completion = m_lastSubmissionValue + 1;
+    vk::CommandBufferSubmitInfo command{};
+    command.setCommandBuffer(slot.commandBuffer);
+    vk::SemaphoreSubmitInfo signal{};
+    signal.setSemaphore(m_VK_completionTimeline).setValue(completion).setStageMask(vk::PipelineStageFlagBits2::eAllCommands);
+    vk::SubmitInfo2 submit{};
+    submit.setCommandBufferInfos(command).setSignalSemaphoreInfos(signal);
+    mp_Device->getGraphicsQueue().submit2(submit);
+
+    m_lastSubmissionValue = completion;
+    slot.request = request;
+    slot.completionValue = completion;
+    slot.contextVersion = m_contextVersion;
+    slot.inFlight = true;
+}
+
+void Craig::SoundPropagation::collectCompleted() {
+    if (!m_VK_completionTimeline) return;
+
+    const uint64_t completed = mp_Device->getLogicalDevice().getSemaphoreCounterValue(m_VK_completionTimeline);
+    for (auto& slot : m_slots) {
+        if (!slot.inFlight || slot.completionValue > completed) continue;
+
+        slot.inFlight = false;
+        m_statistics.completed++;
+
+        //Old context, or older than something we've already got
+        if (!m_acceptRequests || slot.contextVersion != m_contextVersion ||
+            (m_latestSequence && slot.request.sequenceId <= *m_latestSequence)) {
+            m_statistics.discarded++;
+            continue;
+        }
+
+        if (vmaInvalidateAllocation(mp_Device->getVmaAllocator(), slot.results.allocation, 0, VK_WHOLE_SIZE) != VK_SUCCESS) {
+            throw std::runtime_error("result-slot readback invalidation failed");
+        }
+
+        Result result{};
+        const auto* blocked = static_cast<const uint32_t*>(slot.results.pMapped);
+        for (uint32_t i = 0; i < slot.request.rayCount; ++i) {
+            //Still 0xffffffff means the shader never wrote it
+            if (blocked[i] > 1) throw std::runtime_error("result-slot dispatch did not produce a valid obstruction result");
+            if (blocked[i] != 0) result.blocked++;
+        }
+        result.rayCount = slot.request.rayCount;
+        result.sceneGeneration = slot.request.sceneGeneration;
+        result.sourceId = slot.request.sourceId;
+        result.sequenceId = slot.request.sequenceId;
+        result.inputTime = slot.request.inputTime;
+
+        if (m_readyResult) m_statistics.discarded++;
+        m_readyResult = result;
+        m_latestSequence = result.sequenceId;
+    }
+}
+
+bool Craig::SoundPropagation::poll(Result& result) {
+    collectCompleted();
+    if (!m_readyResult) return false;
+
+    result = *m_readyResult;
+    result.ageMs = std::chrono::duration<double, std::milli>(Clock::now() - result.inputTime).count();
+    m_readyResult.reset();
+    return true;
+}
+
+CraigError Craig::SoundPropagation::runSlotTest(Scene& scene) {
+    //Waits for the timeline on purpose, the real thing never does this
+    const auto waitForCompletion = [this] {
+        const vk::Device device = mp_Device->getLogicalDevice();
+        const vk::SemaphoreWaitInfo waitInfo = vk::SemaphoreWaitInfo().setSemaphores(m_VK_completionTimeline).setValues(m_lastSubmissionValue);
+        return device.waitSemaphores(waitInfo, 1000000000ull) == vk::Result::eSuccess;
+    };
+
+    Request request{};
+    request.rayCount = 1;
+    request.rays[0] = {{0.0f, 2.0f, -3.0f, 0.001f}, {0.0f, 0.0f, 1.0f, 6.0f}};
+    request.sceneGeneration = 1;
+    request.sourceId = 1;
+    request.inputTime = Clock::now();
+
+    CraigError ret = CRAIG_SUCCESS;
+    Result result{};
+
+    //Through the wall like the scene test, should come back blocked
+    setContext(1, 1);
+    request.sequenceId = 0;
+    const bool submitted = trySubmit(scene, request) == SubmitStatus::Submitted;
+    const bool gotResult = submitted && waitForCompletion() && poll(result);
+    Logger::renderer().info("Ray-query Slot test: submitted {}, got a result {}, blocked {}/{} (expected 1/1) - {}",
+        submitted, gotResult, result.blocked, result.rayCount, gotResult && result.blocked == 1 ? "pass" : "FAIL");
+    if (!gotResult || result.blocked != 1) ret = CRAIG_FAIL;
+
+    //Submit, then change context before it finishes, the result should never come out of poll
+    request.sequenceId = 1;
+    const bool oldSubmitted = trySubmit(scene, request) == SubmitStatus::Submitted;
+    setContext(2, 1);
+    const bool oldCompleted = oldSubmitted && waitForCompletion();
+    const bool staleResult = oldCompleted && poll(result);
+    //A timeout isn't a successful rejection, the GPU has to finish before this check means anything
+    const bool rejected = oldCompleted && !staleResult;
+    Logger::renderer().info("Ray-query Slot test: old submission completed {}, stale result {} - {}", oldCompleted, staleResult, rejected ? "pass" : "FAIL");
+    if (!rejected) ret = CRAIG_FAIL;
+
+    stop();
+    return ret;
 }

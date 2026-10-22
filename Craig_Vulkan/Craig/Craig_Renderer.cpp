@@ -246,6 +246,7 @@ CraigError Craig::Renderer::initSceneResources() {
         if (m_soundPropagation.init(&m_Devices, &m_commandManager, mp_SceneManager->getCurrentScene()) == CRAIG_SUCCESS) {
             m_soundPropagation.runTriangleTest();
             m_soundPropagation.runSceneTest(*mp_SceneManager->getCurrentScene());
+            m_soundPropagation.runSlotTest(*mp_SceneManager->getCurrentScene());
         }
         m_soundPropagation.terminate();
     }

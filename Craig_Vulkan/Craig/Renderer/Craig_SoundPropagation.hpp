@@ -3,6 +3,7 @@
 #include "Craig_Device.hpp"
 #include <array>
 #include <chrono>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -34,6 +35,25 @@ namespace Craig {
 			uint64_t sequenceId = 0;
 			Clock::time_point inputTime; //When the positions were read, for working out how old a result is
 		};
+		//What comes back once the GPU's done
+		struct Result {
+			uint32_t blocked = 0;
+			uint32_t rayCount = 1;
+			uint64_t sceneGeneration = 0;
+			uint64_t sourceId = 0;
+			uint64_t sequenceId = 0;
+			Clock::time_point inputTime;
+			double ageMs = 0.0;
+		};
+		//Shown in the editor, mostly to see if results are getting thrown away
+		struct Statistics {
+			uint64_t requested = 0;
+			uint64_t submitted = 0;
+			uint64_t completed = 0;
+			uint64_t skipped = 0;
+			uint64_t discarded = 0;
+		};
+		enum class SubmitStatus { Submitted, Busy, Inactive, GeometryNotReady };
 
 		//Builds a BLAS for every model in the scene that blocks sound
 		CraigError init(Device* pDevice, CommandManager* pCommandManager, Scene* pScene);
@@ -41,6 +61,16 @@ namespace Craig {
 		CraigError runTriangleTest();
 		//Test: fires rays around the reference scene (Listener, Source and a wall between them) and checks what they hit
 		CraigError runSceneTest(Scene& scene);
+		//Test: same wall ray but through the slots, and checks a result from an old context gets thrown away
+		CraigError runSlotTest(Scene& scene);
+		//Anything submitted before this gets thrown away when it comes back
+		void setContext(uint64_t sceneGeneration, uint64_t sourceId);
+		void stop();
+		//Main thread only, the same as everything else on the graphics queue
+		SubmitStatus trySubmit(Scene& scene, const Request& request);
+		//True if there's a new result, otherwise result is left alone
+		bool poll(Result& result);
+		const Statistics& getStatistics() const { return m_statistics; }
 		CraigError terminate();
 
 	private:
@@ -97,6 +127,9 @@ namespace Craig {
 		void createPipeline();
 		void writeQueryDescriptors(const ResultSlot& slot);
 		void createResultSlots(uint32_t instanceCapacity);
+		void recordQuery(vk::CommandBuffer commandBuffer, const ResultSlot& slot, const Request& request);
+		void collectCompleted();
+		void submitSlot(ResultSlot& slot, const Request& request);
 
 		Device* mp_Device = nullptr;
 		CommandManager* mp_CommandManager = nullptr;
@@ -108,6 +141,13 @@ namespace Craig {
 		uint32_t m_instanceCapacity = 0; //Slot TLASes are sized for this many, set when the scene's prepared
 		vk::Semaphore m_VK_completionTimeline;
 		uint64_t m_lastSubmissionValue = 0;
+		uint64_t m_contextVersion = 0; //Goes up on every stop, slots remember the version they were submitted with
+		uint64_t m_sceneGeneration = 0;
+		uint64_t m_sourceId = 0;
+		bool m_acceptRequests = false;
+		std::optional<uint64_t> m_latestSequence; //So an older submission finishing late can't replace a newer result
+		std::optional<Result> m_readyResult;
+		Statistics m_statistics;
 
 		vk::DescriptorPool m_VK_descriptorPool;
 		vk::DescriptorSetLayout m_VK_descriptorSetLayout;

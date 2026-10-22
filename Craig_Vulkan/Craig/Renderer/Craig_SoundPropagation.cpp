@@ -535,6 +535,25 @@ CraigError Craig::SoundPropagation::runSceneTest(Scene& scene) {
     return checkTestResults("Scene", traceTestRays(m_sceneTLAS, rays), {1, 0, 0, 1});
 }
 
+void Craig::SoundPropagation::recordQuery(vk::CommandBuffer commandBuffer, const ResultSlot& slot, const Request& request) {
+    //Garbage first again, a dispatch that got skipped shouldn't look like a clear path
+    commandBuffer.fillBuffer(slot.results.buffer, 0, VK_WHOLE_SIZE, 0xffffffff);
+    vk::MemoryBarrier2 resetBarrier{};
+    resetBarrier.setSrcStageMask(vk::PipelineStageFlagBits2::eTransfer).setSrcAccessMask(vk::AccessFlagBits2::eTransferWrite)
+        .setDstStageMask(vk::PipelineStageFlagBits2::eComputeShader).setDstAccessMask(vk::AccessFlagBits2::eShaderWrite);
+    commandBuffer.pipelineBarrier2(vk::DependencyInfo().setMemoryBarriers(resetBarrier));
+
+    commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, m_VK_pipeline);
+    commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, m_VK_pipelineLayout, 0, slot.descriptorSet, {});
+    commandBuffer.pushConstants(m_VK_pipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(request.rayCount), &request.rayCount);
+    commandBuffer.dispatch((request.rayCount + 63) / 64, 1, 1);
+
+    vk::MemoryBarrier2 readbackBarrier{};
+    readbackBarrier.setSrcStageMask(vk::PipelineStageFlagBits2::eComputeShader).setSrcAccessMask(vk::AccessFlagBits2::eShaderWrite)
+        .setDstStageMask(vk::PipelineStageFlagBits2::eHost).setDstAccessMask(vk::AccessFlagBits2::eHostRead);
+    commandBuffer.pipelineBarrier2(vk::DependencyInfo().setMemoryBarriers(readbackBarrier));
+}
+
 void Craig::SoundPropagation::destroyBuffer(Buffer& buffer) {
     if (buffer.buffer) {
         vmaDestroyBuffer(mp_Device->getVmaAllocator(), buffer.buffer, buffer.allocation);

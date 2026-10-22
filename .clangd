@@ -1,0 +1,4 @@
+CompileFlags:
+  CompilationDatabase: cmake-build-debug
+  Remove: [-fmodules-ts, '-fmodule-mapper=*', '-fdeps-format=*', '-fdeps-file=*']
+  Add: [-std=c++20]
