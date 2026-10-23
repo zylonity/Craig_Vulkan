@@ -1,5 +1,6 @@
 #pragma once
 #include "Craig_Constants.hpp"
+#include "Craig_SoundProbe.hpp"
 
 #include <string>
 
@@ -19,6 +20,9 @@ namespace Craig {
 		// swaps straight away, don't call it from inside a scene/game object loop
 		CraigError loadScene(const std::string& scenePath);
 		Craig::Scene* getCurrentScene() const;
+		CraigError configureSoundProbe(const std::string& listener, const std::string& source, uint64_t sourceId);
+		void disableSoundProbe();
+		SoundProbeReadout getSoundProbeReadout() const;
 
 		// editor: back to edit mode, no editor: closes the app
 		// happens next frame

@@ -164,6 +164,8 @@ CraigError Craig::Framework::update() {
 	}
 	// menus freeze the world but the game keeps going so it can read input
 	const bool worldFrozenByGame = gameRunning && !mp_Game->isWorldRunning();
+	mp_Renderer->setSoundProbeMode(static_cast<uint32_t>(m_engineModes.getCurrent()->getId()),
+		mode.runGameplay && !worldFrozenByGame);
 
 	// physics steps, then the scene copies the results onto the objects, then it gets drawn
 	// otherwise every frame shows the step before

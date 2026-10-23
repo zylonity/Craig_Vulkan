@@ -162,6 +162,10 @@ CraigError Craig::Renderer::update(const float& deltaTime) {
         createModelDescriptorSets();
     }
 
+    updateSoundProbe();
+#if defined(IMGUI_ENABLED)
+    if (m_swapChain.getExtent().width > 0 && m_swapChain.getExtent().height > 0) drawSoundProbeReadout();
+#endif
     drawFrame(deltaTime);
 
 	return ret;
@@ -1111,6 +1115,8 @@ CraigError Craig::Renderer::newGameObject(std::string objectName, std::string mo
 CraigError Craig::Renderer::loadScene(const std::string& scenePath)
 {
     CraigError ret = CRAIG_SUCCESS;
+    //Forget the sound result before loading, not after a long wait with the old number still showing
+    resetSoundProbeContext();
 
     // GPU might still be using the old scene's buffers + sets
     m_Devices.getLogicalDevice().waitIdle();
@@ -1131,6 +1137,7 @@ CraigError Craig::Renderer::loadScene(const std::string& scenePath)
 CraigError Craig::Renderer::restoreScene(const nlohmann::json& sceneJson, const std::string& scenePath)
 {
     CraigError ret = CRAIG_SUCCESS;
+    resetSoundProbeContext();
 
     // grab the name first, the pointer's dead after the swap
     std::string selectedName;
@@ -1155,6 +1162,13 @@ CraigError Craig::Renderer::restoreScene(const nlohmann::json& sceneJson, const 
 
 void Craig::Renderer::finishSceneSwap(const std::string& reselectObjectName)
 {
+    resetSoundProbeContext();
+    ++m_soundSceneGeneration;
+    //Scene loading already waited for the GPU, so the old BLASes can go now
+    m_soundPropagation.terminate();
+    m_soundPrepared = false;
+    if (m_soundConfigured && prepareSoundProbe() != CRAIG_SUCCESS) disableSoundProbe();
+
     // Buffers are built from the scene's objects, so remake them + sets for any new models
     rebuildGeometryBuffers();
     createModelDescriptorSets();
@@ -1261,6 +1275,8 @@ CraigError Craig::Renderer::terminate() {
     CraigError ret = CRAIG_SUCCESS;
 
     m_Devices.getLogicalDevice().waitIdle();
+    disableSoundProbe();
+    m_soundPropagation.terminate();
 
 #if defined(IMGUI_ENABLED)
     ImGui_ImplVulkan_Shutdown();

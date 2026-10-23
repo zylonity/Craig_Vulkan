@@ -26,6 +26,7 @@
 #include "Renderer/Craig_RenderingAttachments.hpp"
 #include "Renderer/Craig_SyncManager.hpp"
 #include "Renderer/Craig_SoundPropagation.hpp"
+#include "Craig_SoundProbe.hpp"
 
 namespace Craig {
 
@@ -41,6 +42,12 @@ namespace Craig {
 		CraigError initSceneResources(); // Needs the scene manager initialised first, see the cpp
 		CraigError update(const float& deltaTime);
 		CraigError terminate();
+
+		//Builds the sound geometry here, not in the per frame update
+		CraigError configureSoundProbe(const std::string& listener, const std::string& source, uint64_t sourceId);
+		void disableSoundProbe();
+		void setSoundProbeMode(uint32_t mode, bool running);
+		SoundProbeReadout getSoundProbeReadout() const;
 
 		bool& getVSyncState() { return m_swapChain.m_vsyncEnabled; };
 		void refreshSwapChain() { recreateSwapChain(); };
@@ -136,6 +143,24 @@ namespace Craig {
 		};
 
 		std::vector<const char*> mv_VK_Layers; // Validation layers
+
+		void resetSoundProbeContext();
+		CraigError prepareSoundProbe();
+		void updateSoundProbe();
+		void drawSoundProbeReadout();
+
+		std::string m_soundListener;
+		std::string m_soundSource;
+		bool m_soundConfigured = false;
+		bool m_soundPrepared = false;
+		bool m_soundRunning = false;
+		bool m_soundContextActive = false;
+		uint32_t m_soundMode = 0;
+		uint64_t m_soundSceneGeneration = 1;
+		uint64_t m_soundSourceId = 0;
+		uint64_t m_soundSequence = 0;
+		std::optional<SoundPropagation::Result> m_soundResult;
+		SoundProbeReadout::State m_soundState = SoundProbeReadout::State::Disabled;
 
 		
 		// Engine-facing state
