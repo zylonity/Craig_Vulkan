@@ -43,6 +43,8 @@ void Craig::Renderer::resetSoundProbeContext() {
     m_soundContextActive = false;
     m_soundResult.reset();
     m_soundSequence = 0;
+    m_soundListenerInstance = 0;
+    m_soundSourceInstance = 0;
     m_soundState = m_soundConfigured ? SoundProbeReadout::State::Waiting : SoundProbeReadout::State::Disabled;
 }
 
@@ -109,9 +111,11 @@ void Craig::Renderer::updateSoundProbe() {
         return;
     }
 
-    if (!m_soundContextActive) {
+    if (!m_soundContextActive || pListener->getInstanceId() != m_soundListenerInstance || pSource->getInstanceId() != m_soundSourceInstance) {
         resetSoundProbeContext();
         m_soundPropagation.setContext(m_soundSceneGeneration, m_soundSourceId);
+        m_soundListenerInstance = pListener->getInstanceId();
+        m_soundSourceInstance = pSource->getInstanceId();
         m_soundContextActive = true;
     }
 

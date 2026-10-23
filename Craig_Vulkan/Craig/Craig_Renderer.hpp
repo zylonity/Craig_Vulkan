@@ -159,6 +159,8 @@ namespace Craig {
 		uint64_t m_soundSceneGeneration = 1;
 		uint64_t m_soundSourceId = 0;
 		uint64_t m_soundSequence = 0;
+		uint64_t m_soundListenerInstance = 0;
+		uint64_t m_soundSourceInstance = 0;
 		std::optional<SoundPropagation::Result> m_soundResult;
 		SoundProbeReadout::State m_soundState = SoundProbeReadout::State::Disabled;
 
