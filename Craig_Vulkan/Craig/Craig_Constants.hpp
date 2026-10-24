@@ -35,7 +35,7 @@ constexpr uint32_t kMaxEditorLogLines = 5000; // oldest lines get dropped after 
 constexpr uint32_t kPhysicsTempAllocatorSize = 10 * 1024 * 1024; // 10 MB
 
 //Sound propagation
-constexpr bool kRunRayQueryTest = true; // fires a few test rays at a triangle on startup and logs if they hit
+constexpr bool kRunRayQueryTest = false; //Startup checks are off now, the moving door shows the live results instead
 
 enum CraigError {
 	CRAIG_SUCCESS = 0,

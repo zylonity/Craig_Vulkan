@@ -32,12 +32,12 @@
 #include <cassert>
 
 #include "Craig/Craig_Framework.hpp"
-#include "Game/CraigGame.hpp"
+#include "Game/SoundDemo.hpp"
 //===============================================================================
 // Framework is constructed as Global
 Craig::Framework g_framework;
 // so is the game, the framework just borrows it
-Game::CraigGame g_game;
+Game::SoundDemo g_game;
 //===============================================================================
 
 int main() {

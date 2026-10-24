@@ -1,0 +1,14 @@
+{
+  "name": "Live sound propagation — moving door",
+  "camera": {"position": [7.0, 5.0, 9.0], "rotation": [-22.0, 38.0]},
+  "gameObjects": [
+    {"name": "Door", "position": [0.0, 1.5, 0.0], "scale": [0.9, 1.5, 0.12], "components": {"model": {"path": "data/models/BlankBox.glb"}}},
+    {"name": "Left wall", "position": [-2.5, 1.5, 0.0], "scale": [1.5, 1.5, 0.15], "components": {"model": {"path": "data/models/BlankBox.glb"}}},
+    {"name": "Right wall", "position": [2.5, 1.5, 0.0], "scale": [1.5, 1.5, 0.15], "components": {"model": {"path": "data/models/BlankBox.glb"}}},
+    {"name": "Floor", "position": [0.0, -0.15, 0.0], "scale": [5.0, 0.15, 5.0], "components": {"model": {"path": "data/models/BlankBox.glb"}}},
+    {"name": "Listener", "position": [0.0, 1.0, -3.0], "scale": [0.15, 0.15, 0.15], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticBlocker": false}}},
+    {"name": "Source", "position": [0.0, 1.0, 3.0], "scale": [0.15, 0.15, 0.15], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticBlocker": false}}},
+    {"name": "Query segment", "position": [0.0, 1.0, 0.0], "scale": [0.015, 0.015, 3.0], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticBlocker": false}}},
+    {"name": "Sun", "rotation": [45.0, -30.0, 0.0], "components": {"sun": {"intensity": 2.0}}}
+  ]
+}
