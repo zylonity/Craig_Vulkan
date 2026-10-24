@@ -203,6 +203,7 @@ void Craig::SoundPropagation::collectCompleted() {
             if (blocked[i] != 0) result.blocked++;
         }
         result.rayCount = slot.request.rayCount;
+        result.seed = slot.request.seed;
         result.sceneGeneration = slot.request.sceneGeneration;
         result.sourceId = slot.request.sourceId;
         result.sequenceId = slot.request.sequenceId;

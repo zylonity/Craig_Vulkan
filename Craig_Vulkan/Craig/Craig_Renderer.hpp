@@ -156,6 +156,9 @@ namespace Craig {
 		bool m_soundRunning = false;
 		bool m_soundContextActive = false;
 		uint32_t m_soundMode = 0;
+		int m_soundRayCount = 128;
+		int m_soundSeed = 1;
+		float m_soundEmitterSize[2] = {2.0f, 1.0f}; //World XY width/height in metres
 		uint64_t m_soundSceneGeneration = 1;
 		uint64_t m_soundSourceId = 0;
 		uint64_t m_soundSequence = 0;

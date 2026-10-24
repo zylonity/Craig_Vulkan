@@ -2,7 +2,9 @@
 #include "Craig/Craig_SceneManager.hpp"
 #include "Craig/Craig_Logger.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <random>
 #if defined(IMGUI_ENABLED)
 #include "imgui.h"
 #endif
@@ -71,6 +73,7 @@ Craig::SoundProbeReadout Craig::Renderer::getSoundProbeReadout() const {
         readout.hasResult = true;
         readout.blockedRays = m_soundResult->blocked;
         readout.rayCount = m_soundResult->rayCount;
+        readout.seed = m_soundResult->seed;
         readout.obstruction = static_cast<float>(readout.blockedRays) / readout.rayCount;
         readout.sceneGeneration = m_soundResult->sceneGeneration;
         readout.sourceId = m_soundResult->sourceId;
@@ -121,7 +124,9 @@ void Craig::Renderer::updateSoundProbe() {
 
     SoundPropagation::Result result;
     if (m_soundPropagation.poll(result)) {
-        if (!m_soundResult || result.blocked != m_soundResult->blocked) {
+        //Only log when it becomes fully clear/blocked, not every small sample change
+        if (!m_soundResult || (result.blocked == 0) != (m_soundResult->blocked == 0) ||
+            (result.blocked == result.rayCount) != (m_soundResult->blocked == m_soundResult->rayCount)) {
             Logger::renderer().info("Live sound probe: {}/{} rays blocked (scene {}, source {}, sequence {}, input age {:.2f} ms)",
                 result.blocked, result.rayCount, result.sceneGeneration, result.sourceId, result.sequenceId, result.ageMs);
         }
@@ -129,10 +134,30 @@ void Craig::Renderer::updateSoundProbe() {
     }
 
     SoundPropagation::Request request{};
-    request.rayCount = 1;
-    const glm::vec3 direction = segment / distance;
-    request.rays[0] = {{origin.x, origin.y, origin.z, 0.001f},
-        {direction.x, direction.y, direction.z, distance - 0.001f}};
+    request.rayCount = static_cast<uint32_t>(m_soundRayCount);
+    request.seed = static_cast<uint32_t>(m_soundSeed);
+    //Same seed each time so a stationary wall doesn't get a different sample pattern every frame
+    std::mt19937 generator(request.seed);
+    for (uint32_t i = 0; i < request.rayCount; ++i) {
+        glm::vec3 sample = endpoint;
+        if (request.rayCount > 1) {
+            //Uniform rectangle across world X/Y, one ray still aims at the centre
+            const float u = static_cast<float>(generator() >> 8) / 16777216.0f;
+            const float v = static_cast<float>(generator() >> 8) / 16777216.0f;
+            sample += glm::vec3((u - 0.5f) * m_soundEmitterSize[0], (v - 0.5f) * m_soundEmitterSize[1], 0.0f);
+        }
+        //From the source to the listener, the way the sound goes
+        const glm::vec3 raySegment = origin - sample;
+        const float rayDistance = glm::length(raySegment);
+        if (!std::isfinite(rayDistance) || rayDistance <= 0.002f) {
+            resetSoundProbeContext();
+            m_soundState = SoundProbeReadout::State::InvalidSegment;
+            return;
+        }
+        const glm::vec3 direction = raySegment / rayDistance;
+        request.rays[i] = {{sample.x, sample.y, sample.z, 0.001f},
+            {direction.x, direction.y, direction.z, rayDistance - 0.001f}};
+    }
     request.sceneGeneration = m_soundSceneGeneration;
     request.sourceId = m_soundSourceId;
     request.sequenceId = m_soundSequence++;
@@ -157,9 +182,16 @@ void Craig::Renderer::drawSoundProbeReadout() {
     const char* states[] = {"disabled", "paused", "waiting", "ready", "missing endpoint", "invalid segment", "geometry not prepared"};
     ImGui::Begin("Sound propagation");
     ImGui::Text("State: %s", states[static_cast<unsigned>(readout.state)]);
-    ImGui::Text("%s -> %s", m_soundListener.c_str(), m_soundSource.c_str());
-    if (readout.hasResult) {
-        ImGui::Text("Blocked: %u / %u", readout.blockedRays, readout.rayCount);
+    ImGui::Text("%s -> %s", m_soundSource.c_str(), m_soundListener.c_str());
+    bool changed = ImGui::SliderInt("Direct rays", &m_soundRayCount, 1, SoundPropagation::kMaxRayCount);
+    changed |= ImGui::InputInt("Seed", &m_soundSeed);
+    changed |= ImGui::SliderFloat2("Emitter width / height (m)", m_soundEmitterSize, 0.0f, 4.0f);
+    m_soundRayCount = std::clamp(m_soundRayCount, 1, static_cast<int>(SoundPropagation::kMaxRayCount));
+    for (float& size : m_soundEmitterSize) size = std::isfinite(size) ? std::clamp(size, 0.0f, 4.0f) : 0.0f;
+    if (changed) resetSoundProbeContext();
+    ImGui::TextUnformatted("Uniform world-XY rectangle, 1 ray uses its centre");
+    if (readout.hasResult && !changed) {
+        ImGui::Text("Obstruction: %.3f (%u / %u blocked), seed %u", readout.obstruction, readout.blockedRays, readout.rayCount, readout.seed);
         ImGui::Text("Input age: %.2f ms, sequence %llu", readout.ageMs, static_cast<unsigned long long>(readout.sequenceId));
     }
     const auto& stats = m_soundPropagation.getStatistics();

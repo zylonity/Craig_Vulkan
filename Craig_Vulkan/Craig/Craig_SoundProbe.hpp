@@ -12,6 +12,7 @@ namespace Craig {
 		float obstruction = 0.0f; //Blocked rays / all rays
 		uint32_t blockedRays = 0;
 		uint32_t rayCount = 0;
+		uint32_t seed = 0;
 		uint64_t sceneGeneration = 0;
 		uint64_t sourceId = 0;
 		uint64_t sequenceId = 0;

@@ -30,6 +30,7 @@ namespace Craig {
 		struct Request {
 			std::array<Ray, kMaxRayCount> rays;
 			uint32_t rayCount = 1;
+			uint32_t seed = 1;
 			uint64_t sceneGeneration = 0;
 			uint64_t sourceId = 0;
 			uint64_t sequenceId = 0;
@@ -39,6 +40,7 @@ namespace Craig {
 		struct Result {
 			uint32_t blocked = 0;
 			uint32_t rayCount = 1;
+			uint32_t seed = 1;
 			uint64_t sceneGeneration = 0;
 			uint64_t sourceId = 0;
 			uint64_t sequenceId = 0;
