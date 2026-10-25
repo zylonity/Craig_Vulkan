@@ -15,7 +15,11 @@ namespace Game {
 		void drawImGui() override;
 
 	private:
+		enum class ReferenceCase { MovingDoor, Clear, Half, Blocked };
+		CraigError selectReferenceCase(ReferenceCase referenceCase);
 		Craig::GameServices* mp_services = nullptr;
+		ReferenceCase m_referenceCase = ReferenceCase::MovingDoor;
+		bool m_referenceFailed = false;
 		bool m_animate = true;
 		bool m_probeReady = false;
 		float m_time = 0.0f;

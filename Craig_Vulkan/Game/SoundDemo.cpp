@@ -24,6 +24,8 @@ void Game::SoundDemo::onPlayStarted(bool startedFromEditor) {
 	(void)startedFromEditor;
 	m_probeReady = mp_services->configureSoundProbe("Listener", "Source", 1) == CRAIG_SUCCESS;
 	m_time = 0.0f;
+	m_referenceCase = ReferenceCase::MovingDoor;
+	m_referenceFailed = false;
 }
 
 void Game::SoundDemo::onPlayStopped() {
@@ -31,11 +33,30 @@ void Game::SoundDemo::onPlayStopped() {
 	m_probeReady = false;
 }
 
+CraigError Game::SoundDemo::selectReferenceCase(ReferenceCase referenceCase) {
+	const bool movingDoor = referenceCase == ReferenceCase::MovingDoor;
+	const char* path = movingDoor ? "data/scenes/SoundPropagationDemo.json" : "data/scenes/SoundPropagationReference.json";
+	if (mp_services->loadScene(path) != CRAIG_SUCCESS) return CRAIG_FAIL;
+	if (!movingDoor) {
+		Craig::GameObject* pWall = mp_services->getCurrentScene()->findObject("Reference wall");
+		assert(pWall != nullptr && "The reference scene needs its wall");
+		//BlankBox is [-1,1], wall scale.x is 2, so centred at -2 its right edge is exactly x = 0
+		//That covers half of the symmetric emitter, x = 6 moves it completely out of the way
+		const float x = referenceCase == ReferenceCase::Clear ? 6.0f :
+			(referenceCase == ReferenceCase::Half ? -2.0f : 0.0f);
+		pWall->setPosition({x, 2.0f, 0.0f});
+	}
+	m_referenceCase = referenceCase;
+	m_time = 0.0f;
+	m_probeReady = mp_services->configureSoundProbe("Listener", "Source", 1) == CRAIG_SUCCESS;
+	return m_probeReady ? CRAIG_SUCCESS : CRAIG_FAIL;
+}
+
 CraigError Game::SoundDemo::update(const float& deltaTime) {
 	//The editor still works on a GPU without ray queries
 	if (!m_probeReady) return CRAIG_SUCCESS;
 	Craig::Scene& scene = *mp_services->getCurrentScene();
-	if (m_animate) {
+	if (m_animate && m_referenceCase == ReferenceCase::MovingDoor) {
 		m_time += deltaTime;
 		if (Craig::GameObject* pDoor = scene.findObject("Door")) {
 			pDoor->setPosition({1.3f * (1.0f - std::cos(m_time)), 1.5f, 0.0f});
@@ -63,7 +84,23 @@ void Game::SoundDemo::drawImGui() {
 #if defined(IMGUI_ENABLED)
 	ImGui::Begin("Moving-door demo");
 	ImGui::TextUnformatted("Small cubes: listener/source, thin line: the segment between them");
-	ImGui::Checkbox("Animate door", &m_animate);
+	if (m_referenceCase == ReferenceCase::MovingDoor) ImGui::Checkbox("Animate door", &m_animate);
+	ImGui::SeparatorText("Geometric references");
+	const char* cases[] = {"Moving door", "Clear (0%)", "Half (50%)", "Blocked (100%)"};
+	for (int i = 0; i < 4; ++i) {
+		if (i != 0) ImGui::SameLine();
+		if (ImGui::Button(cases[i])) m_referenceFailed = selectReferenceCase(static_cast<ReferenceCase>(i)) != CRAIG_SUCCESS;
+	}
+	if (m_referenceFailed) ImGui::TextUnformatted("Scene/probe setup failed, see the log");
+	if (m_referenceCase != ReferenceCase::MovingDoor) {
+		const float expected = m_referenceCase == ReferenceCase::Clear ? 0.0f :
+			(m_referenceCase == ReferenceCase::Half ? 0.5f : 1.0f);
+		ImGui::Text("Expected obstruction: %.0f%% (if the reference scene hasn't been edited)", expected * 100.0f);
+		ImGui::TextUnformatted("Half needs multiple rays and a non-zero emitter width");
+		ImGui::TextUnformatted("Finite samples won't be exactly 50%, change the seed to try another set");
+		const auto probe = mp_services->getSoundProbeReadout();
+		if (probe.hasResult) ImGui::Text("GPU: %.4f, difference: %.4f", probe.obstruction, std::abs(probe.obstruction - expected));
+	}
 	ImGui::TextUnformatted("Use the engine toolbar to play, pause, step and stop");
 	ImGui::TextUnformatted("Sound propagation shows the last completed GPU result, not a synchronous check");
 	ImGui::End();
