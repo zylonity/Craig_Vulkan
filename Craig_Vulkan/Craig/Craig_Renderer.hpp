@@ -144,10 +144,11 @@ namespace Craig {
 
 		std::vector<const char*> mv_VK_Layers; // Validation layers
 
-		void resetSoundProbeContext();
+		void resetSoundProbeContext(bool clearDebugRays = true);
 		CraigError prepareSoundProbe();
 		void updateSoundProbe();
 		void drawSoundProbeReadout();
+		void drawSoundProbeRays();
 
 		std::string m_soundListener;
 		std::string m_soundSource;
@@ -159,6 +160,9 @@ namespace Craig {
 		int m_soundRayCount = 128;
 		int m_soundSeed = 1;
 		float m_soundEmitterSize[2] = {2.0f, 1.0f}; //World XY width/height in metres
+		bool m_showSoundRays = false;
+		std::vector<SoundPropagation::Ray> mv_soundDebugRays;
+		uint64_t m_soundDebugSequence = 0;
 		uint64_t m_soundSceneGeneration = 1;
 		uint64_t m_soundSourceId = 0;
 		uint64_t m_soundSequence = 0;

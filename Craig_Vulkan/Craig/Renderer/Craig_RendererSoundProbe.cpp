@@ -3,6 +3,7 @@
 #include "Craig/Craig_Logger.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <random>
 #if defined(IMGUI_ENABLED)
@@ -40,7 +41,8 @@ CraigError Craig::Renderer::prepareSoundProbe() {
     return CRAIG_FAIL;
 }
 
-void Craig::Renderer::resetSoundProbeContext() {
+void Craig::Renderer::resetSoundProbeContext(bool clearDebugRays) {
+    if (clearDebugRays) mv_soundDebugRays.clear();
     m_soundPropagation.stop();
     m_soundContextActive = false;
     m_soundResult.reset();
@@ -58,7 +60,7 @@ void Craig::Renderer::disableSoundProbe() {
 
 void Craig::Renderer::setSoundProbeMode(uint32_t mode, bool running) {
     //Even if we're resuming the same scene, results from before the pause aren't current anymore
-    if (mode != m_soundMode || running != m_soundRunning) resetSoundProbeContext();
+    if (mode != m_soundMode || running != m_soundRunning) resetSoundProbeContext(false);
     m_soundMode = mode;
     m_soundRunning = running;
     if (m_soundConfigured && !running) m_soundState = SoundProbeReadout::State::Paused;
@@ -164,6 +166,13 @@ void Craig::Renderer::updateSoundProbe() {
     request.inputTime = inputTime;
 
     const auto status = m_soundPropagation.trySubmit(scene, request);
+#if defined(IMGUI_ENABLED)
+    //Only show rays we actually submitted, not what we would have submitted if a slot was free
+    if (m_showSoundRays && status == SoundPropagation::SubmitStatus::Submitted) {
+        mv_soundDebugRays.assign(request.rays.begin(), request.rays.begin() + request.rayCount);
+        m_soundDebugSequence = request.sequenceId;
+    }
+#endif
     if (status == SoundPropagation::SubmitStatus::GeometryNotReady) {
         if (previousState != SoundProbeReadout::State::GeometryNotReady) {
             Logger::renderer().warn("Sound probe geometry is outside its prepared model set/capacity; reload the scene to prepare it");
@@ -189,6 +198,12 @@ void Craig::Renderer::drawSoundProbeReadout() {
     m_soundRayCount = std::clamp(m_soundRayCount, 1, static_cast<int>(SoundPropagation::kMaxRayCount));
     for (float& size : m_soundEmitterSize) size = std::isfinite(size) ? std::clamp(size, 0.0f, 4.0f) : 0.0f;
     if (changed) resetSoundProbeContext();
+    if (ImGui::Checkbox("Show direct samples", &m_showSoundRays) && !m_showSoundRays) mv_soundDebugRays.clear();
+    if (m_showSoundRays) {
+        ImGui::TextUnformatted("Neutral lines through walls, not hit/miss colours");
+        ImGui::Text("Last submitted: %zu rays, sequence %llu (frozen on pause)",
+            mv_soundDebugRays.size(), static_cast<unsigned long long>(m_soundDebugSequence));
+    }
     ImGui::TextUnformatted("Uniform world-XY rectangle, 1 ray uses its centre");
     if (readout.hasResult && !changed) {
         ImGui::Text("Obstruction: %.3f (%u / %u blocked), seed %u", readout.obstruction, readout.blockedRays, readout.rayCount, readout.seed);
@@ -199,5 +214,46 @@ void Craig::Renderer::drawSoundProbeReadout() {
         static_cast<unsigned long long>(stats.submitted), static_cast<unsigned long long>(stats.completed),
         static_cast<unsigned long long>(stats.skipped), static_cast<unsigned long long>(stats.discarded));
     ImGui::End();
+    drawSoundProbeRays();
+#endif
+}
+
+void Craig::Renderer::drawSoundProbeRays() {
+#if defined(IMGUI_ENABLED)
+    if (!m_showSoundRays || mv_soundDebugRays.empty()) return;
+    const Camera& camera = mp_SceneManager->getCurrentScene()->getCamera();
+    const glm::mat4 viewProj = camera.getProj() * camera.getView();
+    const ImGuiViewport* pViewport = ImGui::GetMainViewport();
+    ImDrawList* pDrawList = ImGui::GetBackgroundDrawList();
+
+    //getProj already flips Y for Vulkan, no second flip here
+    const auto screenPoint = [pViewport](const glm::vec4& clip) {
+        const glm::vec2 ndc = glm::vec2(clip) / clip.w;
+        return ImVec2(pViewport->Pos.x + (ndc.x * 0.5f + 0.5f) * pViewport->Size.x,
+            pViewport->Pos.y + (ndc.y * 0.5f + 0.5f) * pViewport->Size.y);
+    };
+
+    //Clip against the six planes before dividing by w, otherwise a ray behind the camera flips across the screen
+    const std::array<glm::vec4, 6> planes = {{
+        {1, 0, 0, 1}, {-1, 0, 0, 1}, {0, 1, 0, 1}, {0, -1, 0, 1}, {0, 0, 1, 0}, {0, 0, -1, 1}
+    }};
+    const auto drawSegment = [&](const glm::vec3& from, const glm::vec3& to, ImU32 colour) {
+        glm::vec4 start = viewProj * glm::vec4(from, 1.0f);
+        glm::vec4 end = viewProj * glm::vec4(to, 1.0f);
+        for (const auto& plane : planes) {
+            const float a = glm::dot(plane, start);
+            const float b = glm::dot(plane, end);
+            if (a < 0.0f && b < 0.0f) return;
+            if (a < 0.0f) start = glm::mix(start, end, a / (a - b));
+            else if (b < 0.0f) end = glm::mix(start, end, a / (a - b));
+        }
+        if (start.w > 0.0f && end.w > 0.0f) pDrawList->AddLine(screenPoint(start), screenPoint(end), colour, 1.5f);
+    };
+
+    for (const auto& ray : mv_soundDebugRays) {
+        const glm::vec3 origin(ray.origin[0], ray.origin[1], ray.origin[2]);
+        const glm::vec3 direction(ray.direction[0], ray.direction[1], ray.direction[2]);
+        drawSegment(origin + direction * ray.origin[3], origin + direction * ray.direction[3], IM_COL32(255, 220, 100, 90));
+    }
 #endif
 }
