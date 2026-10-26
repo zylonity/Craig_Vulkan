@@ -36,6 +36,19 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(JoltPhysics)
 
+#HiFi-LoFi, MIT - https://github.com/HiFi-LoFi/FFTConvolver (f2cdeb04c42141d2caec19ca4f137398b2a76b85)
+#Partitioned convolution, so the reflected impulse response can be applied without doing it sample by sample
+add_library(FFTConvolver STATIC
+        Craig_Vulkan/External/FFTConvolver/AudioFFT.cpp
+        Craig_Vulkan/External/FFTConvolver/FFTConvolver.cpp
+        Craig_Vulkan/External/FFTConvolver/TwoStageFFTConvolver.cpp
+        Craig_Vulkan/External/FFTConvolver/Utilities.cpp
+)
+#Keep the DSP optimised in Debug too, the audio callback still has a real-time deadline
+if(NOT MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(FFTConvolver PRIVATE $<$<CONFIG:Debug>:-O2>)
+endif()
+
 #get all my files to build
 file(GLOB_RECURSE CRAIG_SOURCES
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/Craig/*.cpp
