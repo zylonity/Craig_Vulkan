@@ -49,6 +49,26 @@ if(NOT MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(FFTConvolver PRIVATE $<$<CONFIG:Debug>:-O2>)
 endif()
 
+#Valve Corporation, Apache-2.0 - Steam Audio v4.8.1 (0da18255cca520771f363ee01f100572b39a308e)
+#Only the bit that turns an energy field into an impulse response, not the simulator itself
+set(STEAM_DSP_DIR ${CMAKE_SOURCE_DIR}/Craig_Vulkan/External/SteamAudio)
+add_library(SteamAudioReconstruction STATIC
+        ${STEAM_DSP_DIR}/reconstructor.cpp
+        ${STEAM_DSP_DIR}/energy_field.cpp
+        ${STEAM_DSP_DIR}/impulse_response.cpp
+        ${STEAM_DSP_DIR}/iir.cpp
+        ${STEAM_DSP_DIR}/array_math.cpp
+        ${STEAM_DSP_DIR}/memory_allocator.cpp
+        ${STEAM_DSP_DIR}/standalone_memory.cpp
+        ${STEAM_DSP_DIR}/math_functions.cpp
+        ${STEAM_DSP_DIR}/bands.cpp
+        ${STEAM_DSP_DIR}/air_absorption.cpp
+)
+target_precompile_headers(SteamAudioReconstruction PRIVATE <algorithm> <cmath> <cstring>)
+if(NOT MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(SteamAudioReconstruction PRIVATE $<$<CONFIG:Debug>:-O2>)
+endif()
+
 #get all my files to build
 file(GLOB_RECURSE CRAIG_SOURCES
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/Craig/*.cpp
