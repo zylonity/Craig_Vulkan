@@ -42,7 +42,10 @@ CraigError Craig::Renderer::prepareSoundProbe() {
 }
 
 void Craig::Renderer::resetSoundProbeContext(bool clearDebugRays) {
-    if (clearDebugRays) mv_soundDebugRays.clear();
+    if (clearDebugRays) {
+        mv_soundDebugRays.clear();
+        mv_soundDebugPaths.clear();
+    }
     m_soundPropagation.stop();
     m_soundContextActive = false;
     m_soundResult.reset();
@@ -80,6 +83,8 @@ Craig::SoundProbeReadout Craig::Renderer::getSoundProbeReadout() const {
         readout.sceneGeneration = m_soundResult->sceneGeneration;
         readout.sourceId = m_soundResult->sourceId;
         readout.sequenceId = m_soundResult->sequenceId;
+        readout.arrivals = m_soundResult->arrivals;
+        readout.arrivalCount = m_soundResult->arrivalCount;
         //Always work this out again, leaving a result on screen for a second doesn't make it a fresh one
         readout.ageMs = std::chrono::duration<double, std::milli>(SoundPropagation::Clock::now() - m_soundResult->inputTime).count();
     }
@@ -129,10 +134,14 @@ void Craig::Renderer::updateSoundProbe() {
         //Only log when it becomes fully clear/blocked, not every small sample change
         if (!m_soundResult || (result.blocked == 0) != (m_soundResult->blocked == 0) ||
             (result.blocked == result.rayCount) != (m_soundResult->blocked == m_soundResult->rayCount)) {
-            Logger::renderer().info("Live sound probe: {}/{} rays blocked (scene {}, source {}, sequence {}, input age {:.2f} ms)",
-                result.blocked, result.rayCount, result.sceneGeneration, result.sourceId, result.sequenceId, result.ageMs);
+            Logger::renderer().info("Live sound probe: {}/{} rays blocked, {} arrivals (scene {}, source {}, sequence {}, input age {:.2f} ms)",
+                result.blocked, result.rayCount, result.arrivalCount, result.sceneGeneration, result.sourceId, result.sequenceId, result.ageMs);
         }
         m_soundResult = result;
+        //Copied so pausing keeps them on screen
+        mv_soundDebugPaths.assign(result.arrivals.begin(), result.arrivals.begin() + result.arrivalCount);
+        m_soundDebugListener = origin;
+        m_soundDebugSource = endpoint;
     }
 
     SoundPropagation::Request request{};
@@ -164,6 +173,13 @@ void Craig::Renderer::updateSoundProbe() {
     request.sourceId = m_soundSourceId;
     request.sequenceId = m_soundSequence++;
     request.inputTime = inputTime;
+    request.listener = {origin.x, origin.y, origin.z};
+    request.source = {endpoint.x, endpoint.y, endpoint.z};
+    //The listener object's +X is its right ear, not the editor camera's
+    const glm::vec3 right = glm::vec3(pListener->GetModelMatrix()[0]);
+    const float rightLength = glm::length(right);
+    const glm::vec3 ear = std::isfinite(rightLength) && rightLength > 0.0f ? right / rightLength : glm::vec3(1.0f, 0.0f, 0.0f);
+    request.listenerRight = {ear.x, ear.y, ear.z};
 
     const auto status = m_soundPropagation.trySubmit(scene, request);
 #if defined(IMGUI_ENABLED)
@@ -198,6 +214,8 @@ void Craig::Renderer::drawSoundProbeReadout() {
     m_soundRayCount = std::clamp(m_soundRayCount, 1, static_cast<int>(SoundPropagation::kMaxRayCount));
     for (float& size : m_soundEmitterSize) size = std::isfinite(size) ? std::clamp(size, 0.0f, 4.0f) : 0.0f;
     if (changed) resetSoundProbeContext();
+    ImGui::Checkbox("Show sound paths", &m_showSoundPaths);
+    ImGui::SameLine();
     if (ImGui::Checkbox("Show direct samples", &m_showSoundRays) && !m_showSoundRays) mv_soundDebugRays.clear();
     if (m_showSoundRays) {
         ImGui::TextUnformatted("Neutral lines through walls, not hit/miss colours");
@@ -208,6 +226,28 @@ void Craig::Renderer::drawSoundProbeReadout() {
     if (readout.hasResult && !changed) {
         ImGui::Text("Obstruction: %.3f (%u / %u blocked), seed %u", readout.obstruction, readout.blockedRays, readout.rayCount, readout.seed);
         ImGui::Text("Input age: %.2f ms, sequence %llu", readout.ageMs, static_cast<unsigned long long>(readout.sequenceId));
+        if (ImGui::BeginTable("Arrivals", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY, ImVec2(0, 160))) {
+            ImGui::TableSetupColumn("Order");
+            ImGui::TableSetupColumn("Length (m)");
+            ImGui::TableSetupColumn("Delay (ms)");
+            ImGui::TableSetupColumn("Low / mid / high gain");
+            ImGui::TableSetupColumn("Pan");
+            ImGui::TableSetupColumn("Level (dB)");
+            ImGui::TableHeadersRow();
+            for (uint32_t i = 0; i < readout.arrivalCount; ++i) {
+                const SoundArrival& arrival = readout.arrivals[i];
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn(); ImGui::Text("%u", arrival.order);
+                ImGui::TableNextColumn(); ImGui::Text("%.3f", arrival.length);
+                ImGui::TableNextColumn(); ImGui::Text("%.2f", arrival.delaySeconds * 1000.0f);
+                ImGui::TableNextColumn(); ImGui::Text("%.3f / %.3f / %.3f", arrival.gains[0], arrival.gains[1], arrival.gains[2]);
+                ImGui::TableNextColumn(); ImGui::Text("%+.2f", arrival.pan);
+                //Average of the three bands, just to have one number to look at
+                const float level = (arrival.gains[0] + arrival.gains[1] + arrival.gains[2]) / 3.0f;
+                ImGui::TableNextColumn(); ImGui::Text("%.1f", 20.0f * std::log10(std::max(level, 1e-6f)));
+            }
+            ImGui::EndTable();
+        }
     }
     const auto& stats = m_soundPropagation.getStatistics();
     ImGui::Text("Submitted %llu, completed %llu, skipped %llu, discarded %llu",
@@ -220,7 +260,7 @@ void Craig::Renderer::drawSoundProbeReadout() {
 
 void Craig::Renderer::drawSoundProbeRays() {
 #if defined(IMGUI_ENABLED)
-    if (!m_showSoundRays || mv_soundDebugRays.empty()) return;
+    if ((!m_showSoundRays || mv_soundDebugRays.empty()) && (!m_showSoundPaths || mv_soundDebugPaths.empty())) return;
     const Camera& camera = mp_SceneManager->getCurrentScene()->getCamera();
     const glm::mat4 viewProj = camera.getProj() * camera.getView();
     const ImGuiViewport* pViewport = ImGui::GetMainViewport();
@@ -250,10 +290,18 @@ void Craig::Renderer::drawSoundProbeRays() {
         if (start.w > 0.0f && end.w > 0.0f) pDrawList->AddLine(screenPoint(start), screenPoint(end), colour, 1.5f);
     };
 
-    for (const auto& ray : mv_soundDebugRays) {
-        const glm::vec3 origin(ray.origin[0], ray.origin[1], ray.origin[2]);
-        const glm::vec3 direction(ray.direction[0], ray.direction[1], ray.direction[2]);
-        drawSegment(origin + direction * ray.origin[3], origin + direction * ray.direction[3], IM_COL32(255, 220, 100, 90));
+    if (m_showSoundRays) {
+        for (const auto& ray : mv_soundDebugRays) {
+            const glm::vec3 origin(ray.origin[0], ray.origin[1], ray.origin[2]);
+            const glm::vec3 direction(ray.direction[0], ray.direction[1], ray.direction[2]);
+            drawSegment(origin + direction * ray.origin[3], origin + direction * ray.direction[3], IM_COL32(255, 220, 100, 90));
+        }
+    }
+    if (m_showSoundPaths) {
+        //White line for the direct path from the last result
+        for (const SoundArrival& arrival : mv_soundDebugPaths) {
+            if (arrival.order == 0) drawSegment(m_soundDebugListener, m_soundDebugSource, IM_COL32(255, 255, 255, 200));
+        }
     }
 #endif
 }

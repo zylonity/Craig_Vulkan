@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Craig_Device.hpp"
+#include "Craig/Craig_SoundProbe.hpp"
 #include <array>
 #include <chrono>
 #include <optional>
@@ -31,6 +32,9 @@ namespace Craig {
 			std::array<Ray, kMaxRayCount> rays;
 			uint32_t rayCount = 1;
 			uint32_t seed = 1;
+			std::array<float, 3> listener{};
+			std::array<float, 3> source{};
+			std::array<float, 3> listenerRight{1.0f, 0.0f, 0.0f}; //For panning
 			uint64_t sceneGeneration = 0;
 			uint64_t sourceId = 0;
 			uint64_t sequenceId = 0;
@@ -41,6 +45,8 @@ namespace Craig {
 			uint32_t blocked = 0;
 			uint32_t rayCount = 1;
 			uint32_t seed = 1;
+			std::array<SoundArrival, kMaxSoundArrivals> arrivals{};
+			uint32_t arrivalCount = 0;
 			uint64_t sceneGeneration = 0;
 			uint64_t sourceId = 0;
 			uint64_t sequenceId = 0;
@@ -137,6 +143,7 @@ namespace Craig {
 		void writeQueryDescriptors(const ResultSlot& slot);
 		void createResultSlots(uint32_t instanceCapacity);
 		void recordQuery(vk::CommandBuffer commandBuffer, const ResultSlot& slot, const Request& request);
+		void buildArrivals(const ResultSlot& slot, Result& result);
 		void collectCompleted();
 		void submitSlot(ResultSlot& slot, const Request& request);
 

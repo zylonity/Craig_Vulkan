@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <stdexcept>
+#include <glm/glm.hpp>
 
 #include "Craig/Craig_Scene.hpp"
 #include "Craig/Craig_Logger.hpp"
@@ -200,12 +202,7 @@ void Craig::SoundPropagation::collectCompleted() {
         }
 
         Result result{};
-        const auto* blocked = static_cast<const uint32_t*>(slot.results.pMapped);
-        for (uint32_t i = 0; i < slot.request.rayCount; ++i) {
-            //Still 0xffffffff means the shader never wrote it
-            if (blocked[i] > kAcousticMaterials.size()) throw std::runtime_error("result-slot dispatch did not produce a valid obstruction result");
-            if (blocked[i] != 0) result.blocked++;
-        }
+        buildArrivals(slot, result);
         result.rayCount = slot.request.rayCount;
         result.seed = slot.request.seed;
         result.sceneGeneration = slot.request.sceneGeneration;
@@ -217,6 +214,49 @@ void Craig::SoundPropagation::collectCompleted() {
         m_readyResult = result;
         m_latestSequence = result.sequenceId;
     }
+}
+
+namespace {
+    float distanceGain(float length) {
+        //Amplitude drops off as 1/r, capped at 1 m so something right next to the listener doesn't blow up
+        return 1.0f / std::max(length, 1.0f);
+    }
+
+    Craig::SoundArrival makeArrival(const glm::vec3& direction, float length, const std::array<float, 3>& bandGains,
+        const std::array<float, 3>& listenerRight, uint32_t order) {
+        Craig::SoundArrival arrival{};
+        arrival.delaySeconds = length / Craig::kSpeedOfSound;
+        arrival.length = length;
+        arrival.order = order;
+        //Positive if it's coming from the listener's right
+        arrival.pan = std::clamp(glm::dot(direction, glm::vec3(listenerRight[0], listenerRight[1], listenerRight[2])), -1.0f, 1.0f);
+        for (uint32_t band = 0; band < Craig::kAcousticBandCount; ++band) {
+            arrival.gains[band] = bandGains[band] * distanceGain(length) * std::exp(-Craig::kAirAbsorption[band] * length);
+        }
+        return arrival;
+    }
+}
+
+void Craig::SoundPropagation::buildArrivals(const ResultSlot& slot, Result& result) {
+    const Request& request = slot.request;
+    const auto* blocked = static_cast<const uint32_t*>(slot.results.pMapped);
+    std::array<float, 3> transmission{};
+    for (uint32_t i = 0; i < request.rayCount; ++i) {
+        //Still 0xffffffff means the shader never wrote it
+        if (blocked[i] > kAcousticMaterials.size()) throw std::runtime_error("result-slot dispatch did not produce a valid obstruction result");
+        if (blocked[i] != 0) result.blocked++;
+        for (uint32_t band = 0; band < kAcousticBandCount; ++band) {
+            //A blocked sample still lets that wall's transmission through, so a door doesn't go completely silent
+            transmission[band] += blocked[i] == 0 ? 1.0f : kAcousticMaterials[blocked[i] - 1].transmission[band];
+        }
+    }
+    for (float& gain : transmission) gain /= static_cast<float>(request.rayCount);
+
+    const glm::vec3 listener(request.listener[0], request.listener[1], request.listener[2]);
+    const glm::vec3 source(request.source[0], request.source[1], request.source[2]);
+    const float directLength = glm::length(source - listener);
+    result.arrivals[0] = makeArrival((source - listener) / directLength, directLength, transmission, request.listenerRight, 0);
+    result.arrivalCount = 1;
 }
 
 bool Craig::SoundPropagation::poll(Result& result) {

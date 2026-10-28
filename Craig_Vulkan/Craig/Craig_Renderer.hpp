@@ -161,6 +161,10 @@ namespace Craig {
 		int m_soundSeed = 1;
 		float m_soundEmitterSize[2] = {2.0f, 1.0f}; //World XY width/height in metres
 		bool m_showSoundRays = false;
+		bool m_showSoundPaths = true;
+		std::vector<SoundArrival> mv_soundDebugPaths; //Copied from the last result so pausing keeps them on screen
+		glm::vec3 m_soundDebugListener{0.0f};
+		glm::vec3 m_soundDebugSource{0.0f};
 		std::vector<SoundPropagation::Ray> mv_soundDebugRays;
 		uint64_t m_soundDebugSequence = 0;
 		uint64_t m_soundSceneGeneration = 1;
