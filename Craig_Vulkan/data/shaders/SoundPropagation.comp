@@ -1,0 +1,48 @@
+#version 460
+#extension GL_EXT_ray_query : require
+
+//Ray query setup adapted from Sascha Willems' rayquery example (MIT) - https://github.com/SaschaWillems/Vulkan/tree/master/shaders/glsl/rayquery
+layout(local_size_x = 64) in;
+
+layout(push_constant) uniform QuerySettings {
+    uint rayCount;
+};
+
+layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
+
+//origin.w is tmin, direction.w is tmax
+struct Ray { vec4 origin; vec4 direction; };
+//Indexed by the TLAS instance's custom index
+struct InstanceInfo { uint material; };
+//absorption.w is scattering, transmission.w is unused
+struct Material { vec4 absorption; vec4 transmission; };
+
+layout(std430, set = 0, binding = 1) readonly buffer RayInputs { Ray rays[]; };
+//0 = clear, otherwise 1 + the material it hit
+layout(std430, set = 0, binding = 2) writeonly buffer RayResults { uint blocked[]; };
+layout(std430, set = 0, binding = 4) readonly buffer Instances { InstanceInfo instances[]; };
+layout(std430, set = 0, binding = 6) readonly buffer Materials { Material materials[]; };
+
+struct Hit { float t; uint material; };
+
+//Closest hit instead of terminate on first hit, so we know which wall is actually in the way
+bool traceClosest(vec3 origin, vec3 direction, float tmin, float tmax, out Hit hit) {
+    rayQueryEXT query;
+    rayQueryInitializeEXT(query, topLevelAS, gl_RayFlagsOpaqueEXT, 0xff, origin, tmin, direction, tmax);
+    while (rayQueryProceedEXT(query)) {}
+    if (rayQueryGetIntersectionTypeEXT(query, true) != gl_RayQueryCommittedIntersectionTriangleEXT) return false;
+
+    InstanceInfo info = instances[rayQueryGetIntersectionInstanceCustomIndexEXT(query, true)];
+    hit.t = rayQueryGetIntersectionTEXT(query, true);
+    hit.material = info.material;
+    return true;
+}
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= rayCount) return;
+
+    Ray ray = rays[index];
+    Hit hit;
+    blocked[index] = traceClosest(ray.origin.xyz, ray.direction.xyz, ray.origin.w, ray.direction.w, hit) ? 1u + hit.material : 0u;
+}

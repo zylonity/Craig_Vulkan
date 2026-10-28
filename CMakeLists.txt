@@ -152,6 +152,7 @@ compile_glsl(${SHADER_DIR}/skyVert.spv ${SHADER_DIR}/SkyVertexShader.vert)
 compile_glsl(${SHADER_DIR}/skyFrag.spv ${SHADER_DIR}/SkyFragmentShader.frag)
 #the ray query shader targets vulkan1.2, the rest stay on the default
 compile_glsl(${SHADER_DIR}/rayQueryTest.spv ${SHADER_DIR}/RayQueryTest.comp --target-env=vulkan1.2)
+compile_glsl(${SHADER_DIR}/SoundPropagation.spv ${SHADER_DIR}/SoundPropagation.comp --target-env=vulkan1.2)
 
 add_custom_target(Shaders ALL
         DEPENDS
@@ -160,6 +161,7 @@ add_custom_target(Shaders ALL
         ${SHADER_DIR}/skyVert.spv
         ${SHADER_DIR}/skyFrag.spv
         ${SHADER_DIR}/rayQueryTest.spv
+        ${SHADER_DIR}/SoundPropagation.spv
 )
 
 # Make the main program depend on shaders

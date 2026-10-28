@@ -89,12 +89,18 @@ namespace Craig {
 			vk::DeviceAddress address = 0;
 		};
 
+		//Per TLAS instance, the shader finds it with the instance custom index
+		struct InstanceInfo {
+			uint32_t material;
+		};
+
 		//Everything one submission needs, so nothing gets overwritten while the GPU's still using it
 		struct ResultSlot {
 			Buffer instances;
 			Buffer scratch;
 			Buffer rays;
 			Buffer results;
+			Buffer instanceInfo;
 			AccelerationStructure tlas;
 			vk::CommandPool commandPool;
 			vk::CommandBuffer commandBuffer;
@@ -126,6 +132,7 @@ namespace Craig {
 		CraigError checkTestResults(const char* testName, const std::vector<uint32_t>& results, const std::vector<uint32_t>& expected);
 		void createModelGeometry(const Model& model, ModelGeometry& geometry);
 		bool collectSceneInstances(Scene& scene, std::vector<VkAccelerationStructureInstanceKHR>& instances, bool prepareGeometry);
+		void createSharedTables();
 		void createPipeline();
 		void writeQueryDescriptors(const ResultSlot& slot);
 		void createResultSlots(uint32_t instanceCapacity);
@@ -139,6 +146,8 @@ namespace Craig {
 		vk::DeviceSize m_scratchAlignment = 1;
 		std::unordered_map<std::string, ModelGeometry> m_modelGeometry; //By model path, so instances of the same model share one BLAS
 		std::vector<VkAccelerationStructureInstanceKHR> mv_instanceSnapshot;
+		std::vector<InstanceInfo> mv_instanceInfoSnapshot;
+		Buffer m_materialBuffer; //kAcousticMaterials, uploaded once
 		std::array<ResultSlot, kResultSlotCount> m_slots;
 		uint32_t m_instanceCapacity = 0; //Slot TLASes are sized for this many, set when the scene's prepared
 		vk::Semaphore m_VK_completionTimeline;

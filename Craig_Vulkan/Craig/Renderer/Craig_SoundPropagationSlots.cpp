@@ -6,6 +6,7 @@
 
 #include "Craig/Craig_Scene.hpp"
 #include "Craig/Craig_Logger.hpp"
+#include "Craig/Craig_AcousticMaterial.hpp"
 
 //Slot/timeline setup adapted from Sascha Willems' timelinesemaphore example
 //Copyright (C) 2024-2025 Sascha Willems, MIT - https://github.com/SaschaWillems/Vulkan/tree/master/examples/timelinesemaphore
@@ -15,6 +16,7 @@ void Craig::SoundPropagation::createResultSlots(uint32_t instanceCapacity) {
     const vk::Device device = mp_Device->getLogicalDevice();
     m_instanceCapacity = std::max(1u, instanceCapacity);
     mv_instanceSnapshot.reserve(m_instanceCapacity);
+    mv_instanceInfoSnapshot.reserve(m_instanceCapacity);
 
     //One timeline for every sound submission, each slot remembers what value it's waiting for
     vk::SemaphoreTypeCreateInfo type{};
@@ -27,6 +29,7 @@ void Craig::SoundPropagation::createResultSlots(uint32_t instanceCapacity) {
         createBuffer(slot.rays, sizeof(Request::rays), vk::BufferUsageFlagBits::eStorageBuffer, true);
         createBuffer(slot.results, sizeof(uint32_t) * kMaxRayCount,
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, true);
+        createBuffer(slot.instanceInfo, m_instanceCapacity * sizeof(InstanceInfo), vk::BufferUsageFlagBits::eStorageBuffer, true);
 
         //The TLAS gets made once at full capacity and rebuilt in place every submission
         VkAccelerationStructureGeometryKHR geometry{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
@@ -121,6 +124,7 @@ void Craig::SoundPropagation::submitSlot(ResultSlot& slot, const Request& reques
     const vk::Device device = mp_Device->getLogicalDevice();
     if (!mv_instanceSnapshot.empty()) {
         uploadBuffer(slot.instances, mv_instanceSnapshot.data(), mv_instanceSnapshot.size() * sizeof(mv_instanceSnapshot[0]));
+        uploadBuffer(slot.instanceInfo, mv_instanceInfoSnapshot.data(), mv_instanceInfoSnapshot.size() * sizeof(mv_instanceInfoSnapshot[0]));
     }
     uploadBuffer(slot.rays, request.rays.data(), sizeof(Ray) * request.rayCount);
 
@@ -199,7 +203,7 @@ void Craig::SoundPropagation::collectCompleted() {
         const auto* blocked = static_cast<const uint32_t*>(slot.results.pMapped);
         for (uint32_t i = 0; i < slot.request.rayCount; ++i) {
             //Still 0xffffffff means the shader never wrote it
-            if (blocked[i] > 1) throw std::runtime_error("result-slot dispatch did not produce a valid obstruction result");
+            if (blocked[i] > kAcousticMaterials.size()) throw std::runtime_error("result-slot dispatch did not produce a valid obstruction result");
             if (blocked[i] != 0) result.blocked++;
         }
         result.rayCount = slot.request.rayCount;

@@ -3,9 +3,11 @@
 #include "Craig/Craig_ResourceManager.hpp"
 #include "Craig/Craig_Scene.hpp"
 #include "Craig/Craig_Logger.hpp"
+#include "Craig/Craig_AcousticMaterial.hpp"
 #include "imgui.h"
 #include "imgui_stdlib.h"
 
+#include <cassert>
 #include <filesystem>
 
 CraigError Craig::Components::Model::init() {
@@ -40,6 +42,15 @@ CraigError Craig::Components::Model::loadFromJson(const nlohmann::json& json) {
 
 	//Old scenes don't have it, so everything blocks by default
 	setAcousticBlocker(json.value("acousticBlocker", true));
+
+	//A typo in the material name falls back to Generic, but it tells you about it
+	const std::string material = json.value("acousticMaterial", std::string(kAcousticMaterials[0].name));
+	const uint32_t materialIndex = findAcousticMaterial(material);
+	if (materialIndex == kAcousticMaterials.size())
+	{
+		Craig::Logger::resources().warn("'{}' has unknown acoustic material '{}', using {}", mp_owner->getName(), material, kAcousticMaterials[0].name);
+	}
+	setAcousticMaterial(materialIndex == kAcousticMaterials.size() ? 0 : materialIndex);
 	return setModelPath(json.value("path", ""));
 }
 
@@ -47,6 +58,7 @@ void Craig::Components::Model::saveToJson(nlohmann::json& json) const {
 
 	json["path"] = m_modelPath;
 	json["acousticBlocker"] = m_acousticBlocker;
+	json["acousticMaterial"] = kAcousticMaterials[m_acousticMaterial].name;
 }
 
 CraigError Craig::Components::Model::setModelPath(const std::string& modelPath) {
@@ -93,6 +105,13 @@ void Craig::Components::Model::setAcousticBlocker(bool blocker)
 	}
 }
 
+void Craig::Components::Model::setAcousticMaterial(uint32_t material)
+{
+	assert(material < kAcousticMaterials.size() && "Acoustic material out of range");
+	//No geometry rebuild needed, the material table gets uploaded with every sound submission anyway
+	m_acousticMaterial = material;
+}
+
 void Craig::Components::Model::markSceneGeometryDirty()
 {
 	if (mp_owner != nullptr && mp_owner->getScene() != nullptr)
@@ -107,6 +126,17 @@ void Craig::Components::Model::displayImGuiAttributes()
 	if (ImGui::Checkbox("Acoustic blocker", &acousticBlocker))
 	{
 		setAcousticBlocker(acousticBlocker);
+	}
+	if (m_acousticBlocker && ImGui::BeginCombo("Acoustic material", kAcousticMaterials[m_acousticMaterial].name))
+	{
+		for (uint32_t i = 0; i < kAcousticMaterials.size(); ++i)
+		{
+			if (ImGui::Selectable(kAcousticMaterials[i].name, i == m_acousticMaterial))
+			{
+				setAcousticMaterial(i);
+			}
+		}
+		ImGui::EndCombo();
 	}
 
 	// edit a copy so we only try loading once the user's done typing

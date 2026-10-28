@@ -2,6 +2,7 @@
 #include "Craig/Craig_Constants.hpp"
 #include "Craig_Component.hpp"
 
+#include <cstdint>
 #include <string>
 
 #include "../External/Imgui/imgui.h"
@@ -35,12 +36,16 @@ namespace Craig {
 			//Whether sound rays hit this, so markers like the listener/source cubes can be visible without blocking anything
 			bool isAcousticBlocker() const { return m_acousticBlocker; }
 			void setAcousticBlocker(bool blocker);
+			//Index into kAcousticMaterials, the sound propagation reads it every submission
+			uint32_t getAcousticMaterial() const { return m_acousticMaterial; }
+			void setAcousticMaterial(uint32_t material);
 
 		private:
 			void markSceneGeometryDirty();
 
 			std::string m_modelPath;
 			bool m_acousticBlocker = true;
+			uint32_t m_acousticMaterial = 0;
 
 			// editor only
 			std::string m_modelPathError;
