@@ -55,6 +55,7 @@ namespace Craig {
 		static spdlog::logger& scene() { return get(getInstance().mp_scene); };
 		static spdlog::logger& resources() { return get(getInstance().mp_resources); };
 		static spdlog::logger& state() { return get(getInstance().mp_state); };
+		static spdlog::logger& audio() { return get(getInstance().mp_audio); };
 
 		//===============================================================================
 		// Singleton Implementations
@@ -88,6 +89,7 @@ namespace Craig {
 		std::shared_ptr<spdlog::logger> mp_scene;
 		std::shared_ptr<spdlog::logger> mp_resources;
 		std::shared_ptr<spdlog::logger> mp_state;
+		std::shared_ptr<spdlog::logger> mp_audio;
 	};
 
 }
