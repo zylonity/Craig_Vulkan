@@ -23,6 +23,7 @@ namespace Game {
 		bool m_animate = true;
 		bool m_probeReady = false;
 		float m_time = 0.0f;
+		int m_sound = 0;
 	};
 
 }

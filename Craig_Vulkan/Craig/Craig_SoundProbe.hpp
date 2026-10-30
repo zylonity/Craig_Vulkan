@@ -6,6 +6,8 @@
 namespace Craig {
 
 	inline constexpr uint32_t kMaxSoundArrivals = 64;
+	//Longest delay the audio can play back, about 2.7 s at 48 kHz, power of two so the ring buffer can wrap with a mask
+	inline constexpr uint32_t kSoundDelayCapacity = 1u << 17;
 
 	//One way the sound gets to the listener, order 0 is the direct path
 	struct SoundArrival {

@@ -4,11 +4,12 @@
 
 #include <cassert>
 
-void Craig::GameServices::init(Craig::Renderer* pRenderer, Craig::SceneManager* pSceneManager)
+void Craig::GameServices::init(Craig::Renderer* pRenderer, Craig::SceneManager* pSceneManager, Craig::Audio* pAudio)
 {
-	assert(pRenderer != nullptr && pSceneManager != nullptr && "GameServices needs the renderer and scene manager");
+	assert(pRenderer != nullptr && pSceneManager != nullptr && pAudio != nullptr && "GameServices needs the engine's services");
 	mp_renderer = pRenderer;
 	mp_sceneManager = pSceneManager;
+	mp_audio = pAudio;
 }
 
 CraigError Craig::GameServices::loadScene(const std::string& scenePath)
@@ -31,6 +32,12 @@ Craig::SoundProbeReadout Craig::GameServices::getSoundProbeReadout() const
 {
 	return mp_renderer->getSoundProbeReadout();
 }
+
+CraigError Craig::GameServices::playSoundLoop(const std::string& path) { return mp_audio->playLoop(path); }
+void Craig::GameServices::stopSoundLoop() { mp_audio->stop(); }
+void Craig::GameServices::setSoundMuted(bool muted) { mp_audio->setMuted(muted); }
+void Craig::GameServices::setSoundPathsEnabled(bool direct, bool reflections) { mp_audio->setPathsEnabled(direct, reflections); }
+Craig::AudioStatus Craig::GameServices::getAudioStatus() const { return mp_audio->getStatus(); }
 
 Craig::Scene* Craig::GameServices::getCurrentScene() const
 {

@@ -33,6 +33,7 @@ namespace Craig {
 		Craig::Renderer* mp_Renderer		 = nullptr;
 		Craig::SceneManager* mp_SceneManager = nullptr;
 		Craig::PhysicsEngine* mp_PhysicsEngine = nullptr;
+		Craig::Audio* mp_Audio = nullptr;
 		Craig::Game* mp_Game = nullptr; // not owned, main.cpp is
 
 		// edit/play/pause etc, decides what ticks each frame

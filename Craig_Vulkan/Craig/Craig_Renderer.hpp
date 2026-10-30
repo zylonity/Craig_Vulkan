@@ -5,6 +5,8 @@
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 
 #include <optional>
+#include <functional>
+#include <utility>
 #include <vector>
 #include <array>
 #include <vulkan/vulkan.hpp>
@@ -48,6 +50,8 @@ namespace Craig {
 		void disableSoundProbe();
 		void setSoundProbeMode(uint32_t mode, bool running);
 		SoundProbeReadout getSoundProbeReadout() const;
+		//Called whenever the sound results get thrown away, the audio uses it to go quiet
+		void setSoundProbeInvalidationCallback(std::function<void()> callback) { m_soundInvalidated = std::move(callback); }
 
 		bool& getVSyncState() { return m_swapChain.m_vsyncEnabled; };
 		void refreshSwapChain() { recreateSwapChain(); };
@@ -150,6 +154,7 @@ namespace Craig {
 		void drawSoundProbeReadout();
 		void drawSoundProbeRays();
 
+		std::function<void()> m_soundInvalidated;
 		std::string m_soundListener;
 		std::string m_soundSource;
 		bool m_soundConfigured = false;

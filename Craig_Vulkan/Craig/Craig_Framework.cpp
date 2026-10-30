@@ -48,12 +48,16 @@ CraigError Craig::Framework::init() {
 	mp_SceneManager = new Craig::SceneManager;
 	mp_Renderer = new Craig::Renderer;
 	mp_PhysicsEngine = new Craig::PhysicsEngine;
+	mp_Audio = new Craig::Audio;
+	//Whenever the renderer throws away its sound results the audio has to go quiet too
+	mp_Renderer->setSoundProbeInvalidationCallback([this] { mp_Audio->invalidate(); });
 
 	//Check they were succesfully allocated just in case
 	assert(mp_Window != nullptr && "mp_Window failed to allocate memory");
 	assert(mp_SceneManager != nullptr && "mp_SceneManager failed to allocate memory");
 	assert(mp_Renderer != nullptr && "mp_Renderer failed to allocate memory");
 	assert(mp_PhysicsEngine != nullptr && "mp_PhysicsEngine failed to allocate memory");
+	assert(mp_Audio != nullptr && "mp_Audio failed to allocate memory");
 
 	//Initialise the objects
 	ret = mp_Window->init();
@@ -85,7 +89,7 @@ CraigError Craig::Framework::init() {
 	assert(ret == CRAIG_SUCCESS);
 
 	// after everything the game might want is up
-	m_gameServices.init(mp_Renderer, mp_SceneManager);
+	m_gameServices.init(mp_Renderer, mp_SceneManager, mp_Audio);
 	if (mp_Game != nullptr) {
 		ret = mp_Game->init(&m_gameServices);
 		logIfFailed(ret, "Game init");
@@ -199,6 +203,9 @@ CraigError Craig::Framework::update() {
 	logIfFailed(ret, "Renderer update");
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer failed to update");
 
+	//After rendering so the audio gets this frame's result (or hears that it got thrown away)
+	mp_Audio->update(mp_Renderer->getSoundProbeReadout(), mode.runGameplay && !worldFrozenByGame);
+
 	CRAIG_PROFILE_END_FRAME();
 
 	return ret;
@@ -237,6 +244,13 @@ CraigError Craig::Framework::terminate() {
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer didn't terminate properly"); //Check it closed properly
 	delete mp_Renderer; //Delete the scene manager
 	mp_Renderer = nullptr; //Set the pointer to null (Might not be done by default, just in case)
+
+	//After the renderer's last invalidation callback, and before the window calls SDL_Quit
+	ret = mp_Audio->terminate();
+	logIfFailed(ret, "Audio terminate");
+	assert(ret == CRAIG_SUCCESS && "mp_Audio didn't terminate properly");
+	delete mp_Audio;
+	mp_Audio = nullptr;
 
 	ret = mp_Window->terminate(); //Delete left over items in memory
 	logIfFailed(ret, "Window terminate");

@@ -3,11 +3,18 @@
 #include <glm/gtx/quaternion.hpp>
 #include "Craig/Craig_Scene.hpp"
 
+#include <array>
 #include <cassert>
 #include <cmath>
 #if defined(IMGUI_ENABLED)
 #include "imgui.h"
 #endif
+
+namespace {
+	//Clicks make separate echoes easy to hear, a steady tone mostly just changes colour
+	constexpr std::array<const char*, 2> kSoundNames = {"Clicks (loop)", "Tone (loop)"};
+	constexpr std::array<const char*, 2> kSoundPaths = {"data/audio/clicks_loop.wav", "data/audio/door_loop.wav"};
+}
 
 CraigError Game::SoundDemo::init(Craig::GameServices* pServices) {
 	assert(pServices != nullptr && "SoundDemo needs the game services");
@@ -17,6 +24,7 @@ CraigError Game::SoundDemo::init(Craig::GameServices* pServices) {
 
 CraigError Game::SoundDemo::terminate() {
 	mp_services->disableSoundProbe();
+	mp_services->stopSoundLoop();
 	return CRAIG_SUCCESS;
 }
 
@@ -26,10 +34,12 @@ void Game::SoundDemo::onPlayStarted(bool startedFromEditor) {
 	m_time = 0.0f;
 	m_referenceCase = ReferenceCase::MovingDoor;
 	m_referenceFailed = false;
+	if (m_probeReady) mp_services->playSoundLoop(kSoundPaths[m_sound]);
 }
 
 void Game::SoundDemo::onPlayStopped() {
 	mp_services->disableSoundProbe();
+	mp_services->stopSoundLoop();
 	m_probeReady = false;
 }
 
@@ -101,8 +111,23 @@ void Game::SoundDemo::drawImGui() {
 		const auto probe = mp_services->getSoundProbeReadout();
 		if (probe.hasResult) ImGui::Text("GPU: %.4f, difference: %.4f", probe.obstruction, std::abs(probe.obstruction - expected));
 	}
+	ImGui::Separator();
 	ImGui::TextUnformatted("Use the engine toolbar to play, pause, step and stop");
 	ImGui::TextUnformatted("Sound propagation shows the last completed GPU result, not a synchronous check");
+	const auto audio = mp_services->getAudioStatus();
+	ImGui::Text("Audio: %s", Craig::Audio::stateName(audio.state));
+	if (audio.available) {
+		bool muted = audio.muted;
+		bool direct = audio.directEnabled;
+		if (ImGui::Checkbox("Mute", &muted)) mp_services->setSoundMuted(muted);
+		ImGui::SameLine();
+		if (ImGui::Checkbox("Direct", &direct)) mp_services->setSoundPathsEnabled(direct, audio.reflectionsEnabled);
+		if (ImGui::Combo("Sound", &m_sound, kSoundNames.data(), static_cast<int>(kSoundNames.size())) && m_probeReady) {
+			mp_services->playSoundLoop(kSoundPaths[m_sound]);
+		}
+		ImGui::Text("Playing %u arrivals, envelope %.3f, old results fade out after 250 ms", audio.arrivals, audio.gain);
+		ImGui::TextUnformatted("Direct: equal power pan, no HRTF");
+	}
 	ImGui::End();
 #endif
 }

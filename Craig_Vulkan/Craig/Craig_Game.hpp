@@ -1,6 +1,7 @@
 #pragma once
 #include "Craig_Constants.hpp"
 #include "Craig_SoundProbe.hpp"
+#include "Craig_Audio.hpp"
 
 #include <string>
 
@@ -15,7 +16,7 @@ namespace Craig {
 	class GameServices {
 
 	public:
-		void init(Craig::Renderer* pRenderer, Craig::SceneManager* pSceneManager);
+		void init(Craig::Renderer* pRenderer, Craig::SceneManager* pSceneManager, Craig::Audio* pAudio);
 
 		// swaps straight away, don't call it from inside a scene/game object loop
 		CraigError loadScene(const std::string& scenePath);
@@ -23,6 +24,11 @@ namespace Craig {
 		CraigError configureSoundProbe(const std::string& listener, const std::string& source, uint64_t sourceId);
 		void disableSoundProbe();
 		SoundProbeReadout getSoundProbeReadout() const;
+		CraigError playSoundLoop(const std::string& path);
+		void stopSoundLoop();
+		void setSoundMuted(bool muted);
+		void setSoundPathsEnabled(bool direct, bool reflections);
+		AudioStatus getAudioStatus() const;
 
 		// editor: back to edit mode, no editor: closes the app
 		// happens next frame
@@ -33,6 +39,7 @@ namespace Craig {
 	private:
 		Craig::Renderer* mp_renderer = nullptr;
 		Craig::SceneManager* mp_sceneManager = nullptr;
+		Craig::Audio* mp_audio = nullptr;
 		bool m_exitRequested = false;
 	};
 

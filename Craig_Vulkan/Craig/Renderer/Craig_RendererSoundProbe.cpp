@@ -46,6 +46,7 @@ void Craig::Renderer::resetSoundProbeContext(bool clearDebugRays) {
         mv_soundDebugRays.clear();
         mv_soundDebugPaths.clear();
     }
+    if (m_soundInvalidated) m_soundInvalidated();
     m_soundPropagation.stop();
     m_soundContextActive = false;
     m_soundResult.reset();
