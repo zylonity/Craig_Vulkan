@@ -10,6 +10,7 @@
 
 //The callback can't ever wait on a lock, so these have to be real lock free atomics
 static_assert(std::atomic<uint8_t>::is_always_lock_free);
+static_assert(std::atomic<uint64_t>::is_always_lock_free);
 static_assert(std::atomic<float>::is_always_lock_free);
 
 CraigError Craig::Audio::init() {
@@ -59,9 +60,22 @@ CraigError Craig::Audio::loadWave(const std::string& path) {
 	return CRAIG_SUCCESS;
 }
 
-CraigError Craig::Audio::playLoop(const std::string& path) { return openSound(path); }
+CraigError Craig::Audio::playLoop(const std::string& path) { return openSound(path, true); }
 
-CraigError Craig::Audio::openSound(const std::string& path) {
+CraigError Craig::Audio::prepareOneShot(const std::string& path) { return openSound(path, false); }
+
+void Craig::Audio::playOneShot() {
+	if (!m_playing || m_looping) return;
+	const uint64_t command = m_playbackCommand.load(std::memory_order_relaxed);
+	m_playbackCommand.store((command & ~kShotCountMask) | static_cast<uint32_t>(command + 1), std::memory_order_release);
+}
+
+void Craig::Audio::cancelOneShot() {
+	const uint64_t command = m_playbackCommand.load(std::memory_order_relaxed);
+	m_playbackCommand.store((command & ~kShotCountMask) + (kShotCountMask + 1), std::memory_order_release);
+}
+
+CraigError Craig::Audio::openSound(const std::string& path, bool looping) {
 	//Only ever called from the main thread, the old callback gets taken off before we touch any of its memory
 	terminate();
 	if (init() != CRAIG_SUCCESS) return CRAIG_FAIL;
@@ -73,7 +87,13 @@ CraigError Craig::Audio::openSound(const std::string& path) {
 	//Allocate everything the callback needs BEFORE the callback exists
 	for (auto& line : mv_delayLines) line.assign(kDelayCapacity, 0.0f);
 	m_writeIndex = 0;
-	m_cursor = 0.0;
+	m_looping = looping;
+	//A one shot starts finished, it waits for a press
+	m_cursor = looping ? 0.0 : static_cast<double>(mv_wave.size());
+	m_playbackCommand.store(0, std::memory_order_relaxed);
+	m_consumedPlaybackCommand = 0;
+	m_voices = {};
+	m_delayFrames = kDelayCapacity;
 	m_lowSplit = 0.0f;
 	m_highSplit = 0.0f;
 	m_gain = 0.0f;
@@ -93,7 +113,7 @@ CraigError Craig::Audio::openSound(const std::string& path) {
 	}
 	m_playing = true;
 	m_state = AudioStatus::State::NoResult;
-	Logger::audio().info("Loop ready on SDL {} (silent until there's a fresh result)", SDL_GetCurrentAudioDriver());
+	Logger::audio().info("{} ready on SDL {} (silent until there's a fresh result)", looping ? "Loop" : "One-shot sound", SDL_GetCurrentAudioDriver());
 	return CRAIG_SUCCESS;
 }
 
@@ -115,6 +135,8 @@ void Craig::Audio::publish(const SoundProbeReadout* probe, uint64_t deadlineMs) 
 }
 
 void Craig::Audio::invalidate() {
+	//Presses from before a pause/scene change shouldn't go off later on
+	cancelOneShot();
 	publish(nullptr, 0);
 	m_state = AudioStatus::State::NoResult;
 }
@@ -160,6 +182,7 @@ void Craig::Audio::update(const SoundProbeReadout& probe, bool worldRunning) {
 		publish(&probe, SDL_GetTicks() + static_cast<uint64_t>(kMaxResultAgeMs - probe.ageMs));
 		return;
 	}
+	cancelOneShot();
 	publish(nullptr, 0);
 }
 
@@ -190,6 +213,8 @@ void Craig::Audio::renderTaps(const RenderSet& set, float weight, uint32_t write
 	if (weight <= 0.0f) return;
 	constexpr uint32_t mask = kDelayCapacity - 1;
 	for (uint32_t i = 0; i < set.count; ++i) {
+		//A cancelled shot is still sitting in the delay line, don't read further back than the cancel
+		if (set.delays[i] > m_delayFrames) continue;
 		const uint32_t read = (writeIndex - set.delays[i]) & mask;
 		const Tap& tap = set.taps[i];
 		const float sample = weight * (tap.gains[0] * mv_delayLines[0][read] + tap.gains[1] * mv_delayLines[1][read] +
@@ -205,13 +230,14 @@ void Craig::Audio::mix(const SDL_AudioSpec& spec, float* buffer, int bytes, uint
 	//No allocating, logging, locks or Vulkan in here - https://wiki.libsdl.org/SDL3/SDL_SetAudioPostmixCallback
 	const int frames = bytes / static_cast<int>(sizeof(float)) / spec.channels;
 	const double step = static_cast<double>(kWaveRate) / spec.freq;
-	const auto readSample = [&](double& cursor) {
+	const auto readSample = [&](double& cursor, bool looping) {
+		if (cursor >= mv_wave.size()) return 0.0f;
 		const size_t index = static_cast<size_t>(cursor);
 		const float fraction = static_cast<float>(cursor - index);
-		const float next = index + 1 < mv_wave.size() ? mv_wave[index + 1] : mv_wave[0];
+		const float next = index + 1 < mv_wave.size() ? mv_wave[index + 1] : (looping ? mv_wave[0] : 0.0f);
 		const float sample = std::lerp(mv_wave[index], next, fraction);
 		cursor += step;
-		if (cursor >= mv_wave.size()) cursor = std::fmod(cursor, static_cast<double>(mv_wave.size()));
+		if (looping && cursor >= mv_wave.size()) cursor = std::fmod(cursor, static_cast<double>(mv_wave.size()));
 		return sample;
 	};
 	//One pole low passes at 800 Hz and 8 kHz, subtracting them gives the three bands
@@ -243,7 +269,36 @@ void Craig::Audio::mix(const SDL_AudioSpec& spec, float* buffer, int bytes, uint
 		const bool audible = m_current.audible && sampleTimeMs < m_current.deadlineMs;
 		m_gain = audible ? std::min(1.0f, m_gain + riseStep) : std::max(0.0f, m_gain - silenceStep);
 
-		const float dry = readSample(m_cursor);
+		if (!m_looping) {
+			const uint64_t command = m_playbackCommand.load(std::memory_order_acquire);
+			//New cancel generation, stop every voice and forget what's in the delay lines
+			if ((command & ~kShotCountMask) != (m_consumedPlaybackCommand & ~kShotCountMask)) {
+				m_voices = {};
+				m_lowSplit = m_highSplit = 0.0f;
+				m_delayFrames = 0;
+				m_consumedPlaybackCommand = command & ~kShotCountMask;
+			}
+			//Only start once the paths are actually audible, otherwise the start of the sound gets faded in
+			uint32_t pending = static_cast<uint32_t>(command) - static_cast<uint32_t>(m_consumedPlaybackCommand);
+			if (pending && audible && m_gain >= 0.999f) {
+				//If all 16 are busy extra presses get ignored, better than cutting one off halfway
+				for (auto& voice : m_voices) {
+					if (!pending) break;
+					if (!voice.active) { voice = {0.0, true}; --pending; }
+				}
+				m_consumedPlaybackCommand = command;
+			}
+		}
+		//All the voices come from the same source, so they can just be added together before the propagation
+		float dry = m_looping ? readSample(m_cursor, true) : 0.0f;
+		if (!m_looping) {
+			for (auto& voice : m_voices) {
+				if (!voice.active) continue;
+				dry += readSample(voice.cursor, false);
+				voice.active = voice.cursor < mv_wave.size();
+			}
+		}
+		//Finished voices feed in zeros, so the delays can still play out
 		m_lowSplit += lowCoefficient * (dry - m_lowSplit);
 		m_highSplit += highCoefficient * (dry - m_highSplit);
 		constexpr uint32_t mask = kDelayCapacity - 1;
@@ -257,6 +312,7 @@ void Craig::Audio::mix(const SDL_AudioSpec& spec, float* buffer, int bytes, uint
 		renderTaps(m_previous, 1.0f - m_fade, m_writeIndex, left, right);
 		m_fade = std::min(1.0f, m_fade + fadeStep);
 		m_writeIndex = (m_writeIndex + 1) & mask;
+		m_delayFrames = std::min(kDelayCapacity, m_delayFrames + 1);
 
 		//Clamp instead of letting it wrap round into noise
 		left = std::clamp(left * kOutputGain * m_gain, -1.0f, 1.0f);

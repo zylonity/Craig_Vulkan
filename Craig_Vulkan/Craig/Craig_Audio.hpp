@@ -28,6 +28,10 @@ namespace Craig {
 		~Audio() { terminate(); }
 		CraigError init();
 		CraigError playLoop(const std::string& path);
+		//Loads it but doesn't play until playOneShot
+		CraigError prepareOneShot(const std::string& path);
+		//Each press adds another voice, ones already playing carry on
+		void playOneShot();
 		void stop();
 		//Goes silent until the next valid result, scene swaps and pauses call this
 		void invalidate();
@@ -42,6 +46,10 @@ namespace Craig {
 		static constexpr uint64_t kMaxResultAgeMs = 250;
 
 	private:
+		struct Voice {
+			double cursor = 0.0;
+			bool active = false;
+		};
 		struct Tap {
 			float delaySeconds;
 			std::array<float, 3> gains;
@@ -85,13 +93,16 @@ namespace Craig {
 			std::atomic<uint8_t> m_middle{1};
 		};
 
+		static constexpr uint32_t kMaxOneShotVoices = 16;
+		static constexpr uint64_t kShotCountMask = 0xffffffffull;
 		static constexpr int kWaveRate = 48000;
 		static constexpr float kOutputGain = 1.2f;
 		static constexpr float kTransitionSeconds = 0.03f; //Crossfade between two arrival sets
 		static constexpr float kSilenceFadeSeconds = 0.01f;
 		static constexpr uint32_t kDelayCapacity = kSoundDelayCapacity;
 		CraigError loadWave(const std::string& path);
-		CraigError openSound(const std::string& path);
+		CraigError openSound(const std::string& path, bool looping);
+		void cancelOneShot();
 		void publish(const SoundProbeReadout* probe, uint64_t deadlineMs);
 		static void SDLCALL postmix(void* userdata, const SDL_AudioSpec* spec, float* buffer, int bytes);
 		void mix(const SDL_AudioSpec& spec, float* buffer, int bytes, uint64_t nowMs);
@@ -107,11 +118,18 @@ namespace Craig {
 		Mailbox m_mailbox;
 		std::atomic<float> m_reportedGain{0.0f};
 		std::atomic<uint32_t> m_reportedArrivals{0};
+		//Main thread writes it, callback reads it, both halves in one atomic so a cancel and a play can't tear
+		//High word cancels a generation, low word counts presses so two quick presses don't merge into one
+		std::atomic<uint64_t> m_playbackCommand{0};
+		bool m_looping = true; //Doesn't change while the callback's registered
 
 		//Everything below here belongs to the audio thread while the callback's registered
 		std::vector<float> mv_wave;
 		std::array<std::vector<float>, 3> mv_delayLines; //One per band
 		uint32_t m_writeIndex = 0;
+		uint64_t m_consumedPlaybackCommand = 0;
+		std::array<Voice, kMaxOneShotVoices> m_voices{};
+		uint32_t m_delayFrames = kDelayCapacity; //How much of the delay line is from this context, so a cancelled shot can't leak back out
 		double m_cursor = 0.0;
 		float m_lowSplit = 0.0f;
 		float m_highSplit = 0.0f;

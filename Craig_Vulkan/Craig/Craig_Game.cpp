@@ -34,6 +34,8 @@ Craig::SoundProbeReadout Craig::GameServices::getSoundProbeReadout() const
 }
 
 CraigError Craig::GameServices::playSoundLoop(const std::string& path) { return mp_audio->playLoop(path); }
+CraigError Craig::GameServices::prepareSoundEffect(const std::string& path) { return mp_audio->prepareOneShot(path); }
+void Craig::GameServices::playSoundEffect() { mp_audio->playOneShot(); }
 void Craig::GameServices::stopSoundLoop() { mp_audio->stop(); }
 void Craig::GameServices::setSoundMuted(bool muted) { mp_audio->setMuted(muted); }
 void Craig::GameServices::setSoundPathsEnabled(bool direct, bool reflections) { mp_audio->setPathsEnabled(direct, reflections); }

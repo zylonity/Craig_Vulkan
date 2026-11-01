@@ -12,8 +12,9 @@
 
 namespace {
 	//Clicks make separate echoes easy to hear, a steady tone mostly just changes colour
-	constexpr std::array<const char*, 2> kSoundNames = {"Clicks (loop)", "Tone (loop)"};
-	constexpr std::array<const char*, 2> kSoundPaths = {"data/audio/clicks_loop.wav", "data/audio/door_loop.wav"};
+	constexpr std::array<const char*, 3> kSoundNames = {"Impact (button)", "Clicks (loop)", "Tone (loop)"};
+	constexpr std::array<const char*, 3> kSoundPaths = {"data/audio/impact.wav", "data/audio/clicks_loop.wav", "data/audio/door_loop.wav"};
+	constexpr std::array<bool, 3> kSoundIsOneShot = {true, false, false};
 }
 
 CraigError Game::SoundDemo::init(Craig::GameServices* pServices) {
@@ -34,7 +35,10 @@ void Game::SoundDemo::onPlayStarted(bool startedFromEditor) {
 	m_time = 0.0f;
 	m_referenceCase = ReferenceCase::MovingDoor;
 	m_referenceFailed = false;
-	if (m_probeReady) mp_services->playSoundLoop(kSoundPaths[m_sound]);
+	if (m_probeReady) {
+		if (kSoundIsOneShot[m_sound]) mp_services->prepareSoundEffect(kSoundPaths[m_sound]);
+		else mp_services->playSoundLoop(kSoundPaths[m_sound]);
+	}
 }
 
 void Game::SoundDemo::onPlayStopped() {
@@ -116,6 +120,18 @@ void Game::SoundDemo::drawImGui() {
 	ImGui::TextUnformatted("Sound propagation shows the last completed GPU result, not a synchronous check");
 	const auto audio = mp_services->getAudioStatus();
 	ImGui::Text("Audio: %s", Craig::Audio::stateName(audio.state));
+	if (kSoundIsOneShot[m_sound]) {
+		const auto probe = mp_services->getSoundProbeReadout();
+		const bool ready = m_probeReady && audio.available && !audio.muted && probe.hasResult &&
+			probe.state == Craig::SoundProbeReadout::State::Ready && probe.ageMs >= 0.0 &&
+			probe.ageMs < Craig::Audio::kMaxResultAgeMs;
+		ImGui::BeginDisabled(!ready);
+		if (ImGui::Button("Play sound")) mp_services->playSoundEffect();
+		ImGui::EndDisabled();
+		ImGui::SameLine();
+		ImGui::TextUnformatted("Each press adds another, earlier ones keep playing");
+		if (!ready) ImGui::TextUnformatted("Needs Play, unmuted audio and fresh paths");
+	}
 	if (audio.available) {
 		bool muted = audio.muted;
 		bool direct = audio.directEnabled;
@@ -123,7 +139,8 @@ void Game::SoundDemo::drawImGui() {
 		ImGui::SameLine();
 		if (ImGui::Checkbox("Direct", &direct)) mp_services->setSoundPathsEnabled(direct, audio.reflectionsEnabled);
 		if (ImGui::Combo("Sound", &m_sound, kSoundNames.data(), static_cast<int>(kSoundNames.size())) && m_probeReady) {
-			mp_services->playSoundLoop(kSoundPaths[m_sound]);
+			if (kSoundIsOneShot[m_sound]) mp_services->prepareSoundEffect(kSoundPaths[m_sound]);
+			else mp_services->playSoundLoop(kSoundPaths[m_sound]);
 		}
 		ImGui::Text("Playing %u arrivals, envelope %.3f, old results fade out after 250 ms", audio.arrivals, audio.gain);
 		ImGui::TextUnformatted("Direct: equal power pan, no HRTF");

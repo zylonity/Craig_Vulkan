@@ -25,6 +25,8 @@ namespace Craig {
 		void disableSoundProbe();
 		SoundProbeReadout getSoundProbeReadout() const;
 		CraigError playSoundLoop(const std::string& path);
+		CraigError prepareSoundEffect(const std::string& path);
+		void playSoundEffect();
 		void stopSoundLoop();
 		void setSoundMuted(bool muted);
 		void setSoundPathsEnabled(bool direct, bool reflections);
