@@ -86,6 +86,8 @@ Craig::SoundProbeReadout Craig::Renderer::getSoundProbeReadout() const {
         readout.sequenceId = m_soundResult->sequenceId;
         readout.arrivals = m_soundResult->arrivals;
         readout.arrivalCount = m_soundResult->arrivalCount;
+        readout.reverbEnergy = m_soundResult->reverbEnergy;
+        readout.reverbEnabled = m_soundResult->reverbEnabled;
         //Always work this out again, leaving a result on screen for a second doesn't make it a fresh one
         readout.ageMs = std::chrono::duration<double, std::milli>(SoundPropagation::Clock::now() - m_soundResult->inputTime).count();
     }
@@ -174,6 +176,9 @@ void Craig::Renderer::updateSoundProbe() {
     request.sourceId = m_soundSourceId;
     request.sequenceId = m_soundSequence++;
     request.inputTime = inputTime;
+    request.reflectionRayCount = static_cast<uint32_t>(m_soundReflectionRayCount);
+    request.maxBounces = static_cast<uint32_t>(m_soundMaxBounces);
+    request.reverbEnabled = m_soundReverbEnabled;
     request.listener = {origin.x, origin.y, origin.z};
     request.source = {endpoint.x, endpoint.y, endpoint.z};
     //The listener object's +X is its right ear, not the editor camera's
@@ -210,10 +215,15 @@ void Craig::Renderer::drawSoundProbeReadout() {
     ImGui::Text("State: %s", states[static_cast<unsigned>(readout.state)]);
     ImGui::Text("%s -> %s", m_soundSource.c_str(), m_soundListener.c_str());
     bool changed = ImGui::SliderInt("Direct rays", &m_soundRayCount, 1, SoundPropagation::kMaxRayCount);
+    changed |= ImGui::SliderInt("Reflection rays", &m_soundReflectionRayCount, 1, SoundPropagation::kMaxReflectionRayCount);
+    changed |= ImGui::SliderInt("Max bounces", &m_soundMaxBounces, 0, kReverbBounces);
+    m_soundReflectionRayCount = std::clamp(m_soundReflectionRayCount, 1, static_cast<int>(SoundPropagation::kMaxReflectionRayCount));
+    m_soundMaxBounces = std::clamp(m_soundMaxBounces, 0, static_cast<int>(kReverbBounces));
     changed |= ImGui::InputInt("Seed", &m_soundSeed);
     changed |= ImGui::SliderFloat2("Emitter width / height (m)", m_soundEmitterSize, 0.0f, 4.0f);
     m_soundRayCount = std::clamp(m_soundRayCount, 1, static_cast<int>(SoundPropagation::kMaxRayCount));
     for (float& size : m_soundEmitterSize) size = std::isfinite(size) ? std::clamp(size, 0.0f, 4.0f) : 0.0f;
+    changed |= ImGui::Checkbox("GPU reflections (Steam Audio method)", &m_soundReverbEnabled);
     if (changed) resetSoundProbeContext();
     ImGui::Checkbox("Show sound paths", &m_showSoundPaths);
     ImGui::SameLine();
@@ -223,7 +233,9 @@ void Craig::Renderer::drawSoundProbeReadout() {
         ImGui::Text("Last submitted: %zu rays, sequence %llu (frozen on pause)",
             mv_soundDebugRays.size(), static_cast<unsigned long long>(m_soundDebugSequence));
     }
-    ImGui::TextUnformatted("Uniform world-XY rectangle, 1 ray uses its centre");
+    ImGui::TextUnformatted("Direct: uniform world-XY rectangle, 1 ray uses its centre");
+    ImGui::TextUnformatted("Reflections: Steam Audio 4.8.1's method, rays start at the listener and connect to the source");
+    ImGui::TextUnformatted("Order 0 energy in 10 ms bins after the direct sound, 2 s long");
     if (readout.hasResult && !changed) {
         ImGui::Text("Obstruction: %.3f (%u / %u blocked), seed %u", readout.obstruction, readout.blockedRays, readout.rayCount, readout.seed);
         ImGui::Text("Input age: %.2f ms, sequence %llu", readout.ageMs, static_cast<unsigned long long>(readout.sequenceId));

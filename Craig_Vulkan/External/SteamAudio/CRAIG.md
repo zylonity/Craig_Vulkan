@@ -15,3 +15,7 @@ Local changes, each marked in the file:
 - `reconstructor.cpp`: no profiler/log dependency; arithmetic unchanged.
 - `sh_order.h`, `standalone_memory.cpp`: new, replace the SH library's channel
   count and the global context's allocator.
+
+The listener-side ray tracing (`reflection_simulator.cpp`) is translated to GLSL in
+`data/shaders/SteamAudioPropagation.glsl` / `SoundPropagation.comp`, and
+`sampling.cpp` to `Craig/Renderer/Craig_SteamAudioSampling.hpp`.

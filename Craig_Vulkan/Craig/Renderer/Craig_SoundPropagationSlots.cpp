@@ -1,4 +1,5 @@
 #include "Craig_SoundPropagation.hpp"
+#include "Craig_SteamAudioSampling.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -32,6 +33,9 @@ void Craig::SoundPropagation::createResultSlots(uint32_t instanceCapacity) {
         createBuffer(slot.results, sizeof(uint32_t) * kMaxRayCount,
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, true);
         createBuffer(slot.instanceInfo, m_instanceCapacity * sizeof(InstanceInfo), vk::BufferUsageFlagBits::eStorageBuffer, true);
+        createBuffer(slot.samples, sizeof(std::array<float, 4>) * (kMaxReflectionRayCount + kSteamDiffuseSamples), vk::BufferUsageFlagBits::eStorageBuffer, true);
+        createBuffer(slot.hits, sizeof(std::array<float, 4>) * kMaxReflectionRayCount * kReverbBounces, vk::BufferUsageFlagBits::eStorageBuffer, true);
+        createBuffer(slot.reverb, sizeof(std::array<float, 4>) * kMaxReflectionRayCount * kReverbBounces, vk::BufferUsageFlagBits::eStorageBuffer, true);
 
         //The TLAS gets made once at full capacity and rebuilt in place every submission
         VkAccelerationStructureGeometryKHR geometry{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
@@ -96,6 +100,7 @@ void Craig::SoundPropagation::stop() {
 
 Craig::SoundPropagation::SubmitStatus Craig::SoundPropagation::trySubmit(Scene& scene, const Request& request) {
     assert(request.rayCount > 0 && request.rayCount <= kMaxRayCount);
+    assert(request.reflectionRayCount <= kMaxReflectionRayCount && request.maxBounces <= kReverbBounces);
     m_statistics.requested++;
     collectCompleted();
 
@@ -129,6 +134,14 @@ void Craig::SoundPropagation::submitSlot(ResultSlot& slot, const Request& reques
         uploadBuffer(slot.instanceInfo, mv_instanceInfoSnapshot.data(), mv_instanceInfoSnapshot.size() * sizeof(mv_instanceInfoSnapshot[0]));
     }
     uploadBuffer(slot.rays, request.rays.data(), sizeof(Ray) * request.rayCount);
+    if (slot.samplingRayCount != request.reflectionRayCount) {
+        //The sphere directions depend on how many rays there are, only remade when that changes
+        //Safe to write since only a finished slot gets here
+        std::array<std::array<float, 4>, kMaxReflectionRayCount + kSteamDiffuseSamples> samples{};
+        fillSteamAudioSamples(std::span(samples).first(request.reflectionRayCount), std::span(samples).last(kSteamDiffuseSamples));
+        uploadBuffer(slot.samples, samples.data(), sizeof(samples));
+        slot.samplingRayCount = request.reflectionRayCount;
+    }
 
     device.resetCommandPool(slot.commandPool);
     slot.commandBuffer.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
@@ -203,6 +216,32 @@ void Craig::SoundPropagation::collectCompleted() {
 
         Result result{};
         buildArrivals(slot, result);
+        result.reverbEnabled = slot.request.reverbEnabled;
+        if (result.reverbEnabled) {
+            if (vmaInvalidateAllocation(mp_Device->getVmaAllocator(), slot.reverb.allocation, 0, VK_WHOLE_SIZE) != VK_SUCCESS) {
+                throw std::runtime_error("reverb-slot readback invalidation failed");
+            }
+            //Add every bounce's energy into the 10 ms bin it lands in
+            const auto* records = static_cast<const std::array<float, 4>*>(slot.reverb.pMapped);
+            for (uint32_t i = 0; i < slot.request.reflectionRayCount * kReverbBounces; ++i) {
+                const auto& record = records[i];
+                if (!std::isfinite(record[3]) || record[3] < 0.0f || record[3] >= kReverbBins * kReverbBinSeconds) {
+                    throw std::runtime_error("invalid reverb delay");
+                }
+                const uint32_t bin = std::min(kReverbBins - 1, static_cast<uint32_t>(record[3] / kReverbBinSeconds));
+                for (uint32_t band = 0; band < 3; ++band) {
+                    if (!std::isfinite(record[band]) || record[band] < 0.0f) throw std::runtime_error("invalid reverb energy");
+                    result.reverbEnergy[bin][band] += record[band];
+                }
+            }
+        }
+        if (slot.request.captureBounces) {
+            if (vmaInvalidateAllocation(mp_Device->getVmaAllocator(), slot.hits.allocation, 0, VK_WHOLE_SIZE) != VK_SUCCESS) {
+                throw std::runtime_error("result-slot readback invalidation failed");
+            }
+            const auto* hits = static_cast<const std::array<float, 4>*>(slot.hits.pMapped);
+            result.bounces.assign(hits, hits + (slot.request.reverbEnabled ? slot.request.reflectionRayCount * kReverbBounces : 0u));
+        }
         result.rayCount = slot.request.rayCount;
         result.seed = slot.request.seed;
         result.sceneGeneration = slot.request.sceneGeneration;

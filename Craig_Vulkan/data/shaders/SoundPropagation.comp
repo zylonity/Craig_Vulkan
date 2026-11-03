@@ -1,11 +1,22 @@
 #version 460
 #extension GL_EXT_ray_query : require
+#extension GL_GOOGLE_include_directive : require
+
+#include "SteamAudioPropagation.glsl"
 
 //Ray query setup adapted from Sascha Willems' rayquery example (MIT) - https://github.com/SaschaWillems/Vulkan/tree/master/shaders/glsl/rayquery
+//Reflections adapted from Valve Corporation's Steam Audio v4.8.1 reflection_simulator.cpp, Apache-2.0
+//Changed for ray queries, one omnidirectional source, order 0 energy and a random number generator per ray on the GPU
 layout(local_size_x = 64) in;
 
 layout(push_constant) uniform QuerySettings {
+    vec4 listener;
+    vec4 source;
     uint rayCount;
+    uint reflectionRayCount;
+    uint maxBounces;
+    uint seed;
+    uint captureBounces;
 };
 
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
@@ -13,17 +24,27 @@ layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
 //origin.w is tmin, direction.w is tmax
 struct Ray { vec4 origin; vec4 direction; };
 //Indexed by the TLAS instance's custom index
-struct InstanceInfo { uint material; };
+struct InstanceInfo { uint normalOffset; uint material; };
 //absorption.w is scattering, transmission.w is unused
 struct Material { vec4 absorption; vec4 transmission; };
 
 layout(std430, set = 0, binding = 1) readonly buffer RayInputs { Ray rays[]; };
 //0 = clear, otherwise 1 + the material it hit
 layout(std430, set = 0, binding = 2) writeonly buffer RayResults { uint blocked[]; };
+//Steam Audio makes these on the CPU, doing them in GLSL drifted away from upstream after a lot of bounces
+layout(std430, set = 0, binding = 3) readonly buffer Samples { vec4 sphereSamples[4096]; vec4 diffuseSamples[1024]; };
 layout(std430, set = 0, binding = 4) readonly buffer Instances { InstanceInfo instances[]; };
+//One object space normal per triangle, so we know which way a hit surface faces
+layout(std430, set = 0, binding = 5) readonly buffer Normals { vec4 normals[]; };
 layout(std430, set = 0, binding = 6) readonly buffer Materials { Material materials[]; };
+//Only for the bouncing rays overlay, w is 1 for a hit and 2 for flying off into nothing
+layout(std430, set = 0, binding = 7) writeonly buffer PathHits { vec4 hits[]; };
+//xyz is the order 0 SH energy, w is how long after the direct sound it arrives
+layout(std430, set = 0, binding = 8) writeonly buffer ReflectionResults { vec4 reflected[]; };
+const uint kMaxReflectionBounces = 64u;
+const float kReflectionDuration = 2.0;
 
-struct Hit { float t; uint material; };
+struct Hit { float t; vec3 normal; uint material; };
 
 //Closest hit instead of terminate on first hit, so we know which wall is actually in the way
 bool traceClosest(vec3 origin, vec3 direction, float tmin, float tmax, out Hit hit) {
@@ -33,16 +54,103 @@ bool traceClosest(vec3 origin, vec3 direction, float tmin, float tmax, out Hit h
     if (rayQueryGetIntersectionTypeEXT(query, true) != gl_RayQueryCommittedIntersectionTriangleEXT) return false;
 
     InstanceInfo info = instances[rayQueryGetIntersectionInstanceCustomIndexEXT(query, true)];
+    vec3 objectNormal = normals[info.normalOffset + rayQueryGetIntersectionPrimitiveIndexEXT(query, true)].xyz;
+    //Normals go back to world space with the inverse transpose, which is just the transpose of world to object
+    mat4x3 worldToObject = rayQueryGetIntersectionWorldToObjectEXT(query, true);
+    vec3 normal = normalize(transpose(mat3(worldToObject)) * objectNormal);
     hit.t = rayQueryGetIntersectionTEXT(query, true);
+    //Face the normal back at the ray, triangles are double sided for sound
+    hit.normal = dot(normal, direction) > 0.0 ? -normal : normal;
     hit.material = info.material;
     return true;
 }
 
+bool occluded(vec3 origin, vec3 direction, float tmax) {
+    rayQueryEXT query;
+    rayQueryInitializeEXT(query, topLevelAS, gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT,
+        0xff, origin, 0.0, direction, tmax);
+    while (rayQueryProceedEXT(query)) {}
+    return rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionTriangleEXT;
+}
+
+//xorshift, not the same random numbers as the CPU library (that uses std::default_random_engine, which changes per platform)
+//The launch directions, hemisphere tables, scattering chance and energy weights are all the same as upstream though
+uint randomBits(inout uint state) {
+    state ^= state << 13u;
+    state ^= state >> 17u;
+    state ^= state << 5u;
+    return state;
+}
+
+//Like Steam Audio, rays start at the listener and bounce round, every hit checks if it can see the source
+void traceReflections(uint index) {
+    uint rng = (index + 1u) * 747796405u + seed * 2891336453u;
+    if (rng == 0u) rng = 1u;
+    vec3 direction = sphereSamples[index].xyz;
+    vec3 origin = listener.xyz;
+    vec3 energy = vec3(1.0);
+    float accumulatedDistance = 0.0;
+    float directDelay = length(source.xyz - listener.xyz) / kSteamSoundSpeed;
+    bool tracing = true;
+
+    for (uint bounce = 0u; bounce < kMaxReflectionBounces; ++bounce) {
+        vec4 contribution = vec4(0.0);
+        vec4 debugHit = vec4(0.0);
+        Hit hit;
+        if (tracing && bounce < maxBounces && accumulatedDistance <= kReflectionDuration * kSteamSoundSpeed) {
+            if (!traceClosest(origin, direction, 0.0, 3.402823466e38, hit)) {
+                debugHit = vec4(direction, 2.0);
+                tracing = false;
+            }
+            else if (hit.t <= kSteamReceiverRadius) tracing = false;
+            else {
+                //After the first bounce a ray that goes through the source or back through the listener stops
+                if (bounce > 0u) {
+                    float sourceHit = steamSphereIntersection(origin, direction, source.xyz);
+                    float listenerHit = steamSphereIntersection(origin, direction, listener.xyz);
+                    if ((length(source.xyz - listener.xyz) > kSteamReceiverRadius && sourceHit >= 0.0 && sourceHit < hit.t) ||
+                        (listenerHit >= 0.0 && listenerHit < hit.t)) tracing = false;
+                }
+                if (tracing) {
+                    vec3 point = origin + direction * hit.t + kSteamSurfaceOffset * hit.normal;
+                    debugHit = vec4(point, 1.0);
+                    Material material = materials[hit.material];
+                    vec3 toSource = source.xyz - point;
+                    float sourceDistance = length(toSource);
+                    //Upstream skips anything closer than 1 m instead of clamping it, clamping gave bright spikes
+                    if (dot(hit.normal, toSource) >= 0.0 && sourceDistance > 1.0 &&
+                        !occluded(point, toSource / sourceDistance, sourceDistance)) {
+                        float delay = (accumulatedDistance + hit.t + sourceDistance) / kSteamSoundSpeed - directDelay;
+                        if (delay >= 0.0 && delay < kReflectionDuration) {
+                            contribution = vec4(steamReflectionEnergy(energy, material.absorption.xyz, material.absorption.w,
+                                direction, hit.normal, toSource / sourceDistance, sourceDistance, reflectionRayCount), delay);
+                        }
+                    }
+                    energy *= vec3(1.0) - material.absorption.xyz;
+                    accumulatedDistance += hit.t;
+                    origin = point;
+                    //Scatter into a random hemisphere direction, otherwise a mirror bounce
+                    float choice = float(randomBits(rng) >> 8u) / 16777216.0;
+                    if (choice < material.absorption.w) {
+                        uint sampleIndex = randomBits(rng) % kSteamDiffuseSamples;
+                        direction = steamTransformHemisphere(diffuseSamples[sampleIndex].xyz, hit.normal);
+                    }
+                    else direction = reflect(direction, hit.normal);
+                }
+            }
+        }
+        //Write zeros for the bounces that didn't happen too, otherwise a shorter request would read old data from the slot
+        reflected[index * kMaxReflectionBounces + bounce] = contribution;
+        if (captureBounces != 0u) hits[index * kMaxReflectionBounces + bounce] = debugHit;
+    }
+}
+
 void main() {
     uint index = gl_GlobalInvocationID.x;
-    if (index >= rayCount) return;
-
-    Ray ray = rays[index];
-    Hit hit;
-    blocked[index] = traceClosest(ray.origin.xyz, ray.direction.xyz, ray.origin.w, ray.direction.w, hit) ? 1u + hit.material : 0u;
+    if (index < rayCount) {
+        Ray ray = rays[index];
+        Hit hit;
+        blocked[index] = traceClosest(ray.origin.xyz, ray.direction.xyz, ray.origin.w, ray.direction.w, hit) ? 1u + hit.material : 0u;
+    }
+    if (index < reflectionRayCount) traceReflections(index);
 }

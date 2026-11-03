@@ -24,6 +24,7 @@ namespace Craig {
 		};
 
 		static constexpr uint32_t kMaxRayCount = 2048;
+		static constexpr uint32_t kMaxReflectionRayCount = 4096;
 		static constexpr size_t kResultSlotCount = 3; //How many submissions can be on the GPU at once
 		using Clock = std::chrono::steady_clock;
 
@@ -32,9 +33,13 @@ namespace Craig {
 			std::array<Ray, kMaxRayCount> rays;
 			uint32_t rayCount = 1;
 			uint32_t seed = 1;
+			uint32_t reflectionRayCount = 1024;
+			uint32_t maxBounces = 0;
 			std::array<float, 3> listener{};
 			std::array<float, 3> source{};
 			std::array<float, 3> listenerRight{1.0f, 0.0f, 0.0f}; //For panning
+			bool captureBounces = false; //Copies the listener rays' bounce points back for the overlay
+			bool reverbEnabled = true;
 			uint64_t sceneGeneration = 0;
 			uint64_t sourceId = 0;
 			uint64_t sequenceId = 0;
@@ -47,6 +52,9 @@ namespace Craig {
 			uint32_t seed = 1;
 			std::array<SoundArrival, kMaxSoundArrivals> arrivals{};
 			uint32_t arrivalCount = 0;
+			ReverbEnergy reverbEnergy{};
+			bool reverbEnabled = false;
+			std::vector<std::array<float, 4>> bounces; //kReverbBounces per listener ray, empty unless captureBounces was on
 			uint64_t sceneGeneration = 0;
 			uint64_t sourceId = 0;
 			uint64_t sequenceId = 0;
@@ -95,8 +103,20 @@ namespace Craig {
 			vk::DeviceAddress address = 0;
 		};
 
+		//Has to match the shader's push constant block
+		struct QuerySettings {
+			std::array<float, 4> listener;
+			std::array<float, 4> source;
+			uint32_t rayCount;
+			uint32_t reflectionRayCount;
+			uint32_t maxBounces;
+			uint32_t seed;
+			uint32_t captureBounces;
+		};
+
 		//Per TLAS instance, the shader finds it with the instance custom index
 		struct InstanceInfo {
+			uint32_t normalOffset; //Where this model's triangle normals start in the normal buffer
 			uint32_t material;
 		};
 
@@ -107,6 +127,10 @@ namespace Craig {
 			Buffer rays;
 			Buffer results;
 			Buffer instanceInfo;
+			Buffer samples; //Steam Audio's direction tables
+			uint32_t samplingRayCount = 0; //What the samples table was last made for
+			Buffer hits;
+			Buffer reverb;
 			AccelerationStructure tlas;
 			vk::CommandPool commandPool;
 			vk::CommandBuffer commandBuffer;
@@ -122,6 +146,7 @@ namespace Craig {
 			Buffer vertices;
 			Buffer indices;
 			AccelerationStructure blas;
+			uint32_t normalOffset = 0;
 		};
 
 		void loadEntryPoints();
@@ -155,6 +180,8 @@ namespace Craig {
 		std::vector<VkAccelerationStructureInstanceKHR> mv_instanceSnapshot;
 		std::vector<InstanceInfo> mv_instanceInfoSnapshot;
 		Buffer m_materialBuffer; //kAcousticMaterials, uploaded once
+		std::vector<std::array<float, 4>> mv_normals; //Object space triangle normals for every cached model
+		Buffer m_normalBuffer;
 		std::array<ResultSlot, kResultSlotCount> m_slots;
 		uint32_t m_instanceCapacity = 0; //Slot TLASes are sized for this many, set when the scene's prepared
 		vk::Semaphore m_VK_completionTimeline;

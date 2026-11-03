@@ -165,6 +165,9 @@ namespace Craig {
 		int m_soundRayCount = 128;
 		int m_soundSeed = 1;
 		float m_soundEmitterSize[2] = {2.0f, 1.0f}; //World XY width/height in metres
+		int m_soundReflectionRayCount = 1024;
+		int m_soundMaxBounces = 64;
+		bool m_soundReverbEnabled = true;
 		bool m_showSoundRays = false;
 		bool m_showSoundPaths = true;
 		std::vector<SoundArrival> mv_soundDebugPaths; //Copied from the last result so pausing keeps them on screen
