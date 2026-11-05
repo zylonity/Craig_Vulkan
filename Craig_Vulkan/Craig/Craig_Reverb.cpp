@@ -154,9 +154,10 @@ void Craig::Reverb::processSample(float input, int rate, float& left, float& rig
 	for (int i = 0; i < 3; ++i) {
 		auto& bank = m_banks[i];
 		if (m_previous >= 0) break;
-		if (bank.state.load() != Ready) continue;
-		if (bank.epoch != epoch || bank.rate != rate) { bank.state.store(Free); continue; }
-		bank.state.store(Active);
+		//Claim it before reading anything, the worker's allowed to replace one that's only Ready
+		uint8_t expected = Ready;
+		if (!bank.state.compare_exchange_strong(expected, Active, std::memory_order_acq_rel)) continue;
+		if (bank.epoch != epoch || bank.rate != rate) { bank.state.store(Free, std::memory_order_release); continue; }
 		m_previous = m_current;
 		m_current = i;
 		m_fade = m_previous >= 0 ? 0.0f : 1.0f;
