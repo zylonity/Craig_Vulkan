@@ -124,26 +124,32 @@ void Game::SoundDemo::drawImGui() {
 		const auto probe = mp_services->getSoundProbeReadout();
 		const bool ready = m_probeReady && audio.available && !audio.muted && probe.hasResult &&
 			probe.state == Craig::SoundProbeReadout::State::Ready && probe.ageMs >= 0.0 &&
-			probe.ageMs < Craig::Audio::kMaxResultAgeMs;
+			probe.ageMs < Craig::Audio::kMaxResultAgeMs &&
+			(!probe.reverbEnabled || !audio.reflectionsEnabled || audio.reverbReady);
 		ImGui::BeginDisabled(!ready);
 		if (ImGui::Button("Play sound")) mp_services->playSoundEffect();
 		ImGui::EndDisabled();
 		ImGui::SameLine();
 		ImGui::TextUnformatted("Each press adds another, earlier ones keep playing");
-		if (!ready) ImGui::TextUnformatted("Needs Play, unmuted audio and fresh paths");
+		if (!ready) ImGui::TextUnformatted("Needs Play, unmuted audio and fresh paths, the tail might still be getting built");
 	}
 	if (audio.available) {
 		bool muted = audio.muted;
 		bool direct = audio.directEnabled;
+		bool reflections = audio.reflectionsEnabled;
 		if (ImGui::Checkbox("Mute", &muted)) mp_services->setSoundMuted(muted);
 		ImGui::SameLine();
-		if (ImGui::Checkbox("Direct", &direct)) mp_services->setSoundPathsEnabled(direct, audio.reflectionsEnabled);
+		if (ImGui::Checkbox("Direct", &direct)) mp_services->setSoundPathsEnabled(direct, reflections);
+		ImGui::SameLine();
+		if (ImGui::Checkbox("Reflections", &reflections)) mp_services->setSoundPathsEnabled(direct, reflections);
 		if (ImGui::Combo("Sound", &m_sound, kSoundNames.data(), static_cast<int>(kSoundNames.size())) && m_probeReady) {
 			if (kSoundIsOneShot[m_sound]) mp_services->prepareSoundEffect(kSoundPaths[m_sound]);
 			else mp_services->playSoundLoop(kSoundPaths[m_sound]);
 		}
 		ImGui::Text("Playing %u arrivals, envelope %.3f, old results fade out after 250 ms", audio.arrivals, audio.gain);
-		ImGui::TextUnformatted("Direct: equal power pan, no HRTF");
+		ImGui::Text("Steam Audio-method GPU reflections: %s", audio.reverbFailed ? "filter preparation failed" :
+			(audio.reverbReady ? "ready" : "off / preparing"));
+		ImGui::TextUnformatted("Direct: equal power pan. Reflections: order 0 centred mono, no HRTF");
 	}
 	ImGui::End();
 #endif

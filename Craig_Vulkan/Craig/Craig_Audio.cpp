@@ -103,6 +103,9 @@ CraigError Craig::Audio::openSound(const std::string& path, bool looping) {
 	m_mailbox.reset();
 	m_reportedGain.store(0.0f, std::memory_order_relaxed);
 	m_reportedArrivals.store(0, std::memory_order_relaxed);
+	m_reverb.start();
+	m_reverbActive = false;
+	m_nextReverbUpdate = 0;
 
 	const SDL_AudioSpec requested{SDL_AUDIO_F32, 2, kWaveRate};
 	m_device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &requested);
@@ -137,6 +140,9 @@ void Craig::Audio::publish(const SoundProbeReadout* probe, uint64_t deadlineMs) 
 void Craig::Audio::invalidate() {
 	//Presses from before a pause/scene change shouldn't go off later on
 	cancelOneShot();
+	m_reverb.invalidate();
+	m_reverbActive = false;
+	m_nextReverbUpdate = 0;
 	publish(nullptr, 0);
 	m_state = AudioStatus::State::NoResult;
 }
@@ -178,11 +184,22 @@ void Craig::Audio::update(const SoundProbeReadout& probe, bool worldRunning) {
 	else {
 		m_state = probe.obstruction == 0.0f ? AudioStatus::State::Clear :
 			(probe.obstruction == 1.0f ? AudioStatus::State::Blocked : AudioStatus::State::Partial);
+		//Rebuilding the response is slow, so at most 4 times a second
+		const bool tail = m_reflectionsEnabled && probe.reverbEnabled;
+		if (tail && SDL_GetTicks() >= m_nextReverbUpdate) {
+			m_reverb.submit(probe.reverbEnergy, probe.arrivalCount ? probe.arrivals[0].delaySeconds : 0.0f);
+			m_nextReverbUpdate = SDL_GetTicks() + 250;
+		}
+		if (!tail && m_reverbActive) m_reverb.invalidate();
+		m_reverbActive = tail;
 		//The deadline comes from when the result was made, publishing the same old result again doesn't make it last longer
 		publish(&probe, SDL_GetTicks() + static_cast<uint64_t>(kMaxResultAgeMs - probe.ageMs));
 		return;
 	}
 	cancelOneShot();
+	if (m_reverbActive) m_reverb.invalidate();
+	m_reverbActive = false;
+	m_nextReverbUpdate = 0;
 	publish(nullptr, 0);
 }
 
@@ -193,6 +210,8 @@ Craig::AudioStatus Craig::Audio::getStatus() const {
 	status.muted = m_muted;
 	status.directEnabled = m_directEnabled;
 	status.reflectionsEnabled = m_reflectionsEnabled;
+	status.reverbReady = m_reverb.ready();
+	status.reverbFailed = m_reverb.failed();
 	status.gain = m_reportedGain.load(std::memory_order_relaxed);
 	status.arrivals = m_reportedArrivals.load(std::memory_order_relaxed);
 	return status;
@@ -308,6 +327,8 @@ void Craig::Audio::mix(const SDL_AudioSpec& spec, float* buffer, int bytes, uint
 
 		float left = 0.0f;
 		float right = 0.0f;
+		//Upstream's reconstruction already filters and adds up the bands, splitting the input again would colour it twice
+		m_reverb.processSample(dry, spec.freq, left, right);
 		renderTaps(m_current, m_fade, m_writeIndex, left, right);
 		renderTaps(m_previous, 1.0f - m_fade, m_writeIndex, left, right);
 		m_fade = std::min(1.0f, m_fade + fadeStep);
@@ -335,6 +356,7 @@ CraigError Craig::Audio::terminate() {
 		SDL_CloseAudioDevice(m_device);
 		m_device = 0;
 	}
+	m_reverb.stop();
 	mv_wave.clear();
 	for (auto& line : mv_delayLines) line = {};
 	if (m_initialised) SDL_QuitSubSystem(SDL_INIT_AUDIO);

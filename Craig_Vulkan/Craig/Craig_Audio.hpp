@@ -2,6 +2,7 @@
 
 #include "Craig_Constants.hpp"
 #include "Craig_SoundProbe.hpp"
+#include "Craig_Reverb.hpp"
 #include <SDL3/SDL_audio.h>
 #include <array>
 #include <atomic>
@@ -18,6 +19,8 @@ namespace Craig {
 		bool muted = false;
 		bool directEnabled = true;
 		bool reflectionsEnabled = true;
+		bool reverbReady = false;
+		bool reverbFailed = false;
 		float gain = 0.0f;
 		uint32_t arrivals = 0; //How many the callback's actually playing right now
 	};
@@ -99,7 +102,7 @@ namespace Craig {
 		static constexpr float kOutputGain = 1.2f;
 		static constexpr float kTransitionSeconds = 0.03f; //Crossfade between two arrival sets
 		static constexpr float kSilenceFadeSeconds = 0.01f;
-		static constexpr uint32_t kDelayCapacity = kSoundDelayCapacity;
+		static constexpr uint32_t kDelayCapacity = kSoundDelayCapacity; //Shared by the direct tap and the reflections' pre-delay
 		CraigError loadWave(const std::string& path);
 		CraigError openSound(const std::string& path, bool looping);
 		void cancelOneShot();
@@ -116,6 +119,9 @@ namespace Craig {
 		bool m_reflectionsEnabled = true;
 		AudioStatus::State m_state = AudioStatus::State::Unavailable;
 		Mailbox m_mailbox;
+		Reverb m_reverb;
+		bool m_reverbActive = false;
+		uint64_t m_nextReverbUpdate = 0;
 		std::atomic<float> m_reportedGain{0.0f};
 		std::atomic<uint32_t> m_reportedArrivals{0};
 		//Main thread writes it, callback reads it, both halves in one atomic so a cancel and a play can't tear

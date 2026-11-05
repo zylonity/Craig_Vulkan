@@ -68,6 +68,8 @@ target_precompile_headers(SteamAudioReconstruction PRIVATE <algorithm> <cmath> <
 if(NOT MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(SteamAudioReconstruction PRIVATE $<$<CONFIG:Debug>:-O2>)
 endif()
+#reverb filters get built on their own thread
+find_package(Threads REQUIRED)
 
 #get all my files to build
 file(GLOB_RECURSE CRAIG_SOURCES
@@ -123,6 +125,9 @@ target_link_libraries(Craig_Vulkan PUBLIC
         SDL3::SDL3
         glm::glm
         Jolt
+        FFTConvolver
+        SteamAudioReconstruction
+        Threads::Threads
 )
 
 
