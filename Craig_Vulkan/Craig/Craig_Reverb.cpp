@@ -1,14 +1,53 @@
 #include "Craig_Reverb.hpp"
+#include "Craig_Logger.hpp"
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <iomanip>
+#include <limits>
 #include <stdexcept>
 #include "SteamAudio/reconstructor.h"
 
 //The callback reads all of these, none of them can be allowed to lock
 static_assert(std::atomic<uint8_t>::is_always_lock_free);
 static_assert(std::atomic<uint32_t>::is_always_lock_free);
+static_assert(std::atomic<uint64_t>::is_always_lock_free);
 static_assert(std::atomic<int>::is_always_lock_free);
 static_assert(std::atomic<bool>::is_always_lock_free);
+
+namespace {
+	//Dumps what the last prepared tail was made from, so I can plot it and see where a gap or spike came from
+	//Overwritten every time, it's not necessarily the one that's playing yet
+	CraigError saveTailSnapshot(const Craig::ReverbEnergy& energy, const std::array<std::vector<float>, 2>& ir,
+		int rate, uint32_t epoch, float directDelaySeconds) {
+		constexpr const char* path = "logs/reverb-energy.csv";
+		std::ofstream file(path);
+		if (!file) {
+			Craig::Logger::audio().warn("Couldn't open reverb diagnostic snapshot {}", path);
+			return CRAIG_FAIL;
+		}
+		file << std::setprecision(std::numeric_limits<double>::max_digits10);
+		double irEnergy = 0.0;
+		for (const auto& channel : ir) for (float sample : channel) irEnergy += static_cast<double>(sample) * sample;
+		file << "# prepared response, not necessarily active; Steam Audio 4.8.1 order-0 SH, direct-relative bins\n"
+			<< "# epoch=" << epoch << ",sample_rate=" << rate << ",direct_delay_seconds=" << directDelaySeconds
+			<< ",ir_frames=" << ir[0].size() << ",stereo_ir_energy=" << irEnergy << '\n'
+			<< "bin,relative_start_seconds,low,mid,high\n";
+		for (uint32_t bin = 0; bin < Craig::kReverbBins; ++bin) {
+			file << bin << ',' << static_cast<double>(bin) * Craig::kReverbBinSeconds;
+			for (float e : energy[bin]) file << ',' << e;
+			file << '\n';
+		}
+		file.close();
+		if (!file) {
+			Craig::Logger::audio().warn("Couldn't finish reverb diagnostic snapshot {}", path);
+			return CRAIG_FAIL;
+		}
+		Craig::Logger::audio().info("Prepared Steam Audio reflection snapshot: {} (epoch {}, {} Hz, direct delay {:.3f} ms)",
+			path, epoch, rate, 1000.0f * directDelaySeconds);
+		return CRAIG_SUCCESS;
+	}
+}
 
 std::array<std::vector<float>, 2> Craig::Reverb::reconstruct(const ReverbEnergy& energy, int rate, float directDelaySeconds) {
 	if (rate < 8000 || rate > 192000) throw std::runtime_error("unsupported reverb sample rate");
@@ -68,9 +107,13 @@ void Craig::Reverb::stop() {
 	m_drainFrames = 0;
 	m_lastSubmitted.reset();
 	m_ready.store(false, std::memory_order_relaxed);
+	m_activeBanks.store(0, std::memory_order_relaxed);
+	m_changes.store(0, std::memory_order_relaxed);
+	m_invalidations.store(0, std::memory_order_relaxed);
 }
 
 void Craig::Reverb::invalidate() {
+	m_invalidations.fetch_add(1, std::memory_order_relaxed);
 	m_epoch.fetch_add(1, std::memory_order_release);
 	m_ready.store(false, std::memory_order_relaxed);
 	std::lock_guard lock(m_mutex);
@@ -125,6 +168,8 @@ void Craig::Reverb::work() {
 			for (uint32_t i = 0; i < 2; ++i) {
 				if (!target->filters[i].init(128, 2048, ir[i].data(), ir[i].size())) throw std::runtime_error("convolver initialisation failed");
 			}
+			//Written here on the worker, never in the callback
+			if (job.epoch == m_epoch.load(std::memory_order_acquire)) saveTailSnapshot(job.energy, ir, job.rate, job.epoch, job.directDelaySeconds);
 			target->responseFrames = static_cast<uint32_t>(ir[0].size());
 			target->epoch = job.epoch;
 			target->rate = job.rate;
@@ -147,6 +192,7 @@ void Craig::Reverb::processSample(float input, int rate, float& left, float& rig
 		if (*index >= 0 && (m_banks[*index].epoch != epoch || m_banks[*index].rate != rate)) {
 			m_banks[*index].state.store(Free, std::memory_order_release);
 			*index = -1;
+			m_activeBanks.store((m_current >= 0) + (m_previous >= 0), std::memory_order_relaxed);
 		}
 	}
 
@@ -160,6 +206,8 @@ void Craig::Reverb::processSample(float input, int rate, float& left, float& rig
 		if (bank.epoch != epoch || bank.rate != rate) { bank.state.store(Free, std::memory_order_release); continue; }
 		m_previous = m_current;
 		m_current = i;
+		m_changes.fetch_add(1, std::memory_order_relaxed);
+		m_activeBanks.store((m_current >= 0) + (m_previous >= 0), std::memory_order_relaxed);
 		m_fade = m_previous >= 0 ? 0.0f : 1.0f;
 		m_drainFrames = m_previous >= 0 ? m_banks[m_previous].responseFrames + static_cast<uint32_t>(std::ceil(0.05 * rate)) : 0;
 		break;
@@ -182,5 +230,6 @@ void Craig::Reverb::processSample(float input, int rate, float& left, float& rig
 	if (m_previous >= 0 && m_drainFrames > 0 && --m_drainFrames == 0) {
 		m_banks[m_previous].state.store(Free, std::memory_order_release);
 		m_previous = -1;
+		m_activeBanks.store((m_current >= 0) + (m_previous >= 0), std::memory_order_relaxed);
 	}
 }

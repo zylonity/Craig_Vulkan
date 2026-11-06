@@ -149,6 +149,14 @@ void Game::SoundDemo::drawImGui() {
 		ImGui::Text("Playing %u arrivals, envelope %.3f, old results fade out after 250 ms", audio.arrivals, audio.gain);
 		ImGui::Text("Steam Audio-method GPU reflections: %s", audio.reverbFailed ? "filter preparation failed" :
 			(audio.reverbReady ? "ready" : "off / preparing"));
+		ImGui::Text("Callback: %.3f / %.3f ms (%u frames @ %d Hz)", audio.callbackMs, audio.callbackBudgetMs,
+			audio.callbackBufferFrames, audio.callbackRate);
+		ImGui::Text("Peak load %.1f%%; over budget %llu; long gaps %llu (max %.2f ms)", 100.0f * audio.callbackPeakLoad,
+			static_cast<unsigned long long>(audio.callbackOverBudget), static_cast<unsigned long long>(audio.callbackLongGaps), audio.callbackMaxGapMs);
+		ImGui::Text("Tail: %u banks active, %llu filter starts, %llu resets requested", audio.reverbBanks,
+			static_cast<unsigned long long>(audio.reverbChanges), static_cast<unsigned long long>(audio.reverbInvalidations));
+		ImGui::TextDisabled("Counted since the sound was opened, these aren't real underrun counts");
+		ImGui::TextUnformatted("Reflections switches off the whole GPU reflected IR, early part included");
 		ImGui::TextUnformatted("Direct: equal power pan. Reflections: order 0 centred mono, no HRTF");
 	}
 	ImGui::End();

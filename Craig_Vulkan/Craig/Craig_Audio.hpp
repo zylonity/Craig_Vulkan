@@ -23,6 +23,20 @@ namespace Craig {
 		bool reverbFailed = false;
 		float gain = 0.0f;
 		uint32_t arrivals = 0; //How many the callback's actually playing right now
+		//Timing from inside the callback, counted since the sound was opened
+		//These are hints, not real dropout counts, SDL/pipewire don't tell us about underruns
+		uint64_t callbackFrames = 0;
+		float callbackMs = 0.0f;
+		float callbackBudgetMs = 0.0f;
+		float callbackPeakLoad = 0.0f;
+		float callbackMaxGapMs = 0.0f;
+		uint32_t callbackBufferFrames = 0;
+		int callbackRate = 0;
+		uint64_t callbackOverBudget = 0;
+		uint64_t callbackLongGaps = 0;
+		uint32_t reverbBanks = 0;
+		uint64_t reverbChanges = 0;
+		uint64_t reverbInvalidations = 0;
 	};
 
 	//Plays one sound from the source position, filtered by whatever the sound propagation found
@@ -109,6 +123,8 @@ namespace Craig {
 		void publish(const SoundProbeReadout* probe, uint64_t deadlineMs);
 		static void SDLCALL postmix(void* userdata, const SDL_AudioSpec* spec, float* buffer, int bytes);
 		void mix(const SDL_AudioSpec& spec, float* buffer, int bytes, uint64_t nowMs);
+		void recordCallback(uint64_t startNs, uint64_t endNs, uint32_t frames, int rate);
+		void logDiagnostics(); //Once a second, main thread
 		void renderTaps(const RenderSet& set, float weight, uint32_t writeIndex, float& left, float& right) const;
 
 		bool m_initialised = false;
@@ -122,6 +138,16 @@ namespace Craig {
 		Reverb m_reverb;
 		bool m_reverbActive = false;
 		uint64_t m_nextReverbUpdate = 0;
+		uint64_t m_nextTimingLogMs = 0;
+		uint64_t m_lastLoggedOverBudget = 0;
+		//Callback writes, main thread reads, reset when a sound gets opened
+		std::atomic<uint64_t> m_callbackFrames{0};
+		std::atomic<uint64_t> m_callbackFormat{0}; //High word rate, low word buffer frames, so they can't tear
+		std::atomic<uint64_t> m_callbackNs{0};
+		std::atomic<float> m_callbackPeakLoad{0.0f};
+		std::atomic<uint64_t> m_callbackOverBudget{0};
+		std::atomic<uint64_t> m_callbackMaxGapNs{0};
+		std::atomic<uint64_t> m_callbackLongGaps{0};
 		std::atomic<float> m_reportedGain{0.0f};
 		std::atomic<uint32_t> m_reportedArrivals{0};
 		//Main thread writes it, callback reads it, both halves in one atomic so a cancel and a play can't tear
@@ -132,6 +158,8 @@ namespace Craig {
 		//Everything below here belongs to the audio thread while the callback's registered
 		std::vector<float> mv_wave;
 		std::array<std::vector<float>, 3> mv_delayLines; //One per band
+		uint64_t m_previousCallbackStartNs = 0;
+		uint64_t m_previousCallbackBudgetNs = 0;
 		uint32_t m_writeIndex = 0;
 		uint64_t m_consumedPlaybackCommand = 0;
 		std::array<Voice, kMaxOneShotVoices> m_voices{};

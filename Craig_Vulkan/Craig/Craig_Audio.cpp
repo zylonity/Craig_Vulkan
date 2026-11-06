@@ -101,6 +101,15 @@ CraigError Craig::Audio::openSound(const std::string& path, bool looping) {
 	m_current = {};
 	m_previous = {};
 	m_mailbox.reset();
+	m_callbackFrames.store(0, std::memory_order_relaxed);
+	m_callbackFormat.store(0, std::memory_order_relaxed);
+	m_callbackNs.store(0, std::memory_order_relaxed);
+	m_callbackPeakLoad.store(0.0f, std::memory_order_relaxed);
+	m_callbackOverBudget.store(0, std::memory_order_relaxed);
+	m_callbackMaxGapNs.store(0, std::memory_order_relaxed);
+	m_callbackLongGaps.store(0, std::memory_order_relaxed);
+	m_previousCallbackStartNs = m_previousCallbackBudgetNs = 0;
+	m_nextTimingLogMs = m_lastLoggedOverBudget = 0;
 	m_reportedGain.store(0.0f, std::memory_order_relaxed);
 	m_reportedArrivals.store(0, std::memory_order_relaxed);
 	m_reverb.start();
@@ -194,6 +203,7 @@ void Craig::Audio::update(const SoundProbeReadout& probe, bool worldRunning) {
 		m_reverbActive = tail;
 		//The deadline comes from when the result was made, publishing the same old result again doesn't make it last longer
 		publish(&probe, SDL_GetTicks() + static_cast<uint64_t>(kMaxResultAgeMs - probe.ageMs));
+		logDiagnostics();
 		return;
 	}
 	cancelOneShot();
@@ -201,6 +211,22 @@ void Craig::Audio::update(const SoundProbeReadout& probe, bool worldRunning) {
 	m_reverbActive = false;
 	m_nextReverbUpdate = 0;
 	publish(nullptr, 0);
+	logDiagnostics();
+}
+
+void Craig::Audio::logDiagnostics() {
+	if (!m_playing || !m_device) return;
+	const uint64_t now = SDL_GetTicks();
+	if (now < m_nextTimingLogMs) return;
+	m_nextTimingLogMs = now + 1000;
+	const auto status = getStatus();
+	Logger::audio().info("Audio timing: tail {}, {}, {} Hz / {} frames, callback {:.3f}/{:.3f} ms, peak load {:.1f}%, "
+		"over budget {} (+{}), long gaps {} (max {:.3f} ms), tail banks {}, changes {}, invalidations {}",
+		m_reverbActive ? "on" : "off", stateName(status.state), status.callbackRate, status.callbackBufferFrames,
+		status.callbackMs, status.callbackBudgetMs, 100.0f * status.callbackPeakLoad, status.callbackOverBudget,
+		status.callbackOverBudget - m_lastLoggedOverBudget, status.callbackLongGaps, status.callbackMaxGapMs,
+		status.reverbBanks, status.reverbChanges, status.reverbInvalidations);
+	m_lastLoggedOverBudget = status.callbackOverBudget;
 }
 
 Craig::AudioStatus Craig::Audio::getStatus() const {
@@ -214,6 +240,19 @@ Craig::AudioStatus Craig::Audio::getStatus() const {
 	status.reverbFailed = m_reverb.failed();
 	status.gain = m_reportedGain.load(std::memory_order_relaxed);
 	status.arrivals = m_reportedArrivals.load(std::memory_order_relaxed);
+	status.callbackFrames = m_callbackFrames.load(std::memory_order_relaxed);
+	const uint64_t format = m_callbackFormat.load(std::memory_order_relaxed);
+	status.callbackRate = static_cast<int>(format >> 32);
+	status.callbackBufferFrames = static_cast<uint32_t>(format);
+	status.callbackMs = static_cast<float>(m_callbackNs.load(std::memory_order_relaxed)) / 1000000.0f;
+	status.callbackBudgetMs = status.callbackRate > 0 ? 1000.0f * status.callbackBufferFrames / status.callbackRate : 0.0f;
+	status.callbackPeakLoad = m_callbackPeakLoad.load(std::memory_order_relaxed);
+	status.callbackOverBudget = m_callbackOverBudget.load(std::memory_order_relaxed);
+	status.callbackMaxGapMs = static_cast<float>(m_callbackMaxGapNs.load(std::memory_order_relaxed)) / 1000000.0f;
+	status.callbackLongGaps = m_callbackLongGaps.load(std::memory_order_relaxed);
+	status.reverbBanks = m_reverb.activeBanks();
+	status.reverbChanges = m_reverb.changes();
+	status.reverbInvalidations = m_reverb.invalidations();
 	return status;
 }
 
@@ -225,7 +264,31 @@ const char* Craig::Audio::stateName(AudioStatus::State state) {
 
 void SDLCALL Craig::Audio::postmix(void* userdata, const SDL_AudioSpec* spec, float* buffer, int bytes) {
 	if (spec->freq <= 0 || spec->channels <= 0 || bytes <= 0) return;
-	static_cast<Audio*>(userdata)->mix(*spec, buffer, bytes, SDL_GetTicks());
+	const uint32_t frames = bytes / static_cast<int>(sizeof(float)) / spec->channels;
+	if (!frames) return;
+	auto& audio = *static_cast<Audio*>(userdata);
+	const uint64_t start = SDL_GetTicksNS();
+	audio.mix(*spec, buffer, bytes, SDL_GetTicks());
+	audio.recordCallback(start, SDL_GetTicksNS(), frames, spec->freq);
+}
+
+//How long the callback took against how long its buffer lasts, if it goes over we're probably crackling
+void Craig::Audio::recordCallback(uint64_t startNs, uint64_t endNs, uint32_t frames, int rate) {
+	const uint64_t duration = endNs - startNs;
+	const uint64_t budget = 1000000000ull * frames / rate;
+	const float load = static_cast<float>(duration) / budget;
+	m_callbackFormat.store((static_cast<uint64_t>(rate) << 32) | frames, std::memory_order_relaxed);
+	m_callbackNs.store(duration, std::memory_order_relaxed);
+	if (load > m_callbackPeakLoad.load(std::memory_order_relaxed)) m_callbackPeakLoad.store(load, std::memory_order_relaxed);
+	if (duration > budget) m_callbackOverBudget.fetch_add(1, std::memory_order_relaxed);
+	if (m_previousCallbackStartNs) {
+		const uint64_t gap = startNs - m_previousCallbackStartNs;
+		if (gap > m_callbackMaxGapNs.load(std::memory_order_relaxed)) m_callbackMaxGapNs.store(gap, std::memory_order_relaxed);
+		//SDL can batch callbacks up, so a long gap is just a clue, not proof it dropped out
+		if (gap > 2 * m_previousCallbackBudgetNs) m_callbackLongGaps.fetch_add(1, std::memory_order_relaxed);
+	}
+	m_previousCallbackStartNs = startNs;
+	m_previousCallbackBudgetNs = budget;
 }
 
 void Craig::Audio::renderTaps(const RenderSet& set, float weight, uint32_t writeIndex, float& left, float& right) const {
@@ -346,6 +409,7 @@ void Craig::Audio::mix(const SDL_AudioSpec& spec, float* buffer, int bytes, uint
 	}
 	m_reportedGain.store(m_gain, std::memory_order_relaxed);
 	m_reportedArrivals.store(m_current.count, std::memory_order_relaxed);
+	m_callbackFrames.fetch_add(frames, std::memory_order_relaxed);
 }
 
 CraigError Craig::Audio::terminate() {

@@ -24,6 +24,10 @@ namespace Craig {
 		void processSample(float input, int rate, float& left, float& right);
 		bool ready() const { return m_ready.load(std::memory_order_relaxed); }
 		bool failed() const { return m_failed.load(std::memory_order_relaxed); }
+		//Just for the timing log/demo window
+		uint32_t activeBanks() const { return m_activeBanks.load(std::memory_order_relaxed); }
+		uint64_t changes() const { return m_changes.load(std::memory_order_relaxed); }
+		uint64_t invalidations() const { return m_invalidations.load(std::memory_order_relaxed); }
 		static std::array<std::vector<float>, 2> reconstruct(const ReverbEnergy& energy, int rate, float directDelaySeconds = 0.0f);
 
 	private:
@@ -48,6 +52,9 @@ namespace Craig {
 		std::atomic<int> m_rate{48000};
 		std::atomic<bool> m_ready{false};
 		std::atomic<bool> m_failed{false};
+		std::atomic<uint32_t> m_activeBanks{0};
+		std::atomic<uint64_t> m_changes{0};
+		std::atomic<uint64_t> m_invalidations{0};
 		std::thread m_worker;
 		std::mutex m_mutex;
 		std::condition_variable m_wake;

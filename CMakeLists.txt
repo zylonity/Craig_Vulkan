@@ -47,6 +47,11 @@ add_library(FFTConvolver STATIC
 #Keep the DSP optimised in Debug too, the audio callback still has a real-time deadline
 if(NOT MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(FFTConvolver PRIVATE $<$<CONFIG:Debug>:-O2>)
+    #Debug callback was going over its buffer time with just the mixer/reverb wrapper unoptimised
+    set_property(SOURCE
+            Craig_Vulkan/Craig/Craig_Audio.cpp
+            Craig_Vulkan/Craig/Craig_Reverb.cpp
+            APPEND PROPERTY COMPILE_OPTIONS $<$<CONFIG:Debug>:-O2>)
 endif()
 
 #Valve Corporation, Apache-2.0 - Steam Audio v4.8.1 (0da18255cca520771f363ee01f100572b39a308e)
