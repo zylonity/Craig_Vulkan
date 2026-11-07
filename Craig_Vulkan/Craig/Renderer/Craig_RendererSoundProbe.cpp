@@ -45,6 +45,7 @@ void Craig::Renderer::resetSoundProbeContext(bool clearDebugRays) {
     if (clearDebugRays) {
         mv_soundDebugRays.clear();
         mv_soundDebugPaths.clear();
+        mv_soundDebugBounces.clear();
     }
     if (m_soundInvalidated) m_soundInvalidated();
     m_soundPropagation.stop();
@@ -143,6 +144,9 @@ void Craig::Renderer::updateSoundProbe() {
         m_soundResult = result;
         //Copied so pausing keeps them on screen
         mv_soundDebugPaths.assign(result.arrivals.begin(), result.arrivals.begin() + result.arrivalCount);
+        //Moved out rather than copied, it's up to 4096 * 64 points
+        mv_soundDebugBounces = std::move(result.bounces);
+        m_soundResult->bounces.clear();
         m_soundDebugListener = origin;
         m_soundDebugSource = endpoint;
     }
@@ -187,6 +191,9 @@ void Craig::Renderer::updateSoundProbe() {
     const glm::vec3 ear = std::isfinite(rightLength) && rightLength > 0.0f ? right / rightLength : glm::vec3(1.0f, 0.0f, 0.0f);
     request.listenerRight = {ear.x, ear.y, ear.z};
 
+#if defined(IMGUI_ENABLED)
+    request.captureBounces = m_showSoundBounces;
+#endif
     const auto status = m_soundPropagation.trySubmit(scene, request);
 #if defined(IMGUI_ENABLED)
     //Only show rays we actually submitted, not what we would have submitted if a slot was free
@@ -211,6 +218,8 @@ void Craig::Renderer::drawSoundProbeReadout() {
     if (!m_soundConfigured) return;
     const auto readout = getSoundProbeReadout();
     const char* states[] = {"disabled", "paused", "waiting", "ready", "missing endpoint", "invalid segment", "geometry not prepared"};
+    ImGui::SetNextWindowPos(ImVec2(330, 25), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(640, 340), ImGuiCond_FirstUseEver);
     ImGui::Begin("Sound propagation");
     ImGui::Text("State: %s", states[static_cast<unsigned>(readout.state)]);
     ImGui::Text("%s -> %s", m_soundSource.c_str(), m_soundListener.c_str());
@@ -227,6 +236,7 @@ void Craig::Renderer::drawSoundProbeReadout() {
     if (changed) resetSoundProbeContext();
     ImGui::Checkbox("Show sound paths", &m_showSoundPaths);
     ImGui::SameLine();
+    if (ImGui::Checkbox("Show bouncing rays", &m_showSoundBounces) && !m_showSoundBounces) mv_soundDebugBounces.clear();
     if (ImGui::Checkbox("Show direct samples", &m_showSoundRays) && !m_showSoundRays) mv_soundDebugRays.clear();
     if (m_showSoundRays) {
         ImGui::TextUnformatted("Neutral lines through walls, not hit/miss colours");
@@ -236,6 +246,7 @@ void Craig::Renderer::drawSoundProbeReadout() {
     ImGui::TextUnformatted("Direct: uniform world-XY rectangle, 1 ray uses its centre");
     ImGui::TextUnformatted("Reflections: Steam Audio 4.8.1's method, rays start at the listener and connect to the source");
     ImGui::TextUnformatted("Order 0 energy in 10 ms bins after the direct sound, 2 s long");
+    ImGui::TextUnformatted("Purple rays start at the listener, only the first 128 get drawn");
     if (readout.hasResult && !changed) {
         ImGui::Text("Obstruction: %.3f (%u / %u blocked), seed %u", readout.obstruction, readout.blockedRays, readout.rayCount, readout.seed);
         ImGui::Text("Input age: %.2f ms, sequence %llu", readout.ageMs, static_cast<unsigned long long>(readout.sequenceId));
@@ -273,7 +284,8 @@ void Craig::Renderer::drawSoundProbeReadout() {
 
 void Craig::Renderer::drawSoundProbeRays() {
 #if defined(IMGUI_ENABLED)
-    if ((!m_showSoundRays || mv_soundDebugRays.empty()) && (!m_showSoundPaths || mv_soundDebugPaths.empty())) return;
+    if ((!m_showSoundRays || mv_soundDebugRays.empty()) && (!m_showSoundPaths || mv_soundDebugPaths.empty()) &&
+        (!m_showSoundBounces || mv_soundDebugBounces.empty())) return;
     const Camera& camera = mp_SceneManager->getCurrentScene()->getCamera();
     const glm::mat4 viewProj = camera.getProj() * camera.getView();
     const ImGuiViewport* pViewport = ImGui::GetMainViewport();
@@ -308,6 +320,27 @@ void Craig::Renderer::drawSoundProbeRays() {
             const glm::vec3 origin(ray.origin[0], ray.origin[1], ray.origin[2]);
             const glm::vec3 direction(ray.direction[0], ray.direction[1], ray.direction[2]);
             drawSegment(origin + direction * ray.origin[3], origin + direction * ray.direction[3], IM_COL32(255, 220, 100, 90));
+        }
+    }
+    if (m_showSoundBounces) {
+        //Where the listener rays went, not paths that actually reached the source
+        //Capped at 128 rays, drawing all 4096 * 64 segments with ImGui tanked the frame rate
+        const size_t shown = std::min(mv_soundDebugBounces.size(), static_cast<size_t>(128 * kReverbBounces));
+        for (size_t ray = 0; ray + kReverbBounces <= shown; ray += kReverbBounces) {
+            glm::vec3 from = m_soundDebugListener;
+            for (uint32_t k = 0; k < kReverbBounces; ++k) {
+                const auto& hit = mv_soundDebugBounces[ray + k];
+                const glm::vec3 value(hit[0], hit[1], hit[2]);
+                //w 1 is a hit point, w 2 is a direction it flew off in
+                if (hit[3] == 1.0f) {
+                    drawSegment(from, value, IM_COL32(180, 140, 255, 40));
+                    from = value;
+                }
+                else {
+                    if (hit[3] == 2.0f) drawSegment(from, from + value * 2.0f, IM_COL32(180, 140, 255, 20));
+                    break;
+                }
+            }
         }
     }
     if (m_showSoundPaths) {

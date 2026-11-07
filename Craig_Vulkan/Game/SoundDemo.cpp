@@ -96,6 +96,9 @@ CraigError Game::SoundDemo::update(const float& deltaTime) {
 
 void Game::SoundDemo::drawImGui() {
 #if defined(IMGUI_ENABLED)
+	//Under the sound propagation window so they don't start on top of each other
+	ImGui::SetNextWindowPos(ImVec2(330, 450), ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2(640, 340), ImGuiCond_FirstUseEver);
 	ImGui::Begin("Moving-door demo");
 	ImGui::TextUnformatted("Small cubes: listener/source, thin line: the segment between them");
 	if (m_referenceCase == ReferenceCase::MovingDoor) ImGui::Checkbox("Animate door", &m_animate);
