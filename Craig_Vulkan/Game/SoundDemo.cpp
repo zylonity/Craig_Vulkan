@@ -2,6 +2,7 @@
 #include "SoundDemo.hpp"
 #include <glm/gtx/quaternion.hpp>
 #include "Craig/Craig_Scene.hpp"
+#include "Craig/Craig_AcousticMaterial.hpp"
 
 #include <array>
 #include <cassert>
@@ -15,6 +16,9 @@ namespace {
 	constexpr std::array<const char*, 3> kSoundNames = {"Impact (button)", "Clicks (loop)", "Tone (loop)"};
 	constexpr std::array<const char*, 3> kSoundPaths = {"data/audio/impact.wav", "data/audio/clicks_loop.wav", "data/audio/door_loop.wav"};
 	constexpr std::array<bool, 3> kSoundIsOneShot = {true, false, false};
+	//Where they are in SoundPropagationReference.json, for working out the expected reflections
+	const glm::vec3 kReferenceListener(0.0f, 2.0f, -3.0f);
+	const glm::vec3 kReferenceSource(0.0f, 2.0f, 3.0f);
 }
 
 CraigError Game::SoundDemo::init(Craig::GameServices* pServices) {
@@ -54,11 +58,18 @@ CraigError Game::SoundDemo::selectReferenceCase(ReferenceCase referenceCase) {
 	if (!movingDoor) {
 		Craig::GameObject* pWall = mp_services->getCurrentScene()->findObject("Reference wall");
 		assert(pWall != nullptr && "The reference scene needs its wall");
-		//BlankBox is [-1,1], wall scale.x is 2, so centred at -2 its right edge is exactly x = 0
-		//That covers half of the symmetric emitter, x = 6 moves it completely out of the way
-		const float x = referenceCase == ReferenceCase::Clear ? 6.0f :
-			(referenceCase == ReferenceCase::Half ? -2.0f : 0.0f);
-		pWall->setPosition({x, 2.0f, 0.0f});
+		if (referenceCase == ReferenceCase::Reflection) {
+			//Turned side on and moved off the line, so it can only reflect, never block
+			pWall->setScale({0.12f, 3.0f, 6.0f});
+			pWall->setPosition({m_reflectorDistance + 0.12f, 2.0f, 0.0f});
+		}
+		else {
+			//BlankBox is [-1,1], wall scale.x is 2, so centred at -2 its right edge is exactly x = 0
+			//That covers half of the symmetric emitter, x = 6 moves it completely out of the way
+			const float x = referenceCase == ReferenceCase::Clear ? 6.0f :
+				(referenceCase == ReferenceCase::Half ? -2.0f : 0.0f);
+			pWall->setPosition({x, 2.0f, 0.0f});
+		}
 	}
 	m_referenceCase = referenceCase;
 	m_time = 0.0f;
@@ -75,6 +86,11 @@ CraigError Game::SoundDemo::update(const float& deltaTime) {
 		if (Craig::GameObject* pDoor = scene.findObject("Door")) {
 			pDoor->setPosition({1.3f * (1.0f - std::cos(m_time)), 1.5f, 0.0f});
 		}
+	}
+
+	//So the slider moves it live
+	if (m_referenceCase == ReferenceCase::Reflection) {
+		if (Craig::GameObject* pWall = scene.findObject("Reference wall")) pWall->setPosition({m_reflectorDistance + 0.12f, 2.0f, 0.0f});
 	}
 
 	//Thin box joining the two markers, it doesn't block sound, just shows where the ray should be
@@ -103,13 +119,31 @@ void Game::SoundDemo::drawImGui() {
 	ImGui::TextUnformatted("Small cubes: listener/source, thin line: the segment between them");
 	if (m_referenceCase == ReferenceCase::MovingDoor) ImGui::Checkbox("Animate door", &m_animate);
 	ImGui::SeparatorText("Geometric references");
-	const char* cases[] = {"Moving door", "Clear (0%)", "Half (50%)", "Blocked (100%)"};
-	for (int i = 0; i < 4; ++i) {
+	const char* cases[] = {"Moving door", "Clear (0%)", "Half (50%)", "Blocked (100%)", "Reflection"};
+	for (int i = 0; i < 5; ++i) {
 		if (i != 0) ImGui::SameLine();
 		if (ImGui::Button(cases[i])) m_referenceFailed = selectReferenceCase(static_cast<ReferenceCase>(i)) != CRAIG_SUCCESS;
 	}
 	if (m_referenceFailed) ImGui::TextUnformatted("Scene/probe setup failed, see the log");
-	if (m_referenceCase != ReferenceCase::MovingDoor) {
+	if (m_referenceCase == ReferenceCase::Reflection) {
+		ImGui::SliderFloat("Reflector distance (m)", &m_reflectorDistance, 3.0f, 60.0f);
+		//Image sources by hand: mirror the source in the plane, the path length is just the straight line to the mirrored one
+		const float speed = Craig::kSpeedOfSound;
+		const glm::vec3 wallImage(2.0f * m_reflectorDistance - kReferenceSource.x, kReferenceSource.y, kReferenceSource.z);
+		const glm::vec3 floorImage(kReferenceSource.x, -kReferenceSource.y, kReferenceSource.z);
+		const std::array<std::pair<const char*, float>, 3> expected = {{
+			{"Direct", glm::length(kReferenceSource - kReferenceListener)},
+			{"Floor", glm::length(floorImage - kReferenceListener)},
+			{"Reflector", glm::length(wallImage - kReferenceListener)}}};
+		ImGui::TextUnformatted("Expected from image sources (if the listener/source haven't been moved)");
+		for (const auto& [name, length] : expected) {
+			const float excess = (length - expected[0].second) / speed;
+			ImGui::Text("%s: %.3f m, %.2f ms, %.2f ms after the direct sound", name, length,
+				length / speed * 1000.0f, excess * 1000.0f);
+		}
+		ImGui::TextUnformatted("The GPU gives 10 ms energy bins, so look for energy in the bin that delay lands in");
+	}
+	else if (m_referenceCase != ReferenceCase::MovingDoor) {
 		const float expected = m_referenceCase == ReferenceCase::Clear ? 0.0f :
 			(m_referenceCase == ReferenceCase::Half ? 0.5f : 1.0f);
 		ImGui::Text("Expected obstruction: %.0f%% (if the reference scene hasn't been edited)", expected * 100.0f);

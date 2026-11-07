@@ -15,7 +15,7 @@ namespace Game {
 		void drawImGui() override;
 
 	private:
-		enum class ReferenceCase { MovingDoor, Clear, Half, Blocked };
+		enum class ReferenceCase { MovingDoor, Clear, Half, Blocked, Reflection };
 		CraigError selectReferenceCase(ReferenceCase referenceCase);
 		Craig::GameServices* mp_services = nullptr;
 		ReferenceCase m_referenceCase = ReferenceCase::MovingDoor;
@@ -23,6 +23,7 @@ namespace Game {
 		bool m_animate = true;
 		bool m_probeReady = false;
 		float m_time = 0.0f;
+		float m_reflectorDistance = 15.0f; //Metres from the listener/source line to the wall's face
 		int m_sound = 0;
 	};
 
