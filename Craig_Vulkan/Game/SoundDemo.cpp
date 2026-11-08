@@ -13,9 +13,9 @@
 
 namespace {
 	//Clicks make separate echoes easy to hear, a steady tone mostly just changes colour
-	constexpr std::array<const char*, 3> kSoundNames = {"Impact (button)", "Clicks (loop)", "Tone (loop)"};
-	constexpr std::array<const char*, 3> kSoundPaths = {"data/audio/impact.wav", "data/audio/clicks_loop.wav", "data/audio/door_loop.wav"};
-	constexpr std::array<bool, 3> kSoundIsOneShot = {true, false, false};
+	constexpr std::array<const char*, 4> kSoundNames = {"Impact (button)", "Basketball (button)", "Clicks (loop)", "Tone (loop)"};
+	constexpr std::array<const char*, 4> kSoundPaths = {"data/audio/impact.wav", "data/audio/basketball.wav", "data/audio/clicks_loop.wav", "data/audio/door_loop.wav"};
+	constexpr std::array<bool, 4> kSoundIsOneShot = {true, true, false, false};
 	//Where they are in SoundPropagationReference.json, for working out the expected reflections
 	const glm::vec3 kReferenceListener(0.0f, 2.0f, -3.0f);
 	const glm::vec3 kReferenceSource(0.0f, 2.0f, 3.0f);
@@ -53,11 +53,12 @@ void Game::SoundDemo::onPlayStopped() {
 
 CraigError Game::SoundDemo::selectReferenceCase(ReferenceCase referenceCase) {
 	const bool movingDoor = referenceCase == ReferenceCase::MovingDoor;
-	const bool hall = referenceCase == ReferenceCase::Hall;
+	const bool hall = referenceCase == ReferenceCase::Hall || referenceCase == ReferenceCase::SportsHall;
 	const char* path = movingDoor ? "data/scenes/SoundPropagationDemo.json" :
-		(hall ? "data/scenes/SoundPropagationHall.json" : "data/scenes/SoundPropagationReference.json");
+		(referenceCase == ReferenceCase::Hall ? "data/scenes/SoundPropagationHall.json" :
+		(referenceCase == ReferenceCase::SportsHall ? "data/scenes/SoundPropagationSportsHall.json" : "data/scenes/SoundPropagationReference.json"));
 	if (mp_services->loadScene(path) != CRAIG_SUCCESS) return CRAIG_FAIL;
-	//The hall is its own scene, there's no reference wall to move
+	//The halls are their own scenes, there's no reference wall to move
 	if (!movingDoor && !hall) {
 		Craig::GameObject* pWall = mp_services->getCurrentScene()->findObject("Reference wall");
 		assert(pWall != nullptr && "The reference scene needs its wall");
@@ -122,8 +123,8 @@ void Game::SoundDemo::drawImGui() {
 	ImGui::TextUnformatted("Small cubes: listener/source, thin line: the segment between them");
 	if (m_referenceCase == ReferenceCase::MovingDoor) ImGui::Checkbox("Animate door", &m_animate);
 	ImGui::SeparatorText("Geometric references");
-	const char* cases[] = {"Moving door", "Clear (0%)", "Half (50%)", "Blocked (100%)", "Reflection", "Big hall"};
-	for (int i = 0; i < 6; ++i) {
+	const char* cases[] = {"Moving door", "Clear (0%)", "Half (50%)", "Blocked (100%)", "Reflection", "Big hall", "Sports hall"};
+	for (int i = 0; i < 7; ++i) {
 		if (i != 0) ImGui::SameLine();
 		if (ImGui::Button(cases[i])) m_referenceFailed = selectReferenceCase(static_cast<ReferenceCase>(i)) != CRAIG_SUCCESS;
 	}
@@ -150,6 +151,14 @@ void Game::SoundDemo::drawImGui() {
 		ImGui::TextUnformatted("30 x 20 x 8 m concrete hall, source at the far end, listener at this end");
 		ImGui::TextUnformatted("Sabine says RT60 is about 5.5 s mid band, so it should still be going at the end of the 2 s window");
 		ImGui::TextUnformatted("'Show bouncing rays' shows where the listener rays go, Reflection rays sets how many");
+	}
+	else if (m_referenceCase == ReferenceCase::SportsHall) {
+		ImGui::TextUnformatted("34 x 18 x 9 m: wood floor/bleachers, brick low walls, plaster high end walls, glass backboards");
+		//Steam Audio doesn't have an acoustic panel preset, carpet's the closest
+		ImGui::TextUnformatted("Carpet stands in for the absorbent roof, long wall panels and end wall mats");
+		//Fitzroy instead of Sabine since nearly all the absorption is on the roof, the bounces between the walls last longer
+		ImGui::TextUnformatted("Fitzroy estimate without mats ~2.5 / 1.8 / 1.8 s low/mid/high (no air), not a measured hall");
+		ImGui::TextUnformatted("Try it with the basketball");
 	}
 	else if (m_referenceCase != ReferenceCase::MovingDoor) {
 		const float expected = m_referenceCase == ReferenceCase::Clear ? 0.0f :
