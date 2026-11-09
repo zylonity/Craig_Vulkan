@@ -144,7 +144,7 @@ void Craig::Renderer::updateSoundProbe() {
         m_soundResult = result;
         //Copied so pausing keeps them on screen
         mv_soundDebugPaths.assign(result.arrivals.begin(), result.arrivals.begin() + result.arrivalCount);
-        //Moved out rather than copied, it's up to 4096 * 64 points
+        //Only the overlay keeps the bounce points, the readout doesn't need another copy
         mv_soundDebugBounces = std::move(result.bounces);
         m_soundResult->bounces.clear();
         m_soundDebugListener = origin;
@@ -240,16 +240,19 @@ void Craig::Renderer::drawSoundProbeReadout() {
     if (ImGui::Checkbox("Show direct samples", &m_showSoundRays) && !m_showSoundRays) mv_soundDebugRays.clear();
     if (m_showSoundRays) {
         ImGui::TextUnformatted("Neutral lines through walls, not hit/miss colours");
-        ImGui::Text("Last submitted: %zu rays, sequence %llu (frozen on pause)",
+        if (mv_soundDebugRays.empty()) ImGui::TextUnformatted("Waiting for a submitted ray snapshot");
+        else ImGui::Text("Last submitted: %zu rays, sequence %llu (frozen on pause)",
             mv_soundDebugRays.size(), static_cast<unsigned long long>(m_soundDebugSequence));
     }
     ImGui::TextUnformatted("Direct: uniform world-XY rectangle, 1 ray uses its centre");
     ImGui::TextUnformatted("Reflections: Steam Audio 4.8.1's method, rays start at the listener and connect to the source");
     ImGui::TextUnformatted("Order 0 energy in 10 ms bins after the direct sound, 2 s long");
+    ImGui::TextUnformatted("Centred mono reflections, no HRTF or diffraction");
     ImGui::TextUnformatted("Purple rays start at the listener, only the first 128 get drawn");
     if (readout.hasResult && !changed) {
         ImGui::Text("Obstruction: %.3f (%u / %u blocked), seed %u", readout.obstruction, readout.blockedRays, readout.rayCount, readout.seed);
         ImGui::Text("Input age: %.2f ms, sequence %llu", readout.ageMs, static_cast<unsigned long long>(readout.sequenceId));
+        ImGui::Text("Direct taps: %u, reflections are in the energy bins, not separate taps", readout.arrivalCount);
         if (ImGui::BeginTable("Arrivals", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY, ImVec2(0, 160))) {
             ImGui::TableSetupColumn("Order");
             ImGui::TableSetupColumn("Length (m)");
