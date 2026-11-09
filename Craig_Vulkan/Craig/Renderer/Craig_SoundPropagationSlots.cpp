@@ -8,7 +8,6 @@
 #include <glm/glm.hpp>
 
 #include "Craig/Craig_Scene.hpp"
-#include "Craig/Craig_Logger.hpp"
 #include "Craig/Craig_AcousticMaterial.hpp"
 
 //Slot/timeline setup adapted from Sascha Willems' timelinesemaphore example
@@ -306,46 +305,4 @@ bool Craig::SoundPropagation::poll(Result& result) {
     result.ageMs = std::chrono::duration<double, std::milli>(Clock::now() - result.inputTime).count();
     m_readyResult.reset();
     return true;
-}
-
-CraigError Craig::SoundPropagation::runSlotTest(Scene& scene) {
-    //Waits for the timeline on purpose, the real thing never does this
-    const auto waitForCompletion = [this] {
-        const vk::Device device = mp_Device->getLogicalDevice();
-        const vk::SemaphoreWaitInfo waitInfo = vk::SemaphoreWaitInfo().setSemaphores(m_VK_completionTimeline).setValues(m_lastSubmissionValue);
-        return device.waitSemaphores(waitInfo, 1000000000ull) == vk::Result::eSuccess;
-    };
-
-    Request request{};
-    request.rayCount = 1;
-    request.rays[0] = {{0.0f, 2.0f, -3.0f, 0.001f}, {0.0f, 0.0f, 1.0f, 6.0f}};
-    request.sceneGeneration = 1;
-    request.sourceId = 1;
-    request.inputTime = Clock::now();
-
-    CraigError ret = CRAIG_SUCCESS;
-    Result result{};
-
-    //Through the wall like the scene test, should come back blocked
-    setContext(1, 1);
-    request.sequenceId = 0;
-    const bool submitted = trySubmit(scene, request) == SubmitStatus::Submitted;
-    const bool gotResult = submitted && waitForCompletion() && poll(result);
-    Logger::renderer().info("Ray-query Slot test: submitted {}, got a result {}, blocked {}/{} (expected 1/1) - {}",
-        submitted, gotResult, result.blocked, result.rayCount, gotResult && result.blocked == 1 ? "pass" : "FAIL");
-    if (!gotResult || result.blocked != 1) ret = CRAIG_FAIL;
-
-    //Submit, then change context before it finishes, the result should never come out of poll
-    request.sequenceId = 1;
-    const bool oldSubmitted = trySubmit(scene, request) == SubmitStatus::Submitted;
-    setContext(2, 1);
-    const bool oldCompleted = oldSubmitted && waitForCompletion();
-    const bool staleResult = oldCompleted && poll(result);
-    //A timeout isn't a successful rejection, the GPU has to finish before this check means anything
-    const bool rejected = oldCompleted && !staleResult;
-    Logger::renderer().info("Ray-query Slot test: old submission completed {}, stale result {} - {}", oldCompleted, staleResult, rejected ? "pass" : "FAIL");
-    if (!rejected) ret = CRAIG_FAIL;
-
-    stop();
-    return ret;
 }

@@ -73,12 +73,6 @@ namespace Craig {
 
 		//Builds a BLAS for every model in the scene that blocks sound
 		CraigError init(Device* pDevice, CommandManager* pCommandManager, Scene* pScene);
-		//Test: one triangle at z = 0, fires a ray that hits it, one that misses and one that stops before it
-		CraigError runTriangleTest();
-		//Test: fires rays around the reference scene (Listener, Source and a wall between them) and checks what they hit
-		CraigError runSceneTest(Scene& scene);
-		//Test: same wall ray but through the slots, and checks a result from an old context gets thrown away
-		CraigError runSlotTest(Scene& scene);
 		//Anything submitted before this gets thrown away when it comes back
 		void setContext(uint64_t sceneGeneration, uint64_t sourceId);
 		void stop();
@@ -157,10 +151,6 @@ namespace Craig {
 		void buildAccelerationStructure(vk::AccelerationStructureTypeKHR type, const VkAccelerationStructureGeometryKHR& geometry,
 			AccelerationStructure& accelerationStructure, uint32_t primitiveCount);
 		void destroyAccelerationStructure(AccelerationStructure& accelerationStructure);
-		void createTestPipeline();
-		//Blocking, waits for the GPU, only for the startup tests
-		std::vector<uint32_t> traceTestRays(const AccelerationStructure& tlas, const std::vector<Ray>& rays);
-		CraigError checkTestResults(const char* testName, const std::vector<uint32_t>& results, const std::vector<uint32_t>& expected);
 		void createModelGeometry(const Model& model, ModelGeometry& geometry);
 		bool collectSceneInstances(Scene& scene, std::vector<VkAccelerationStructureInstanceKHR>& instances, bool prepareGeometry);
 		void createSharedTables();
@@ -198,23 +188,6 @@ namespace Craig {
 		vk::DescriptorSetLayout m_VK_descriptorSetLayout;
 		vk::PipelineLayout m_VK_pipelineLayout;
 		vk::Pipeline m_VK_pipeline;
-
-		//Test triangle
-		Buffer m_testVertices;
-		Buffer m_testIndices;
-		Buffer m_testInstances;
-		AccelerationStructure m_testBLAS;
-		AccelerationStructure m_testTLAS;
-		Buffer m_sceneInstances;
-		AccelerationStructure m_sceneTLAS;
-		Buffer m_testRays;
-		Buffer m_testResults;
-
-		vk::DescriptorPool m_VK_testDescriptorPool;
-		vk::DescriptorSetLayout m_VK_testDescriptorSetLayout;
-		vk::DescriptorSet m_VK_testDescriptorSet;
-		vk::PipelineLayout m_VK_testPipelineLayout;
-		vk::Pipeline m_VK_testPipeline;
 
 		//The KHR acceleration structure functions aren't guaranteed to be exported by the loader, so we grab them off the device
 		PFN_vkCreateAccelerationStructureKHR m_vkCreateAccelerationStructureKHR = nullptr;

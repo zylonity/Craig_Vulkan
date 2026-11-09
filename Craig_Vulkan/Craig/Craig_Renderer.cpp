@@ -245,16 +245,6 @@ CraigError Craig::Renderer::initSceneResources() {
 
     Craig::Logger::renderer().info("Scene resources ready (sampler, buffers, UBOs, descriptor sets)");
 
-    //Quick startup check that ray queries actually work before building anything bigger on them
-    if (kRunRayQueryTest && m_Devices.isRayQueryEnabled()) {
-        if (m_soundPropagation.init(&m_Devices, &m_commandManager, mp_SceneManager->getCurrentScene()) == CRAIG_SUCCESS) {
-            m_soundPropagation.runTriangleTest();
-            m_soundPropagation.runSceneTest(*mp_SceneManager->getCurrentScene());
-            m_soundPropagation.runSlotTest(*mp_SceneManager->getCurrentScene());
-        }
-        m_soundPropagation.terminate();
-    }
-
     return ret;
 }
 

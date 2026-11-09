@@ -24,7 +24,7 @@ constexpr uint32_t kVertexAttributeDescriptors = 4;
 
 //Scenes
 constexpr char kScenesDirectory[] = "data/scenes";
-constexpr char kDefaultScenePath[] = "data/scenes/SoundPropagationReference.json"; // Scene loaded on startup
+constexpr char kDefaultScenePath[] = "data/scenes/TestScene1.json"; // Scene loaded on startup
 
 //Logging
 constexpr char kLogFilePath[] = "logs/Craig.log"; // overwritten every run (logs/ is gitignored)
@@ -33,9 +33,6 @@ constexpr uint32_t kMaxEditorLogLines = 5000; // oldest lines get dropped after 
 //Physics
 // Jolt's scratch memory per step, going over it aborts ("TempAllocator: Out of memory")
 constexpr uint32_t kPhysicsTempAllocatorSize = 10 * 1024 * 1024; // 10 MB
-
-//Sound propagation
-constexpr bool kRunRayQueryTest = false; //Startup checks are off now, the moving door shows the live results instead
 
 enum CraigError {
 	CRAIG_SUCCESS = 0,
