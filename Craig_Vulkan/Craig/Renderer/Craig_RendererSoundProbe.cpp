@@ -53,17 +53,30 @@ CraigError Craig::Renderer::prepareSoundProbe() {
     //Only called when configuring or changing scenes, builds can wait for the GPU here but not every frame
     m_soundPropagation.terminate();
     m_soundPrepared = false;
+    m_gpuSoundReady = false;
     try {
-        if (m_soundPropagation.init(&m_Devices, &m_commandManager, mp_SceneManager->getCurrentScene()) == CRAIG_SUCCESS) {
-            m_soundPrepared = true;
-            return CRAIG_SUCCESS;
-        }
+        m_gpuSoundReady = m_soundPropagation.init(&m_Devices, &m_commandManager, mp_SceneManager->getCurrentScene()) == CRAIG_SUCCESS;
     }
     catch (const std::exception& error) {
-        Logger::renderer().error("Sound probe preparation failed: {}", error.what());
+        Logger::renderer().error("GPU sound propagation preparation failed: {}", error.what());
     }
-    m_soundPropagation.terminate();
-    return CRAIG_FAIL;
+    if (!m_gpuSoundReady) m_soundPropagation.terminate();
+
+    //Doesn't need ray queries, so a GPU without them still gets sound through this one
+    m_cpuSoundReady = m_steamSimulator.prepare(*mp_SceneManager->getCurrentScene(), steamSimulatorSettings()) == CRAIG_SUCCESS;
+    m_soundPrepared = m_gpuSoundReady || m_cpuSoundReady;
+    if (!m_gpuSoundReady && m_cpuSoundReady && m_soundBackend == SoundBackend::GPU) {
+        Logger::renderer().warn("No ray queries for sound, using Steam Audio's CPU simulator instead");
+        m_soundBackend = SoundBackend::CPU;
+    }
+    return m_soundPrepared ? CRAIG_SUCCESS : CRAIG_FAIL;
+}
+
+Craig::SteamAudioSimulator::Settings Craig::Renderer::steamSimulatorSettings() const {
+    SteamAudioSimulator::Settings settings;
+    settings.rayTracer = m_steamEmbree ? SteamAudioSimulator::RayTracer::Embree : SteamAudioSimulator::RayTracer::Default;
+    settings.threads = m_steamThreads;
+    return settings;
 }
 
 void Craig::Renderer::resetSoundProbeContext(bool clearDebugRays) {
@@ -74,6 +87,7 @@ void Craig::Renderer::resetSoundProbeContext(bool clearDebugRays) {
     }
     if (m_soundInvalidated) m_soundInvalidated();
     m_soundPropagation.stop();
+    m_steamSimulator.stop();
     m_soundContextActive = false;
     m_soundResult.reset();
     m_soundSequence = 0;
@@ -97,29 +111,39 @@ void Craig::Renderer::setSoundProbeMode(uint32_t mode, bool running) {
 }
 
 Craig::SoundProbeReadout Craig::Renderer::getSoundProbeReadout() const {
-    SoundProbeReadout readout;
-    readout.state = m_soundState;
-    readout.sceneGeneration = m_soundSceneGeneration;
-    readout.sourceId = m_soundSourceId;
-    if (m_soundResult) {
-        readout.hasResult = true;
-        readout.blockedRays = m_soundResult->blocked;
-        readout.rayCount = m_soundResult->rayCount;
-        readout.seed = m_soundResult->seed;
-        //Works for both direct models, the volumetric one only counts samples the source can actually see
-        readout.obstruction = 1.0f - m_soundResult->direct.occlusion;
-        readout.sceneGeneration = m_soundResult->sceneGeneration;
-        readout.sourceId = m_soundResult->sourceId;
-        readout.sequenceId = m_soundResult->sequenceId;
-        readout.source = m_soundResult->source;
-        readout.listener = m_soundResult->listener;
-        readout.direct = m_soundResult->direct;
-        readout.reflections = m_soundResult->reflections;
-        readout.reverbEnabled = m_soundResult->reverbEnabled;
-        //Always work this out again, leaving a result on screen for a second doesn't make it a fresh one
-        readout.ageMs = std::chrono::duration<double, std::milli>(SoundPropagation::Clock::now() - m_soundResult->inputTime).count();
+    if (!m_soundResult) {
+        SoundProbeReadout readout;
+        readout.state = m_soundState;
+        readout.sceneGeneration = m_soundSceneGeneration;
+        readout.sourceId = m_soundSourceId;
+        readout.backend = m_soundBackend;
+        return readout;
     }
+    SoundProbeReadout readout = *m_soundResult;
+    readout.state = m_soundState;
+    //Always work this out again, leaving a result on screen for a second doesn't make it a fresh one
+    readout.ageMs = std::chrono::duration<double, std::milli>(SoundPropagation::Clock::now() - readout.inputTime).count();
     return readout;
+}
+
+void Craig::Renderer::acceptSoundResult(const SoundProbeReadout& result) {
+    //Only log when it becomes fully clear/blocked, not every small sample change
+    if (!m_soundResult || (result.obstruction == 0.0f) != (m_soundResult->obstruction == 0.0f) ||
+        (result.obstruction == 1.0f) != (m_soundResult->obstruction == 1.0f)) {
+        const SoundTimings& t = result.timings;
+        Logger::renderer().info("Live sound probe ({}): {:.1f}% obstructed (scene {}, source {}, sequence {}, input age {:.2f} ms), {}",
+            result.backend == SoundBackend::GPU ? "GPU" : "Steam Audio CPU", 100.0f * result.obstruction, result.sceneGeneration,
+            result.sourceId, result.sequenceId, std::chrono::duration<double, std::milli>(SoundPropagation::Clock::now() - result.inputTime).count(),
+            result.backend == SoundBackend::GPU ?
+                fmt::format("TLAS {:.3f} ms, rays {:.3f} ms, readback {:.3f} ms", t.gpuAccelerationStructureMs, t.gpuTraceMs, t.readbackMs) :
+                fmt::format("scene {:.3f} ms, direct {:.3f} ms, reflections {:.3f} ms", t.steamSceneMs, t.steamDirectMs, t.steamReflectionsMs));
+    }
+    m_soundResult = result;
+    m_soundResult->hasResult = true;
+    //Kept so pausing leaves the line on screen
+    m_soundDebugHasPath = true;
+    m_soundDebugListener = glm::vec3(result.listener.origin[0], result.listener.origin[1], result.listener.origin[2]);
+    m_soundDebugSource = glm::vec3(result.source[0], result.source[1], result.source[2]);
 }
 
 void Craig::Renderer::updateSoundProbe() {
@@ -152,30 +176,53 @@ void Craig::Renderer::updateSoundProbe() {
         return;
     }
 
+    const bool gpu = m_soundBackend == SoundBackend::GPU;
+    if (gpu ? !m_gpuSoundReady : !m_cpuSoundReady) {
+        if (previousState != SoundProbeReadout::State::BackendUnavailable) {
+            Logger::renderer().warn("{} sound propagation isn't available, pick the other one", gpu ? "GPU" : "CPU");
+        }
+        resetSoundProbeContext();
+        m_soundState = SoundProbeReadout::State::BackendUnavailable;
+        return;
+    }
+
     if (!m_soundContextActive || pListener->getInstanceId() != m_soundListenerInstance || pSource->getInstanceId() != m_soundSourceInstance) {
         resetSoundProbeContext();
-        m_soundPropagation.setContext(m_soundSceneGeneration, m_soundSourceId);
+        if (gpu) m_soundPropagation.setContext(m_soundSceneGeneration, m_soundSourceId);
+        else m_steamSimulator.setContext(m_soundSceneGeneration, m_soundSourceId);
         m_soundListenerInstance = pListener->getInstanceId();
         m_soundSourceInstance = pSource->getInstanceId();
         m_soundContextActive = true;
     }
 
+    if (!gpu) {
+        updateSteamSimulator(scene, *pListener, origin, endpoint, inputTime, previousState);
+        return;
+    }
+
     SoundPropagation::Result result;
     if (m_soundPropagation.poll(result)) {
-        //Only log when it becomes fully clear/blocked, not every small sample change
-        if (!m_soundResult || (result.blocked == 0) != (m_soundResult->blocked == 0) ||
-            (result.blocked == result.rayCount) != (m_soundResult->blocked == m_soundResult->rayCount)) {
-            Logger::renderer().info("Live sound probe: {}/{} rays blocked (scene {}, source {}, sequence {}, input age {:.2f} ms)",
-                result.blocked, result.rayCount, result.sceneGeneration, result.sourceId, result.sequenceId, result.ageMs);
-        }
-        m_soundResult = result;
-        //Kept so pausing leaves the line on screen
-        m_soundDebugHasPath = true;
+        SoundProbeReadout readout;
+        readout.backend = SoundBackend::GPU;
+        readout.blockedRays = result.blocked;
+        readout.rayCount = result.rayCount;
+        readout.seed = result.seed;
+        //Works for both direct models, the volumetric one only counts samples the source can actually see
+        readout.obstruction = 1.0f - result.direct.occlusion;
+        readout.sceneGeneration = result.sceneGeneration;
+        readout.sourceId = result.sourceId;
+        readout.sequenceId = result.sequenceId;
+        readout.source = result.source;
+        readout.listener = result.listener;
+        readout.direct = result.direct;
+        readout.reflections = result.reflections;
+        readout.reflectionOrder = result.reflections ? result.reflections->order : 0;
+        readout.reverbEnabled = result.reverbEnabled;
+        readout.timings = result.timings;
+        readout.inputTime = result.inputTime;
+        acceptSoundResult(readout);
         //Only the overlay keeps the bounce points, the readout doesn't need another copy
         mv_soundDebugBounces = std::move(result.bounces);
-        m_soundResult->bounces.clear();
-        m_soundDebugListener = origin;
-        m_soundDebugSource = endpoint;
     }
 
     SoundPropagation::Request request{};
@@ -260,16 +307,91 @@ void Craig::Renderer::updateSoundProbe() {
     m_soundState = m_soundResult ? SoundProbeReadout::State::Ready : SoundProbeReadout::State::Waiting;
 }
 
+void Craig::Renderer::updateSteamSimulator(Scene& scene, GameObject& listener, const glm::vec3& origin, const glm::vec3& endpoint,
+    SoundPropagation::Clock::time_point inputTime, SoundProbeReadout::State previousState) {
+    SteamAudioSimulator::Result result;
+    if (m_steamSimulator.poll(result)) {
+        SoundProbeReadout readout;
+        readout.backend = SoundBackend::CPU;
+        readout.obstruction = 1.0f - result.direct.occlusion;
+        readout.seed = static_cast<uint32_t>(m_soundSeed);
+        readout.sceneGeneration = result.sceneGeneration;
+        readout.sourceId = result.sourceId;
+        readout.sequenceId = result.sequenceId;
+        readout.source = result.source;
+        readout.listener = result.listener;
+        readout.direct = result.direct;
+        readout.reverbEnabled = result.reflections;
+        readout.steamReflections = result.reflections;
+        readout.steamReflectionParams = result.reflectionParams;
+        readout.reflectionOrder = result.order;
+        readout.timings = result.timings;
+        readout.inputTime = result.inputTime;
+        acceptSoundResult(readout);
+        mv_soundDebugBounces.clear();
+    }
+
+    //Same settings as the GPU gets, the CPU can only do the volumetric direct model though
+    SteamAudioSimulator::Request request;
+    request.source = {endpoint.x, endpoint.y, endpoint.z};
+    request.listener = makeListenerFrame(listener);
+    request.occlusionSamples = static_cast<uint32_t>(std::min(m_soundRayCount, static_cast<int>(SoundPropagation::kMaxRayCount / 2)));
+    request.occlusionRadius = m_soundOcclusionRadius;
+    request.transmissionRays = static_cast<uint32_t>(m_soundTransmissionRays);
+    request.reflections = m_soundReverbEnabled;
+    request.reflectionRays = static_cast<uint32_t>(m_soundReflectionRayCount);
+    request.bounces = static_cast<uint32_t>(m_soundMaxBounces);
+    request.order = static_cast<uint32_t>(m_soundReflectionOrder);
+    request.sceneGeneration = m_soundSceneGeneration;
+    request.sourceId = m_soundSourceId;
+    request.sequenceId = m_soundSequence++;
+    request.inputTime = inputTime;
+    (void)origin;
+    if (m_steamSimulator.trySubmit(scene, request) == SteamAudioSimulator::SubmitStatus::GeometryNotReady) {
+        if (previousState != SoundProbeReadout::State::GeometryNotReady) {
+            Logger::renderer().warn("Steam Audio scene doesn't match the prepared objects; reload the scene to prepare it");
+        }
+        resetSoundProbeContext();
+        m_soundState = SoundProbeReadout::State::GeometryNotReady;
+        return;
+    }
+    m_soundState = m_soundResult ? SoundProbeReadout::State::Ready : SoundProbeReadout::State::Waiting;
+}
+
 void Craig::Renderer::drawSoundProbeReadout() {
 #if defined(IMGUI_ENABLED)
     if (!m_soundConfigured) return;
     const auto readout = getSoundProbeReadout();
-    const char* states[] = {"disabled", "paused", "waiting", "ready", "missing endpoint", "invalid segment", "geometry not prepared"};
+    const char* states[] = {"disabled", "paused", "waiting", "ready", "missing endpoint", "invalid segment", "geometry not prepared",
+        "backend unavailable"};
     ImGui::SetNextWindowPos(ImVec2(330, 25), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(640, 340), ImGuiCond_FirstUseEver);
     ImGui::Begin("Sound propagation");
     ImGui::Text("State: %s", states[static_cast<unsigned>(readout.state)]);
     ImGui::Text("%s -> %s", m_soundSource.c_str(), m_soundListener.c_str());
+    const char* backends[] = {"GPU (Vulkan ray queries)", "CPU (Steam Audio simulator)"};
+    int backend = static_cast<int>(m_soundBackend);
+    if (ImGui::Combo("Ray tracing", &backend, backends, 2)) {
+        m_soundBackend = static_cast<SoundBackend>(backend);
+        resetSoundProbeContext();
+    }
+    ImGui::SetItemTooltip("Same settings either way. GPU is the port, CPU is Valve's stock simulator.");
+    if (m_soundBackend == SoundBackend::CPU) {
+        //Both get baked into the simulator when it's made, so changing them rebuilds it
+        bool rebuild = ImGui::Checkbox("Embree", &m_steamEmbree);
+        ImGui::SetItemTooltip("Intel's CPU ray tracer, x86 only. Steam Audio's own one gets used where it isn't there.");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(120.0f);
+        ImGui::SliderInt("Threads", &m_steamThreads, 1, 32);
+        m_steamThreads = std::clamp(m_steamThreads, 1, 32);
+        //Only once the slider's let go, rebuilding on every step of a drag would stall the frame each time
+        rebuild |= ImGui::IsItemDeactivatedAfterEdit();
+        if (rebuild) {
+            resetSoundProbeContext();
+            m_cpuSoundReady = m_steamSimulator.prepare(*mp_SceneManager->getCurrentScene(), steamSimulatorSettings()) == CRAIG_SUCCESS;
+        }
+        if (m_soundBackend == SoundBackend::CPU && !m_soundVolumetric) ImGui::TextDisabled("The CPU only does the volumetric direct model");
+    }
     const char* directModels[] = {"Area emitter (obstruction metric)", "Steam Audio volumetric"};
     int directModel = m_soundVolumetric ? 1 : 0;
     bool changed = ImGui::Combo("Direct model", &directModel, directModels, 2);
@@ -312,7 +434,8 @@ void Craig::Renderer::drawSoundProbeReadout() {
         ImGui::TextWrapped("Purple: first 128 listener rays, not confirmed source paths. Readout: last completed GPU result.");
     }
     if (readout.hasResult && !changed) {
-        ImGui::Text("Blocked: %u / %u (%.1f%%)", readout.blockedRays, readout.rayCount, readout.obstruction * 100.0f);
+        if (readout.backend == SoundBackend::CPU) ImGui::Text("Obstructed: %.1f%%", readout.obstruction * 100.0f);
+        else ImGui::Text("Blocked: %u / %u (%.1f%%)", readout.blockedRays, readout.rayCount, readout.obstruction * 100.0f);
         if (m_soundVolumetric) ImGui::SetItemTooltip("Only samples the source can see count, the rest are inside a wall");
         ImGui::Text("Age: %.1f ms | Sequence %llu | Seed %u", readout.ageMs, static_cast<unsigned long long>(readout.sequenceId), readout.seed);
         const DirectPath& direct = readout.direct;
@@ -324,6 +447,16 @@ void Craig::Renderer::drawSoundProbeReadout() {
             ImGui::TextDisabled("Low / mid / high bands, what Steam Audio's direct effect gets");
             ImGui::TreePop();
         }
+        const SoundTimings& timings = readout.timings;
+        if (readout.backend == SoundBackend::GPU) {
+            ImGui::Text("GPU: TLAS %.3f ms | Rays %.3f ms | Readback %.3f ms", timings.gpuAccelerationStructureMs, timings.gpuTraceMs, timings.readbackMs);
+            ImGui::SetItemTooltip("TLAS and rays from GPU timestamps, readback is CPU time binning the records. -1 means it didn't run.");
+        }
+        else {
+            ImGui::Text("CPU: Scene %.3f ms | Direct %.3f ms | Reflections %.3f ms", timings.steamSceneMs, timings.steamDirectMs, timings.steamReflectionsMs);
+            ImGui::SetItemTooltip("Wall clock on the simulation thread. -1 means it didn't run.");
+        }
+        if (readout.steamReflections) ImGui::Text("Reflections: order %u, Steam Audio's own response", readout.reflectionOrder);
         if (readout.reflections) {
             //Just the omni channel, the rest are signed direction weights
             float total = 0.0f;
@@ -332,11 +465,16 @@ void Craig::Renderer::drawSoundProbeReadout() {
                 ReflectionField::channelsFor(readout.reflections->order), total);
         }
     }
-    if (ImGui::CollapsingHeader("GPU diagnostics")) {
+    if (ImGui::CollapsingHeader("Submission diagnostics")) {
         const auto& stats = m_soundPropagation.getStatistics();
-        ImGui::Text("Submitted %llu | Completed %llu | Skipped %llu | Discarded %llu",
+        ImGui::Text("GPU: submitted %llu | completed %llu | skipped %llu | discarded %llu",
             static_cast<unsigned long long>(stats.submitted), static_cast<unsigned long long>(stats.completed),
             static_cast<unsigned long long>(stats.skipped), static_cast<unsigned long long>(stats.discarded));
+        const auto& steamStats = m_steamSimulator.getStatistics();
+        ImGui::Text("CPU: submitted %llu | completed %llu | replaced %llu | discarded %llu",
+            static_cast<unsigned long long>(steamStats.submitted), static_cast<unsigned long long>(steamStats.completed),
+            static_cast<unsigned long long>(steamStats.skipped), static_cast<unsigned long long>(steamStats.discarded));
+        ImGui::SetItemTooltip("The CPU only queues one request, a newer frame replaces it instead of waiting");
     }
     ImGui::End();
     drawSoundProbeRays();

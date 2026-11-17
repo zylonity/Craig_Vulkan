@@ -59,6 +59,7 @@ namespace Craig {
 			DirectPath direct;
 			std::shared_ptr<const ReflectionField> reflections; //Null unless the reflection rays were traced
 			bool reverbEnabled = false;
+			SoundTimings timings;
 			std::vector<std::array<float, 4>> bounces; //kReverbBounces per listener ray, empty unless captureBounces was on
 			uint64_t sceneGeneration = 0;
 			uint64_t sourceId = 0;
@@ -136,6 +137,7 @@ namespace Craig {
 			AccelerationStructure tlas;
 			vk::CommandPool commandPool;
 			vk::CommandBuffer commandBuffer;
+			vk::QueryPool timestamps; //Start, after the TLAS, after the dispatch
 			vk::DescriptorSet descriptorSet;
 			Request request;
 			uint64_t completionValue = 0; //Timeline value this slot's submission signals when it's done
@@ -184,6 +186,8 @@ namespace Craig {
 		std::array<ResultSlot, kResultSlotCount> m_slots;
 		uint32_t m_instanceCapacity = 0; //Slot TLASes are sized for this many, set when the scene's prepared
 		vk::Semaphore m_VK_completionTimeline;
+		bool m_timestampsSupported = false;
+		double m_timestampPeriodNs = 1.0;
 		uint64_t m_lastSubmissionValue = 0;
 		uint64_t m_contextVersion = 0; //Goes up on every stop, slots remember the version they were submitted with
 		uint64_t m_sceneGeneration = 0;

@@ -1267,6 +1267,7 @@ CraigError Craig::Renderer::terminate() {
     m_Devices.getLogicalDevice().waitIdle();
     disableSoundProbe();
     m_soundPropagation.terminate();
+    m_steamSimulator.terminate();
 
 #if defined(IMGUI_ENABLED)
     ImGui_ImplVulkan_Shutdown();

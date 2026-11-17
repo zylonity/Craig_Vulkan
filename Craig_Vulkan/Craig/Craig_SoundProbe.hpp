@@ -1,9 +1,11 @@
 #pragma once
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <vector>
+#include <phonon.h>
 
 namespace Craig {
 
@@ -43,9 +45,23 @@ namespace Craig {
 		std::array<float, 3> ahead{0.0f, 0.0f, -1.0f};
 	};
 
+	//Which ray tracer made the result, the GPU port or Valve's own CPU simulator
+	enum class SoundBackend : uint32_t { GPU, CPU };
+
+	//Milliseconds for each stage of the result, negative means that stage didn't run for it
+	struct SoundTimings {
+		double gpuAccelerationStructureMs = -1.0; //TLAS rebuild, from GPU timestamps
+		double gpuTraceMs = -1.0; //The ray query dispatch, from GPU timestamps
+		double readbackMs = -1.0; //CPU time turning the GPU's records into a result
+		double steamSceneMs = -1.0; //Moving the instanced meshes and committing the scene
+		double steamDirectMs = -1.0;
+		double steamReflectionsMs = -1.0;
+		double steamPathingMs = -1.0;
+	};
+
 	//Just the numbers, no Vulkan handles cross over into the game or audio
 	struct SoundProbeReadout {
-		enum class State { Disabled, Paused, Waiting, Ready, MissingEndpoint, InvalidSegment, GeometryNotReady };
+		enum class State { Disabled, Paused, Waiting, Ready, MissingEndpoint, InvalidSegment, GeometryNotReady, BackendUnavailable };
 		State state = State::Disabled;
 		bool hasResult = false;
 		float obstruction = 0.0f; //Blocked rays / all rays
@@ -62,6 +78,14 @@ namespace Craig {
 		//Shared so a 16 channel field doesn't get copied every time the readout does
 		std::shared_ptr<const ReflectionField> reflections;
 		bool reverbEnabled = false;
+		SoundBackend backend = SoundBackend::GPU;
+		SoundTimings timings;
+		std::chrono::steady_clock::time_point inputTime; //When the positions were read, for working out how old it is
+		//Only the CPU backend: the library keeps its own response, so the audio hands this straight back to its reflection effect
+		//Points into the simulator's source, which stays alive until shutdown so the audio thread can't outlive it
+		bool steamReflections = false;
+		IPLReflectionEffectParams steamReflectionParams{};
+		uint32_t reflectionOrder = 0;
 	};
 
 }

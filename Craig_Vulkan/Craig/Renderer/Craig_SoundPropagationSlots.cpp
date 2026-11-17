@@ -22,6 +22,12 @@ void Craig::SoundPropagation::createResultSlots(uint32_t instanceCapacity) {
     mv_instanceSnapshot.reserve(m_instanceCapacity);
     mv_instanceInfoSnapshot.reserve(m_instanceCapacity);
 
+    //Timestamps need the queue family to actually count, some report 0 valid bits
+    const auto families = mp_Device->getPhysicalDevice().getQueueFamilyProperties();
+    const uint32_t family = mp_Device->getQueueFamilyIndices().graphicsFamily.value();
+    m_timestampsSupported = families[family].timestampValidBits > 0;
+    m_timestampPeriodNs = mp_Device->getPhysicalDevice().getProperties().limits.timestampPeriod;
+
     //One timeline for every sound submission, each slot remembers what value it's waiting for
     vk::SemaphoreTypeCreateInfo type{};
     type.setSemaphoreType(vk::SemaphoreType::eTimeline).setInitialValue(0);
@@ -78,6 +84,9 @@ void Craig::SoundPropagation::createResultSlots(uint32_t instanceCapacity) {
             .setFlags(vk::CommandPoolCreateFlagBits::eTransient));
         slot.commandBuffer = device.allocateCommandBuffers(vk::CommandBufferAllocateInfo()
             .setCommandPool(slot.commandPool).setLevel(vk::CommandBufferLevel::ePrimary).setCommandBufferCount(1))[0];
+        if (m_timestampsSupported) {
+            slot.timestamps = device.createQueryPool(vk::QueryPoolCreateInfo().setQueryType(vk::QueryType::eTimestamp).setQueryCount(3));
+        }
         slot.descriptorSet = device.allocateDescriptorSets(vk::DescriptorSetAllocateInfo()
             .setDescriptorPool(m_VK_descriptorPool).setSetLayouts(m_VK_descriptorSetLayout))[0];
         writeQueryDescriptors(slot);
@@ -153,6 +162,10 @@ void Craig::SoundPropagation::submitSlot(ResultSlot& slot, const Request& reques
 
     device.resetCommandPool(slot.commandPool);
     slot.commandBuffer.begin(vk::CommandBufferBeginInfo().setFlags(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+    if (slot.timestamps) {
+        slot.commandBuffer.resetQueryPool(slot.timestamps, 0, 3);
+        slot.commandBuffer.writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, slot.timestamps, 0);
+    }
 
     //Rebuild the TLAS with where everything is this frame, the BLASes stay the same
     VkAccelerationStructureGeometryKHR geometry{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
@@ -180,8 +193,10 @@ void Craig::SoundPropagation::submitSlot(ResultSlot& slot, const Request& reques
         .setSrcAccessMask(vk::AccessFlagBits2::eAccelerationStructureWriteKHR)
         .setDstStageMask(vk::PipelineStageFlagBits2::eComputeShader).setDstAccessMask(vk::AccessFlagBits2::eAccelerationStructureReadKHR);
     slot.commandBuffer.pipelineBarrier2(vk::DependencyInfo().setMemoryBarriers(barrier));
+    if (slot.timestamps) slot.commandBuffer.writeTimestamp2(vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR, slot.timestamps, 1);
 
     recordQuery(slot.commandBuffer, slot, request);
+    if (slot.timestamps) slot.commandBuffer.writeTimestamp2(vk::PipelineStageFlagBits2::eComputeShader, slot.timestamps, 2);
     slot.commandBuffer.end();
 
     //Signals the timeline when it's done, nothing waits on it, we just check the value next frame
@@ -223,6 +238,16 @@ void Craig::SoundPropagation::collectCompleted() {
         }
 
         Result result{};
+        if (slot.timestamps) {
+            //The timeline says it's finished, so these are ready without waiting
+            std::array<uint64_t, 3> ticks{};
+            if (mp_Device->getLogicalDevice().getQueryPoolResults(slot.timestamps, 0, 3, sizeof(ticks), ticks.data(), sizeof(uint64_t),
+                vk::QueryResultFlagBits::e64) == vk::Result::eSuccess) {
+                result.timings.gpuAccelerationStructureMs = static_cast<double>(ticks[1] - ticks[0]) * m_timestampPeriodNs / 1e6;
+                result.timings.gpuTraceMs = static_cast<double>(ticks[2] - ticks[1]) * m_timestampPeriodNs / 1e6;
+            }
+        }
+        const auto readbackStart = Clock::now();
         buildDirect(slot, result);
         result.reverbEnabled = slot.request.reverbEnabled;
         if (result.reverbEnabled) {
@@ -231,6 +256,7 @@ void Craig::SoundPropagation::collectCompleted() {
             }
             buildReflections(slot, result);
         }
+        result.timings.readbackMs = std::chrono::duration<double, std::milli>(Clock::now() - readbackStart).count();
         if (slot.request.captureBounces) {
             if (vmaInvalidateAllocation(mp_Device->getVmaAllocator(), slot.hits.allocation, 0, VK_WHOLE_SIZE) != VK_SUCCESS) {
                 throw std::runtime_error("result-slot readback invalidation failed");

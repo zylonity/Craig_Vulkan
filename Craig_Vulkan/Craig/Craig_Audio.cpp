@@ -77,10 +77,14 @@ CraigError Craig::Audio::createEffects() {
 	IPLBinauralEffectSettings binauralSettings{steamAudio.getHRTF()};
 	IPLPanningEffectSettings panningSettings{kStereo};
 	IPLAmbisonicsDecodeEffectSettings decodeSettings{kStereo, steamAudio.getHRTF(), SteamAudio::kMaxOrder};
+	//Sized for the biggest response the CPU simulator can make, 2 s at third order
+	IPLReflectionEffectSettings reflectionSettings{IPL_REFLECTIONEFFECTTYPE_CONVOLUTION,
+		static_cast<IPLint32>(kReverbBins * kReverbBinSeconds * kRate), static_cast<IPLint32>(kChannels)};
 	if (iplDirectEffectCreate(context, &settings, &directSettings, &m_directEffect) != IPL_STATUS_SUCCESS ||
 		iplBinauralEffectCreate(context, &settings, &binauralSettings, &m_binauralEffect) != IPL_STATUS_SUCCESS ||
 		iplPanningEffectCreate(context, &settings, &panningSettings, &m_panningEffect) != IPL_STATUS_SUCCESS ||
-		iplAmbisonicsDecodeEffectCreate(context, &settings, &decodeSettings, &m_decodeEffect) != IPL_STATUS_SUCCESS) {
+		iplAmbisonicsDecodeEffectCreate(context, &settings, &decodeSettings, &m_decodeEffect) != IPL_STATUS_SUCCESS ||
+		iplReflectionEffectCreate(context, &settings, &reflectionSettings, &m_reflectionEffect) != IPL_STATUS_SUCCESS) {
 		Logger::audio().warn("Couldn't create the Steam Audio effects");
 		releaseEffects();
 		return CRAIG_FAIL;
@@ -93,6 +97,8 @@ void Craig::Audio::releaseEffects() {
 	if (m_binauralEffect) iplBinauralEffectRelease(&m_binauralEffect);
 	if (m_panningEffect) iplPanningEffectRelease(&m_panningEffect);
 	if (m_decodeEffect) iplAmbisonicsDecodeEffectRelease(&m_decodeEffect);
+	if (m_reflectionEffect) iplReflectionEffectRelease(&m_reflectionEffect);
+	m_reflectionEffect = nullptr;
 	m_directEffect = nullptr;
 	m_binauralEffect = nullptr;
 	m_panningEffect = nullptr;
@@ -133,6 +139,7 @@ CraigError Craig::Audio::openSound(const std::string& path, bool looping) {
 	m_voices = {};
 	m_gain = 0.0f;
 	m_resetEffects = false;
+	m_steamReflectionsPlaying = false;
 	m_current = {};
 	m_mailbox.reset();
 	m_callbackFrames.store(0, std::memory_order_relaxed);
@@ -171,7 +178,8 @@ void Craig::Audio::publish(const SoundProbeReadout* probe, uint64_t deadlineMs) 
 	set.audible = probe != nullptr;
 	set.deadlineMs = deadlineMs;
 	set.direct = m_directEnabled;
-	set.reflections = m_reflectionsEnabled && m_reverbActive;
+	set.reflections = m_reflectionsEnabled && (m_reverbActive || m_steamReflectionsActive);
+	set.steamReflections = false;
 	set.binaural = m_binaural;
 	set.reflectionOrder = m_reverbOrder;
 	if (probe) {
@@ -193,6 +201,8 @@ void Craig::Audio::publish(const SoundProbeReadout* probe, uint64_t deadlineMs) 
 		//The HRTF wants it relative to where the listener's facing
 		set.direction = iplCalculateRelativeDirection(SteamAudio::getInstance().getContext(), toIPL(probe->source),
 			toIPL(listener.origin), toIPL(listener.ahead), toIPL(listener.up));
+		set.steamReflections = m_steamReflectionsActive;
+		set.steamReflectionParams = probe->steamReflectionParams;
 	}
 	m_mailbox.publish();
 }
@@ -202,6 +212,7 @@ void Craig::Audio::invalidate() {
 	cancelOneShot();
 	m_reverb.invalidate();
 	m_reverbActive = false;
+	m_steamReflectionsActive = false;
 	m_nextReverbUpdate = 0;
 	publish(nullptr, 0);
 	m_state = AudioStatus::State::NoResult;
@@ -247,11 +258,14 @@ void Craig::Audio::update(const SoundProbeReadout& probe, bool worldRunning) {
 	else {
 		m_state = probe.obstruction == 0.0f ? AudioStatus::State::Clear :
 			(probe.obstruction == 1.0f ? AudioStatus::State::Blocked : AudioStatus::State::Partial);
+		//The GPU hands over energy for our own convolution, the CPU simulator keeps its own response for the library's effect
 		const bool tail = m_reflectionsEnabled && probe.reverbEnabled && probe.reflections;
+		m_steamReflectionsActive = m_reflectionsEnabled && probe.steamReflections && probe.steamReflectionParams.ir != nullptr;
+		const uint32_t order = tail ? probe.reflections->order : probe.reflectionOrder;
 		//Banks of different orders can't crossfade into one decoder, so a new order starts from silence
-		if (tail && probe.reflections->order != m_reverbOrder) {
+		if ((tail || m_steamReflectionsActive) && order != m_reverbOrder) {
 			m_reverb.invalidate();
-			m_reverbOrder = probe.reflections->order;
+			m_reverbOrder = order;
 			m_nextReverbUpdate = 0;
 		}
 		//Rebuilding the response is slow, so at most 4 times a second
@@ -269,6 +283,7 @@ void Craig::Audio::update(const SoundProbeReadout& probe, bool worldRunning) {
 	cancelOneShot();
 	if (m_reverbActive) m_reverb.invalidate();
 	m_reverbActive = false;
+	m_steamReflectionsActive = false;
 	m_nextReverbUpdate = 0;
 	publish(nullptr, 0);
 	logDiagnostics();
@@ -282,7 +297,7 @@ void Craig::Audio::logDiagnostics() {
 	const auto status = getStatus();
 	Logger::audio().info("Audio timing: tail {} (order {}), {}, {} Hz / {} frames, callback {:.3f}/{:.3f} ms, peak load {:.1f}%, "
 		"over budget {} (+{}), long gaps {} (max {:.3f} ms), tail banks {}, changes {}, invalidations {}",
-		m_reverbActive ? "on" : "off", status.reflectionOrder, stateName(status.state), status.callbackRate, status.callbackBufferFrames,
+		m_reverbActive ? "on (GPU energy)" : (m_steamReflectionsActive ? "on (Steam Audio response)" : "off"), status.reflectionOrder, stateName(status.state), status.callbackRate, status.callbackBufferFrames,
 		status.callbackMs, status.callbackBudgetMs, 100.0f * status.callbackPeakLoad, status.callbackOverBudget,
 		status.callbackOverBudget - m_lastLoggedOverBudget, status.callbackLongGaps, status.callbackMaxGapMs,
 		status.reverbBanks, status.reverbChanges, status.reverbInvalidations);
@@ -419,6 +434,7 @@ void Craig::Audio::renderBlock(uint64_t nowMs) {
 		iplBinauralEffectReset(m_binauralEffect);
 		iplPanningEffectReset(m_panningEffect);
 		iplAmbisonicsDecodeEffectReset(m_decodeEffect);
+		iplReflectionEffectReset(m_reflectionEffect);
 		m_resetEffects = false;
 	}
 
@@ -457,6 +473,19 @@ void Craig::Audio::renderBlock(uint64_t nowMs) {
 	}
 	//Still fed while it's off so the filter history doesn't go stale, it just isn't heard
 	m_reverb.process(m_dry.data(), kFrame, ambisonics.data(), channels);
+	if (m_current.steamReflections && m_current.reflections) {
+		//Coming back after a gap, whatever the effect was still holding is from some other room
+		if (!m_steamReflectionsPlaying) iplReflectionEffectReset(m_reflectionEffect);
+		//The effect was made for 16 channels, so it gets all 16 even if the response is a lower order
+		std::array<float*, kChannels> all{};
+		for (uint32_t c = 0; c < kChannels; ++c) all[c] = m_ambisonics[c].data();
+		IPLAudioBuffer steamBuffer{static_cast<IPLint32>(kChannels), static_cast<IPLint32>(kFrame), all.data()};
+		IPLReflectionEffectParams params = m_current.steamReflectionParams;
+		params.numChannels = std::min(params.numChannels, static_cast<IPLint32>(channels));
+		iplReflectionEffectApply(m_reflectionEffect, &params, &dryBuffer, &steamBuffer, nullptr);
+		m_steamReflectionsPlaying = true;
+	}
+	else m_steamReflectionsPlaying = false;
 	if (m_current.reflections) {
 		IPLAudioBuffer ambisonicBuffer{static_cast<IPLint32>(channels), static_cast<IPLint32>(kFrame), ambisonics.data()};
 		IPLAmbisonicsDecodeEffectParams params{static_cast<IPLint32>(order), hrtf, m_current.listener, m_current.binaural ? IPL_TRUE : IPL_FALSE};

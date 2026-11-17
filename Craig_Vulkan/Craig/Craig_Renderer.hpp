@@ -29,12 +29,14 @@
 #include "Renderer/Craig_SyncManager.hpp"
 #include "Renderer/Craig_SoundPropagation.hpp"
 #include "Craig_SoundProbe.hpp"
+#include "Craig_SteamAudioSimulator.hpp"
 
 namespace Craig {
 
 	//Forward declarations
 	class Window;
 	class SceneManager;
+	class Scene;
 	class GameObject;
 
 	class Renderer {
@@ -151,7 +153,11 @@ namespace Craig {
 
 		void resetSoundProbeContext(bool clearDebugRays = true);
 		CraigError prepareSoundProbe();
+		SteamAudioSimulator::Settings steamSimulatorSettings() const;
+		void acceptSoundResult(const SoundProbeReadout& result);
 		void updateSoundProbe();
+		void updateSteamSimulator(Scene& scene, GameObject& listener, const glm::vec3& origin, const glm::vec3& endpoint,
+			SoundPropagation::Clock::time_point inputTime, SoundProbeReadout::State previousState);
 		void drawSoundProbeReadout();
 		void drawSoundProbeRays();
 
@@ -188,7 +194,12 @@ namespace Craig {
 		uint64_t m_soundSequence = 0;
 		uint64_t m_soundListenerInstance = 0;
 		uint64_t m_soundSourceInstance = 0;
-		std::optional<SoundPropagation::Result> m_soundResult;
+		std::optional<SoundProbeReadout> m_soundResult;
+		SoundBackend m_soundBackend = SoundBackend::GPU;
+		bool m_gpuSoundReady = false;
+		bool m_cpuSoundReady = false;
+		bool m_steamEmbree = true; //Falls back to Steam Audio's own tracer where Embree isn't built (Apple Silicon)
+		int m_steamThreads = 4;
 		SoundProbeReadout::State m_soundState = SoundProbeReadout::State::Disabled;
 
 		
@@ -209,6 +220,8 @@ namespace Craig {
 		// Commands
 		Craig::CommandManager m_commandManager;
 		Craig::SoundPropagation m_soundPropagation;
+		//Valve's own CPU simulator, the baseline the GPU port is compared against
+		Craig::SteamAudioSimulator m_steamSimulator;
 
 		
 		// Sync

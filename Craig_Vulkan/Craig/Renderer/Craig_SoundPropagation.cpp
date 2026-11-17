@@ -388,6 +388,7 @@ CraigError Craig::SoundPropagation::terminate() {
     device.destroySemaphore(m_VK_completionTimeline);
     for (auto& slot : m_slots) {
         device.destroyCommandPool(slot.commandPool);
+        device.destroyQueryPool(slot.timestamps);
         destroyAccelerationStructure(slot.tlas);
         destroyBuffer(slot.instances);
         destroyBuffer(slot.scratch);

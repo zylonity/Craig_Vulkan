@@ -84,6 +84,9 @@ namespace Craig {
 			IPLDirectEffectParams directParams{};
 			IPLVector3 direction{0.0f, 0.0f, -1.0f}; //Listener space, for the HRTF
 			IPLCoordinateSpace3 listener{};
+			//The CPU simulator's own response, handed straight back to the library's reflection effect
+			bool steamReflections = false;
+			IPLReflectionEffectParams steamReflectionParams{};
 		};
 
 		//Triple buffer between the main thread (writes) and the audio callback (reads)
@@ -140,6 +143,7 @@ namespace Craig {
 		Mailbox m_mailbox;
 		Reverb m_reverb;
 		bool m_reverbActive = false;
+		bool m_steamReflectionsActive = false;
 		uint32_t m_reverbOrder = 0;
 		uint64_t m_nextReverbUpdate = 0;
 		uint64_t m_nextTimingLogMs = 0;
@@ -164,6 +168,8 @@ namespace Craig {
 		IPLBinauralEffect m_binauralEffect = nullptr;
 		IPLPanningEffect m_panningEffect = nullptr;
 		IPLAmbisonicsDecodeEffect m_decodeEffect = nullptr;
+		IPLReflectionEffect m_reflectionEffect = nullptr;
+		bool m_steamReflectionsPlaying = false; //Callback only, a reflection effect starting up again shouldn't play an old tail
 
 		//Everything below here belongs to the audio thread while the callback's registered
 		std::vector<float> mv_wave;

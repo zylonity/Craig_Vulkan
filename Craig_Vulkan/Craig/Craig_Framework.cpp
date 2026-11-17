@@ -243,6 +243,12 @@ CraigError Craig::Framework::terminate() {
 	delete mp_PhysicsEngine;
 	mp_PhysicsEngine = nullptr;
 
+	//Audio stops before the renderer, the CPU simulator's response gets read straight off the audio thread
+	//The object stays until after, the renderer's last invalidation callback still calls into it
+	ret = mp_Audio->terminate();
+	logIfFailed(ret, "Audio terminate");
+	assert(ret == CRAIG_SUCCESS && "mp_Audio didn't terminate properly");
+
 	ret = mp_Renderer->terminate(); //Delete left over items in memory
 	logIfFailed(ret, "Renderer terminate");
 	assert(ret == CRAIG_SUCCESS && "mp_Renderer didn't terminate properly"); //Check it closed properly
@@ -250,9 +256,6 @@ CraigError Craig::Framework::terminate() {
 	mp_Renderer = nullptr; //Set the pointer to null (Might not be done by default, just in case)
 
 	//After the renderer's last invalidation callback, and before the window calls SDL_Quit
-	ret = mp_Audio->terminate();
-	logIfFailed(ret, "Audio terminate");
-	assert(ret == CRAIG_SUCCESS && "mp_Audio didn't terminate properly");
 	delete mp_Audio;
 	mp_Audio = nullptr;
 
