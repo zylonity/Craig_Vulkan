@@ -243,6 +243,10 @@ void Game::SoundDemo::drawImGui() {
 		bool binaural = audio.binaural;
 		if (ImGui::Checkbox("HRTF", &binaural)) mp_services->setSoundBinaural(binaural);
 		ImGui::SetItemTooltip("Steam Audio's default HRTF, use headphones. Off is its plain stereo panning.");
+		ImGui::SameLine();
+		bool pathing = audio.pathingEnabled;
+		if (ImGui::Checkbox("Paths", &pathing)) mp_services->setSoundPathingEnabled(pathing);
+		ImGui::SetItemTooltip("Sound bending round corners through the probes, needs pathing baked in Sound propagation");
 		if (ImGui::Combo("Sound", &m_sound, kSoundNames.data(), static_cast<int>(kSoundNames.size()))) prepareSound();
 		ImGui::Text("Reflections: %s", audio.reverbFailed ? "filter failed" :
 			(audio.reverbReady ? "ready" : "off / preparing"));

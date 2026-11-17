@@ -8,6 +8,7 @@
 #include "Components/Craig_Model.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <stdexcept>
 
 namespace {
@@ -22,6 +23,20 @@ namespace {
 			for (int column = 0; column < 4; column++) matrix.elements[row][column] = transform[column][row];
 		}
 		return matrix;
+	}
+
+	//The library calls this for every leg of the paths it used, so the overlay can show the CPU's route too
+	void IPLCALL collectPathSegment(IPLVector3 from, IPLVector3 to, IPLbool occluded, void* userData) {
+		(void)occluded;
+		auto& segments = *static_cast<std::vector<std::array<float, 3>>*>(userData);
+		segments.push_back({from.x, from.y, from.z});
+		segments.push_back({to.x, to.y, to.z});
+	}
+
+	//The header says it's optional, but BakedPathData calls it without checking, so a null one segfaults the bake
+	void IPLCALL ignoreProgress(IPLfloat32 progress, void* userData) {
+		(void)progress;
+		(void)userData;
 	}
 
 	double millisecondsSince(Craig::SteamAudioSimulator::Clock::time_point start) {
@@ -56,7 +71,8 @@ CraigError Craig::SteamAudioSimulator::createSimulator(const Settings& settings)
 	}
 
 	IPLSimulationSettings simulationSettings{};
-	simulationSettings.flags = static_cast<IPLSimulationFlags>(IPL_SIMULATIONFLAGS_DIRECT | IPL_SIMULATIONFLAGS_REFLECTIONS);
+	simulationSettings.flags = static_cast<IPLSimulationFlags>(IPL_SIMULATIONFLAGS_DIRECT | IPL_SIMULATIONFLAGS_REFLECTIONS |
+		IPL_SIMULATIONFLAGS_PATHING);
 	simulationSettings.sceneType = type;
 	simulationSettings.reflectionType = IPL_REFLECTIONEFFECTTYPE_CONVOLUTION;
 	simulationSettings.maxNumOcclusionSamples = kMaxOcclusionSamples;
@@ -66,6 +82,7 @@ CraigError Craig::SteamAudioSimulator::createSimulator(const Settings& settings)
 	simulationSettings.maxOrder = static_cast<IPLint32>(kMaxReflectionOrder);
 	simulationSettings.maxNumSources = 1;
 	simulationSettings.numThreads = std::max(1, settings.threads);
+	simulationSettings.numVisSamples = 4; //Only for runtime validation, which stays off so it matches the GPU
 	simulationSettings.samplingRate = SteamAudio::kSamplingRate;
 	simulationSettings.frameSize = SteamAudio::kFrameSize;
 	if (iplSimulatorCreate(context, &simulationSettings, &m_simulator) != IPL_STATUS_SUCCESS) {
@@ -88,7 +105,18 @@ CraigError Craig::SteamAudioSimulator::createSimulator(const Settings& settings)
 	return CRAIG_SUCCESS;
 }
 
+void Craig::SteamAudioSimulator::releaseProbes() {
+	if (!m_probeBatch) return;
+	if (m_simulator) {
+		iplSimulatorRemoveProbeBatch(m_simulator, m_probeBatch);
+		iplSimulatorCommit(m_simulator);
+	}
+	iplProbeBatchRelease(&m_probeBatch);
+	m_probeBatch = nullptr;
+}
+
 void Craig::SteamAudioSimulator::releaseScene() {
+	releaseProbes();
 	for (auto& instance : mv_instances) {
 		if (instance.mesh) {
 			iplInstancedMeshRemove(instance.mesh, m_scene);
@@ -131,6 +159,8 @@ CraigError Craig::SteamAudioSimulator::prepare(Scene& scene, const Settings& set
 		//Same objects in the same order as SoundPropagation::collectSceneInstances
 		ResourceManager& resources = ResourceManager::getInstance();
 		size_t triangles = 0;
+		m_boundsMin = glm::vec3(std::numeric_limits<float>::max());
+		m_boundsMax = glm::vec3(std::numeric_limits<float>::lowest());
 		for (GameObject* pObject : scene.getGameObjects()) {
 			if (!isAcousticObject(*pObject)) continue;
 			const glm::mat4 transform = pObject->GetModelMatrix();
@@ -174,6 +204,12 @@ CraigError Craig::SteamAudioSimulator::prepare(Scene& scene, const Settings& set
 				triangles += faces.size();
 			}
 			if (!entry->second.scene) continue; //No triangles
+			//Probes get generated inside this box, so it has to cover every instance
+			for (const auto& position : collectAcousticMesh(resources.getModel(key.first)).positions) {
+				const glm::vec3 world(transform * glm::vec4(position[0], position[1], position[2], 1.0f));
+				m_boundsMin = glm::min(m_boundsMin, world);
+				m_boundsMax = glm::max(m_boundsMax, world);
+			}
 
 			//Every object's an instance, so the door moving is just a new transform, not a rebuild
 			Instance instance{pObject, pObject->getInstanceId(), nullptr};
@@ -193,6 +229,65 @@ CraigError Craig::SteamAudioSimulator::prepare(Scene& scene, const Settings& set
 		return CRAIG_FAIL;
 	}
 	m_ready = true;
+	return CRAIG_SUCCESS;
+}
+
+CraigError Craig::SteamAudioSimulator::bakePathing(const PathingSettings& settings, PathingBake& bake) {
+	std::lock_guard simulationLock(m_simulationMutex);
+	releaseProbes();
+	if (!m_ready || mv_instances.empty()) return CRAIG_FAIL;
+	const IPLContext context = SteamAudio::getInstance().getContext();
+
+	//The generator works in a centred unit cube, so the box is a scale and a move
+	//A bit of room on top so the roof's own surface isn't the first thing the downward rays find
+	const glm::vec3 size = m_boundsMax - m_boundsMin + glm::vec3(0.0f, 0.1f, 0.0f);
+	const glm::vec3 centre = 0.5f * (m_boundsMin + m_boundsMax) + glm::vec3(0.0f, 0.05f, 0.0f);
+	IPLProbeGenerationParams generation{};
+	generation.type = IPL_PROBEGENERATIONTYPE_UNIFORMFLOOR;
+	generation.spacing = settings.probeSpacing;
+	generation.height = settings.probeHeight;
+	generation.transform = toIPL(glm::scale(glm::translate(glm::mat4(1.0f), centre), size));
+
+	auto start = Clock::now();
+	IPLProbeArray probes = nullptr;
+	if (iplProbeArrayCreate(context, &probes) != IPL_STATUS_SUCCESS) return CRAIG_FAIL;
+	iplProbeArrayGenerateProbes(probes, m_scene, &generation);
+	const int count = iplProbeArrayGetNumProbes(probes);
+	if (count == 0 || iplProbeBatchCreate(context, &m_probeBatch) != IPL_STATUS_SUCCESS) {
+		Logger::audio().warn("No pathing probes, nothing for the floor probes to stand on");
+		iplProbeArrayRelease(&probes);
+		m_probeBatch = nullptr;
+		return CRAIG_FAIL;
+	}
+	iplProbeBatchAddProbeArray(m_probeBatch, probes);
+	iplProbeBatchCommit(m_probeBatch);
+	bake.probes.resize(static_cast<size_t>(count));
+	for (int i = 0; i < count; ++i) {
+		const IPLSphere sphere = iplProbeArrayGetProbe(probes, i);
+		bake.probes[i] = {glm::vec3(sphere.center.x, sphere.center.y, sphere.center.z), sphere.radius};
+	}
+	iplProbeArrayRelease(&probes);
+	bake.probesMs = millisecondsSince(start);
+
+	//The stock baker, visibility graph and every shortest path, on the same number of threads as the simulation
+	IPLPathBakeParams params{};
+	params.scene = m_scene;
+	params.probeBatch = m_probeBatch;
+	params.identifier.type = IPL_BAKEDDATATYPE_PATHING;
+	params.identifier.variation = IPL_BAKEDDATAVARIATION_DYNAMIC;
+	params.numSamples = static_cast<IPLint32>(settings.visSamples);
+	params.radius = settings.visRadius;
+	params.threshold = settings.visThreshold;
+	params.visRange = settings.visRange;
+	params.pathRange = settings.pathRange;
+	params.numThreads = std::max(1, m_settings.threads);
+	start = Clock::now();
+	iplPathBakerBake(context, &params, ignoreProgress, nullptr);
+	bake.bakeMs = millisecondsSince(start);
+
+	iplSimulatorAddProbeBatch(m_simulator, m_probeBatch);
+	iplSimulatorCommit(m_simulator);
+	Logger::audio().info("Steam Audio pathing baked: {} probes in {:.3f} ms, path bake {:.3f} ms", count, bake.probesMs, bake.bakeMs);
 	return CRAIG_SUCCESS;
 }
 
@@ -324,8 +419,9 @@ Craig::SteamAudioSimulator::Result Craig::SteamAudioSimulator::simulate(const Jo
 	result.timings.steamSceneMs = millisecondsSince(start);
 
 	const ListenerFrame& listener = request.listener;
+	const bool pathing = request.pathing && m_probeBatch;
 	const IPLSimulationFlags flags = static_cast<IPLSimulationFlags>(IPL_SIMULATIONFLAGS_DIRECT |
-		(request.reflections ? IPL_SIMULATIONFLAGS_REFLECTIONS : 0));
+		(request.reflections ? IPL_SIMULATIONFLAGS_REFLECTIONS : 0) | (pathing ? IPL_SIMULATIONFLAGS_PATHING : 0));
 	IPLSimulationSharedInputs shared{};
 	shared.listener = {toIPL(listener.right), toIPL(listener.up), toIPL(listener.ahead), toIPL(listener.origin)};
 	shared.numRays = static_cast<IPLint32>(std::min(request.reflectionRays, kMaxRays));
@@ -333,6 +429,9 @@ Craig::SteamAudioSimulator::Result Craig::SteamAudioSimulator::simulate(const Jo
 	shared.duration = kDuration;
 	shared.order = static_cast<IPLint32>(std::min(request.order, kMaxReflectionOrder));
 	shared.irradianceMinDistance = 1.0f; //What the GPU port has baked in
+	mv_pathSegments.clear();
+	shared.pathingVisCallback = collectPathSegment;
+	shared.pathingUserData = &mv_pathSegments;
 	iplSimulatorSetSharedInputs(m_simulator, flags, &shared);
 
 	IPLSimulationInputs inputs{};
@@ -348,6 +447,18 @@ Craig::SteamAudioSimulator::Result Craig::SteamAudioSimulator::simulate(const Jo
 	inputs.numOcclusionSamples = static_cast<IPLint32>(std::clamp(request.occlusionSamples, 1u, kMaxOcclusionSamples));
 	inputs.numTransmissionRays = static_cast<IPLint32>(std::max(request.transmissionRays, 1u));
 	inputs.reverbScale[0] = inputs.reverbScale[1] = inputs.reverbScale[2] = 1.0f;
+	//Validation and alternate paths off, the GPU side only has the baked graph too
+	IPLDeviationModel deviation{IPL_DEVIATIONTYPE_DEFAULT, nullptr, nullptr};
+	if (pathing) {
+		inputs.pathingProbes = m_probeBatch;
+		inputs.visRadius = request.pathingSettings.visRadius;
+		inputs.visThreshold = request.pathingSettings.visThreshold;
+		inputs.visRange = request.pathingSettings.visRange;
+		inputs.pathingOrder = static_cast<IPLint32>(std::min(request.pathingOrder, kMaxReflectionOrder));
+		inputs.enableValidation = IPL_FALSE;
+		inputs.findAlternatePaths = IPL_FALSE;
+		inputs.deviationModel = &deviation;
+	}
 	iplSourceSetInputs(m_source, flags, &inputs);
 
 	start = Clock::now();
@@ -357,6 +468,12 @@ Craig::SteamAudioSimulator::Result Craig::SteamAudioSimulator::simulate(const Jo
 		start = Clock::now();
 		iplSimulatorRunReflections(m_simulator);
 		result.timings.steamReflectionsMs = millisecondsSince(start);
+	}
+
+	if (pathing) {
+		start = Clock::now();
+		iplSimulatorRunPathing(m_simulator);
+		result.timings.steamPathingMs = millisecondsSince(start);
 	}
 
 	IPLSimulationOutputs outputs{};
@@ -372,6 +489,15 @@ Craig::SteamAudioSimulator::Result Craig::SteamAudioSimulator::simulate(const Jo
 	const glm::vec3 offset = glm::vec3(request.source[0], request.source[1], request.source[2]) -
 		glm::vec3(listener.origin[0], listener.origin[1], listener.origin[2]);
 	direct.distance = glm::length(offset);
+	if (pathing && outputs.pathing.shCoeffs) {
+		//Its own buffer gets overwritten next run, so the numbers get copied out
+		PathingResult& path = result.pathing;
+		path.valid = true;
+		path.order = static_cast<uint32_t>(inputs.pathingOrder);
+		for (int band = 0; band < 3; ++band) path.eq[band] = outputs.pathing.eqCoeffs[band];
+		for (uint32_t c = 0; c < ReflectionField::channelsFor(path.order); ++c) path.sh[c] = outputs.pathing.shCoeffs[c];
+		path.segments = mv_pathSegments;
+	}
 	if (request.reflections) {
 		result.reflections = true;
 		result.reflectionParams = outputs.reflections;

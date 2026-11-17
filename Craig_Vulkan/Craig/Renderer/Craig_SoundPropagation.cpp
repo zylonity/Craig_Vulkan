@@ -300,8 +300,8 @@ void Craig::SoundPropagation::writeQueryDescriptors(const ResultSlot& slot) {
     accelerationStructure.setAccelerationStructures(slot.tlas.handle);
     constexpr std::array<uint32_t, 9> storageBindings = {1, 2, 3, 4, 5, 6, 7, 8, 9};
     const std::array<vk::DescriptorBufferInfo, 9> buffers = {{
-        {slot.rays.buffer, 0, sizeof(Ray) * kMaxRayCount},
-        {slot.results.buffer, 0, sizeof(uint32_t) * kMaxRayCount},
+        {slot.rays.buffer, 0, VK_WHOLE_SIZE},
+        {slot.results.buffer, 0, VK_WHOLE_SIZE},
         {slot.samples.buffer, 0, VK_WHOLE_SIZE},
         {slot.instanceInfo.buffer, 0, VK_WHOLE_SIZE},
         {m_normalBuffer.buffer, 0, VK_WHOLE_SIZE},
@@ -353,11 +353,11 @@ void Craig::SoundPropagation::recordQuery(vk::CommandBuffer commandBuffer, const
     const QuerySettings settings{
         {request.listener.origin[0], request.listener.origin[1], request.listener.origin[2], 0.0f},
         {request.source[0], request.source[1], request.source[2], 0.0f},
-        request.rayCount, reflectionRays, request.maxBounces, request.seed,
+        request.rayCount + request.pathingRayCount, reflectionRays, request.maxBounces, request.seed,
         request.captureBounces ? 1u : 0u, request.transmissionRays};
     commandBuffer.pushConstants(m_VK_pipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(settings), &settings);
     //One thread does a direct ray and/or a reflection ray, so enough groups for whichever there's more of
-    commandBuffer.dispatch((std::max(request.rayCount, reflectionRays) + 63) / 64, 1, 1);
+    commandBuffer.dispatch((std::max(request.rayCount + request.pathingRayCount, reflectionRays) + 63) / 64, 1, 1);
 
     vk::MemoryBarrier2 readbackBarrier{};
     readbackBarrier.setSrcStageMask(vk::PipelineStageFlagBits2::eComputeShader).setSrcAccessMask(vk::AccessFlagBits2::eShaderWrite)

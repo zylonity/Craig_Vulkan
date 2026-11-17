@@ -33,6 +33,7 @@ namespace Craig {
 		void setSoundMuted(bool muted);
 		void setSoundPathsEnabled(bool direct, bool reflections);
 		void setSoundBinaural(bool binaural);
+		void setSoundPathingEnabled(bool pathing);
 		AudioStatus getAudioStatus() const;
 
 		// editor: back to edit mode, no editor: closes the app

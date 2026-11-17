@@ -77,6 +77,7 @@ CraigError Craig::Audio::createEffects() {
 	IPLBinauralEffectSettings binauralSettings{steamAudio.getHRTF()};
 	IPLPanningEffectSettings panningSettings{kStereo};
 	IPLAmbisonicsDecodeEffectSettings decodeSettings{kStereo, steamAudio.getHRTF(), SteamAudio::kMaxOrder};
+	IPLPathEffectSettings pathSettings{SteamAudio::kMaxOrder, IPL_TRUE, kStereo, steamAudio.getHRTF()};
 	//Sized for the biggest response the CPU simulator can make, 2 s at third order
 	IPLReflectionEffectSettings reflectionSettings{IPL_REFLECTIONEFFECTTYPE_CONVOLUTION,
 		static_cast<IPLint32>(kReverbBins * kReverbBinSeconds * kRate), static_cast<IPLint32>(kChannels)};
@@ -84,7 +85,8 @@ CraigError Craig::Audio::createEffects() {
 		iplBinauralEffectCreate(context, &settings, &binauralSettings, &m_binauralEffect) != IPL_STATUS_SUCCESS ||
 		iplPanningEffectCreate(context, &settings, &panningSettings, &m_panningEffect) != IPL_STATUS_SUCCESS ||
 		iplAmbisonicsDecodeEffectCreate(context, &settings, &decodeSettings, &m_decodeEffect) != IPL_STATUS_SUCCESS ||
-		iplReflectionEffectCreate(context, &settings, &reflectionSettings, &m_reflectionEffect) != IPL_STATUS_SUCCESS) {
+		iplReflectionEffectCreate(context, &settings, &reflectionSettings, &m_reflectionEffect) != IPL_STATUS_SUCCESS ||
+		iplPathEffectCreate(context, &settings, &pathSettings, &m_pathEffect) != IPL_STATUS_SUCCESS) {
 		Logger::audio().warn("Couldn't create the Steam Audio effects");
 		releaseEffects();
 		return CRAIG_FAIL;
@@ -98,6 +100,8 @@ void Craig::Audio::releaseEffects() {
 	if (m_panningEffect) iplPanningEffectRelease(&m_panningEffect);
 	if (m_decodeEffect) iplAmbisonicsDecodeEffectRelease(&m_decodeEffect);
 	if (m_reflectionEffect) iplReflectionEffectRelease(&m_reflectionEffect);
+	if (m_pathEffect) iplPathEffectRelease(&m_pathEffect);
+	m_pathEffect = nullptr;
 	m_reflectionEffect = nullptr;
 	m_directEffect = nullptr;
 	m_binauralEffect = nullptr;
@@ -140,6 +144,7 @@ CraigError Craig::Audio::openSound(const std::string& path, bool looping) {
 	m_gain = 0.0f;
 	m_resetEffects = false;
 	m_steamReflectionsPlaying = false;
+	m_pathingMix = 0.0f;
 	m_current = {};
 	m_mailbox.reset();
 	m_callbackFrames.store(0, std::memory_order_relaxed);
@@ -203,6 +208,13 @@ void Craig::Audio::publish(const SoundProbeReadout* probe, uint64_t deadlineMs) 
 			toIPL(listener.origin), toIPL(listener.ahead), toIPL(listener.up));
 		set.steamReflections = m_steamReflectionsActive;
 		set.steamReflectionParams = probe->steamReflectionParams;
+		//The path effect repeats the direct sound when nothing's in the way, so it only fills in what occlusion took away
+		const PathingResult& pathing = probe->pathing;
+		set.pathing = m_pathingEnabled && pathing.valid;
+		set.pathingMix = std::clamp(1.0f - direct.occlusion, 0.0f, 1.0f);
+		set.pathingOrder = pathing.order;
+		set.pathingEQ = pathing.eq;
+		set.pathingSH = pathing.sh;
 	}
 	m_mailbox.publish();
 }
@@ -312,6 +324,7 @@ Craig::AudioStatus Craig::Audio::getStatus() const {
 	status.directEnabled = m_directEnabled;
 	status.reflectionsEnabled = m_reflectionsEnabled;
 	status.binaural = m_binaural;
+	status.pathingEnabled = m_pathingEnabled;
 	status.reverbReady = m_reverb.ready();
 	status.reverbFailed = m_reverb.failed();
 	status.gain = m_reportedGain.load(std::memory_order_relaxed);
@@ -435,6 +448,7 @@ void Craig::Audio::renderBlock(uint64_t nowMs) {
 		iplPanningEffectReset(m_panningEffect);
 		iplAmbisonicsDecodeEffectReset(m_decodeEffect);
 		iplReflectionEffectReset(m_reflectionEffect);
+		iplPathEffectReset(m_pathEffect);
 		m_resetEffects = false;
 	}
 
@@ -492,11 +506,34 @@ void Craig::Audio::renderBlock(uint64_t nowMs) {
 		iplAmbisonicsDecodeEffectApply(m_decodeEffect, &params, &ambisonicBuffer, &reflectedStereoBuffer);
 	}
 
+	//Pathing: the route round the corner as a direction and an EQ, the library spatialises it straight to stereo
+	for (auto& channel : m_pathStereo) channel.fill(0.0f);
+	const float pathingTarget = m_current.pathing ? m_current.pathingMix : 0.0f;
+	if (m_current.pathing || m_pathingMix > 0.0f) {
+		float* pathStereo[2] = {m_pathStereo[0].data(), m_pathStereo[1].data()};
+		IPLAudioBuffer pathBuffer{2, static_cast<IPLint32>(kFrame), pathStereo};
+		IPLPathEffectParams params{};
+		for (int band = 0; band < 3; ++band) params.eqCoeffs[band] = m_current.pathingEQ[band];
+		params.shCoeffs = m_current.pathingSH.data();
+		params.order = static_cast<IPLint32>(m_current.pathingOrder);
+		params.binaural = m_current.binaural ? IPL_TRUE : IPL_FALSE;
+		params.hrtf = hrtf;
+		params.listener = m_current.listener;
+		params.normalizeEQ = IPL_FALSE; //Keep the loss from bending, both backends hand over the same kind of numbers
+		iplPathEffectApply(m_pathEffect, &params, &dryBuffer, &pathBuffer);
+		for (uint32_t i = 0; i < kFrame; ++i) {
+			const float mix = m_pathingMix + (pathingTarget - m_pathingMix) * (static_cast<float>(i + 1) / kFrame);
+			m_pathStereo[0][i] *= mix;
+			m_pathStereo[1][i] *= mix;
+		}
+	}
+	m_pathingMix = pathingTarget;
+
 	for (uint32_t i = 0; i < kFrame; ++i) {
 		const float scale = kOutputGain * m_gainRamp[i];
 		//Clamp instead of letting it wrap round into noise
-		m_interleaved[i * 2] = std::clamp((m_directStereo[0][i] + m_reflectedStereo[0][i]) * scale, -1.0f, 1.0f);
-		m_interleaved[i * 2 + 1] = std::clamp((m_directStereo[1][i] + m_reflectedStereo[1][i]) * scale, -1.0f, 1.0f);
+		m_interleaved[i * 2] = std::clamp((m_directStereo[0][i] + m_reflectedStereo[0][i] + m_pathStereo[0][i]) * scale, -1.0f, 1.0f);
+		m_interleaved[i * 2 + 1] = std::clamp((m_directStereo[1][i] + m_reflectedStereo[1][i] + m_pathStereo[1][i]) * scale, -1.0f, 1.0f);
 	}
 	m_reportedGain.store(m_gain, std::memory_order_relaxed);
 	m_reportedOrder.store(m_current.reflections ? order : 0, std::memory_order_relaxed);

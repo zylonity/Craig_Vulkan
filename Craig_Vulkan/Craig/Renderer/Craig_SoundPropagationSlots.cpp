@@ -37,7 +37,7 @@ void Craig::SoundPropagation::createResultSlots(uint32_t instanceCapacity) {
         createBuffer(slot.instances, m_instanceCapacity * sizeof(VkAccelerationStructureInstanceKHR),
             vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eShaderDeviceAddress, true);
         createBuffer(slot.rays, sizeof(Request::rays), vk::BufferUsageFlagBits::eStorageBuffer, true);
-        createBuffer(slot.results, sizeof(uint32_t) * kMaxRayCount,
+        createBuffer(slot.results, sizeof(uint32_t) * (kMaxRayCount + kMaxPathingRays),
             vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, true);
         createBuffer(slot.instanceInfo, m_instanceCapacity * sizeof(InstanceInfo), vk::BufferUsageFlagBits::eStorageBuffer, true);
         createBuffer(slot.samples, sizeof(std::array<float, 4>) * (kMaxReflectionRayCount + kSteamDiffuseSamples), vk::BufferUsageFlagBits::eStorageBuffer, true);
@@ -110,7 +110,7 @@ void Craig::SoundPropagation::stop() {
 }
 
 Craig::SoundPropagation::SubmitStatus Craig::SoundPropagation::trySubmit(Scene& scene, const Request& request) {
-    assert(request.rayCount > 0 && request.rayCount <= kMaxRayCount);
+    assert(request.rayCount > 0 && request.rayCount <= kMaxRayCount && request.pathingRayCount <= kMaxPathingRays);
     assert(request.reflectionRayCount <= kMaxReflectionRayCount && request.maxBounces <= kReverbBounces);
     m_statistics.requested++;
     collectCompleted();
@@ -144,7 +144,7 @@ void Craig::SoundPropagation::submitSlot(ResultSlot& slot, const Request& reques
         uploadBuffer(slot.instances, mv_instanceSnapshot.data(), mv_instanceSnapshot.size() * sizeof(mv_instanceSnapshot[0]));
         uploadBuffer(slot.instanceInfo, mv_instanceInfoSnapshot.data(), mv_instanceInfoSnapshot.size() * sizeof(mv_instanceInfoSnapshot[0]));
     }
-    uploadBuffer(slot.rays, request.rays.data(), sizeof(Ray) * request.rayCount);
+    uploadBuffer(slot.rays, request.rays.data(), sizeof(Ray) * (request.rayCount + request.pathingRayCount));
     if (slot.samplingRayCount != request.reflectionRayCount) {
         //The sphere directions depend on how many rays there are, only remade when that changes
         //Safe to write since only a finished slot gets here
@@ -256,6 +256,14 @@ void Craig::SoundPropagation::collectCompleted() {
             }
             buildReflections(slot, result);
         }
+        const auto* blocked = static_cast<const uint32_t*>(slot.results.pMapped);
+        for (uint32_t i = 0; i < slot.request.pathingRayCount; ++i) {
+            const uint32_t value = blocked[slot.request.rayCount + i];
+            if (value > kAcousticMaterials.size()) throw std::runtime_error("pathing ray never got traced");
+            result.pathingBlocked[i] = value != 0;
+        }
+        result.pathingRayCount = slot.request.pathingRayCount;
+        result.pathingQuery = slot.request.pathingQuery;
         result.timings.readbackMs = std::chrono::duration<double, std::milli>(Clock::now() - readbackStart).count();
         if (slot.request.captureBounces) {
             if (vmaInvalidateAllocation(mp_Device->getVmaAllocator(), slot.hits.allocation, 0, VK_WHOLE_SIZE) != VK_SUCCESS) {

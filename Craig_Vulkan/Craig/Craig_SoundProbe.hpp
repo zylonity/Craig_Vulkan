@@ -45,6 +45,16 @@ namespace Craig {
 		std::array<float, 3> ahead{0.0f, 0.0f, -1.0f};
 	};
 
+	//Steam Audio's path effect parameters, how the sound got round to the listener through the probes
+	struct PathingResult {
+		bool valid = false;
+		std::array<float, 3> eq{1.0f, 1.0f, 1.0f};
+		std::array<float, 16> sh{}; //World space, up to third order
+		uint32_t order = 1;
+		//Pairs of points, so the overlay can draw the route the paths took
+		std::vector<std::array<float, 3>> segments;
+	};
+
 	//Which ray tracer made the result, the GPU port or Valve's own CPU simulator
 	enum class SoundBackend : uint32_t { GPU, CPU };
 
@@ -86,6 +96,7 @@ namespace Craig {
 		bool steamReflections = false;
 		IPLReflectionEffectParams steamReflectionParams{};
 		uint32_t reflectionOrder = 0;
+		PathingResult pathing;
 	};
 
 }

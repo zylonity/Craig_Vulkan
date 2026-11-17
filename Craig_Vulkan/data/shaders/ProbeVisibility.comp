@@ -1,0 +1,67 @@
+#version 460
+#extension GL_EXT_ray_query : require
+
+//Valve Corporation's Steam Audio v4.8.1 path_visibility.cpp areProbesVisible(), Apache-2.0
+//https://github.com/ValveSoftware/steam-audio/tree/0da18255cca520771f363ee01f100572b39a308e/core/src/core
+//Changed for ray queries, one probe pair per thread instead of one row of the graph per job
+layout(local_size_x = 64) in;
+
+layout(push_constant) uniform VisibilitySettings {
+    uint pairCount;
+    uint sampleCount;
+    float radius;
+    float threshold;
+};
+
+layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
+//xyz is the probe's centre
+layout(std430, set = 0, binding = 1) readonly buffer Probes { vec4 probes[]; };
+//Which two probes this thread tests, the first one always has the higher index like upstream
+layout(std430, set = 0, binding = 2) readonly buffer Pairs { uvec2 pairs[]; };
+//Points inside a unit sphere, sample 0 is the centre
+layout(std430, set = 0, binding = 3) readonly buffer Samples { vec4 samples[]; };
+layout(std430, set = 0, binding = 4) writeonly buffer Visible { uint visible[]; };
+
+//IScene::isOccluded, the whole segment from 0 to its length
+bool occluded(vec3 from, vec3 to) {
+    vec3 offset = to - from;
+    float distance = length(offset);
+    //Upstream gets a zero length ray here, nothing can be in the way of it
+    if (distance <= 0.0) return false;
+    rayQueryEXT query;
+    rayQueryInitializeEXT(query, topLevelAS, gl_RayFlagsOpaqueEXT | gl_RayFlagsTerminateOnFirstHitEXT,
+        0xff, from, 0.0, offset / distance, distance);
+    while (rayQueryProceedEXT(query)) {}
+    return rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionTriangleEXT;
+}
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+    if (index >= pairCount) return;
+    vec3 from = probes[pairs[index].x].xyz;
+    vec3 to = probes[pairs[index].y].xyz;
+
+    //Upstream only makes the sample table for more than one sample
+    if (sampleCount > 1u && radius > 0.0) {
+        uint numVisible = 0u;
+        for (uint i = 0u; i < sampleCount; ++i) {
+            vec3 fromSample = from + samples[i].xyz * radius;
+            //A sample inside a wall doesn't count
+            if (occluded(from, fromSample)) continue;
+            for (uint j = 0u; j < sampleCount; ++j) {
+                vec3 toSample = to + samples[j].xyz * radius;
+                if (occluded(to, toSample)) continue;
+                if (!occluded(fromSample, toSample)) {
+                    ++numVisible;
+                    //Divided by the sample count, not samples squared, same as upstream
+                    if (float(numVisible) / float(sampleCount) >= threshold) {
+                        visible[index] = 1u;
+                        return;
+                    }
+                }
+            }
+        }
+        visible[index] = 0u;
+    }
+    else visible[index] = occluded(from, to) ? 0u : 1u;
+}

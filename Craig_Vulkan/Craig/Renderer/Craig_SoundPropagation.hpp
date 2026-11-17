@@ -2,6 +2,7 @@
 
 #include "Craig_Device.hpp"
 #include "Craig/Craig_SoundProbe.hpp"
+#include "Craig/Craig_SoundPathing.hpp"
 #include <array>
 #include <chrono>
 #include <optional>
@@ -25,13 +26,17 @@ namespace Craig {
 
 		static constexpr uint32_t kMaxRayCount = 2048;
 		static constexpr uint32_t kMaxReflectionRayCount = 4096;
+		//Pathing's occlusion checks ride along after the direct rays: listener to its probes, source to its probes, then listener to source
+		static constexpr uint32_t kMaxPathingRays = 2 * SoundPathing::kMaxNeighbours + 1;
 		static constexpr size_t kResultSlotCount = 3; //How many submissions can be on the GPU at once
 		using Clock = std::chrono::steady_clock;
 
 		//What the renderer hands over each frame
 		struct Request {
-			std::array<Ray, kMaxRayCount> rays;
-			uint32_t rayCount = 1;
+			std::array<Ray, kMaxRayCount + kMaxPathingRays> rays;
+			uint32_t rayCount = 1; //Direct rays only, the pathing ones come straight after
+			uint32_t pathingRayCount = 0;
+			SoundPathing::Query pathingQuery; //Which probes the pathing rays went to, comes back with the result
 			uint32_t seed = 1;
 			uint32_t reflectionRayCount = 1024;
 			uint32_t maxBounces = 0;
@@ -60,6 +65,9 @@ namespace Craig {
 			std::shared_ptr<const ReflectionField> reflections; //Null unless the reflection rays were traced
 			bool reverbEnabled = false;
 			SoundTimings timings;
+			std::array<bool, kMaxPathingRays> pathingBlocked{}; //Same order as the pathing rays went in
+			uint32_t pathingRayCount = 0;
+			SoundPathing::Query pathingQuery;
 			std::vector<std::array<float, 4>> bounces; //kReverbBounces per listener ray, empty unless captureBounces was on
 			uint64_t sceneGeneration = 0;
 			uint64_t sourceId = 0;
@@ -87,6 +95,13 @@ namespace Craig {
 		//True if there's a new result, otherwise result is left alone
 		bool poll(Result& result);
 		const Statistics& getStatistics() const { return m_statistics; }
+		//Probe to probe visibility for pathing in one go, waits for the GPU, so only when baking
+		struct VisibilityBake {
+			std::vector<uint8_t> visible; //One per pair
+			double gpuMs = -1.0;
+		};
+		VisibilityBake bakeProbeVisibility(Scene& scene, const std::vector<ProbeSphere>& probes, const std::vector<SoundPathing::Pair>& pairs,
+			uint32_t samples, float radius, float threshold);
 		CraigError terminate();
 
 	private:

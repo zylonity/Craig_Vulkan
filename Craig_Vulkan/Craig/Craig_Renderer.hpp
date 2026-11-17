@@ -155,6 +155,7 @@ namespace Craig {
 		CraigError prepareSoundProbe();
 		SteamAudioSimulator::Settings steamSimulatorSettings() const;
 		void acceptSoundResult(const SoundProbeReadout& result);
+		void bakeSoundPathing();
 		void updateSoundProbe();
 		void updateSteamSimulator(Scene& scene, GameObject& listener, const glm::vec3& origin, const glm::vec3& endpoint,
 			SoundPropagation::Clock::time_point inputTime, SoundProbeReadout::State previousState);
@@ -198,6 +199,23 @@ namespace Craig {
 		SoundBackend m_soundBackend = SoundBackend::GPU;
 		bool m_gpuSoundReady = false;
 		bool m_cpuSoundReady = false;
+		bool m_soundPathing = true; //Bakes when the scene gets prepared, the demo scenes take well under a second
+		int m_soundPathingOrder = 1;
+		PathingSettings m_pathingSettings;
+		SoundPathing m_gpuPathing; //The CPU half of the GPU backend's pathing, fed by the GPU's visibility bake
+		std::vector<ProbeSphere> mv_pathingProbes;
+		bool m_showSoundProbes = false;
+		//How long the last bake took each way, for the comparison
+		struct PathingBakeStats {
+			bool baked = false;
+			uint32_t probes = 0;
+			uint32_t pairs = 0;
+			uint32_t edges = 0;
+			double probesMs = -1.0;
+			double cpuBakeMs = -1.0;
+			double gpuVisibilityMs = -1.0;
+			double gpuSearchMs = -1.0;
+		} m_pathingBake;
 		bool m_steamEmbree = true; //Falls back to Steam Audio's own tracer where Embree isn't built (Apple Silicon)
 		int m_steamThreads = 4;
 		SoundProbeReadout::State m_soundState = SoundProbeReadout::State::Disabled;

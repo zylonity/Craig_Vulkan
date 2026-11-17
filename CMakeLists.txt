@@ -190,6 +190,8 @@ compile_glsl(${SHADER_DIR}/SoundPropagation.spv ${SHADER_DIR}/SoundPropagation.c
 #the shader #includes this, so it has to rebuild when it changes too
 add_custom_command(OUTPUT ${SHADER_DIR}/SoundPropagation.spv APPEND
         DEPENDS ${SHADER_DIR}/SteamAudioPropagation.glsl)
+#probe to probe visibility for pathing, only runs when the probes get baked
+compile_glsl(${SHADER_DIR}/ProbeVisibility.spv ${SHADER_DIR}/ProbeVisibility.comp --target-env=vulkan1.2)
 
 add_custom_target(Shaders ALL
         DEPENDS
@@ -198,6 +200,7 @@ add_custom_target(Shaders ALL
         ${SHADER_DIR}/skyVert.spv
         ${SHADER_DIR}/skyFrag.spv
         ${SHADER_DIR}/SoundPropagation.spv
+        ${SHADER_DIR}/ProbeVisibility.spv
 )
 
 # Make the main program depend on shaders

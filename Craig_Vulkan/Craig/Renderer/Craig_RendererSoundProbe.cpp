@@ -65,11 +65,55 @@ CraigError Craig::Renderer::prepareSoundProbe() {
     //Doesn't need ray queries, so a GPU without them still gets sound through this one
     m_cpuSoundReady = m_steamSimulator.prepare(*mp_SceneManager->getCurrentScene(), steamSimulatorSettings()) == CRAIG_SUCCESS;
     m_soundPrepared = m_gpuSoundReady || m_cpuSoundReady;
+    //New scene means new probes, the old graph doesn't mean anything here
+    m_gpuPathing.clear();
+    mv_pathingProbes.clear();
+    m_pathingBake = {};
+    if (m_soundPathing) bakeSoundPathing();
     if (!m_gpuSoundReady && m_cpuSoundReady && m_soundBackend == SoundBackend::GPU) {
         Logger::renderer().warn("No ray queries for sound, using Steam Audio's CPU simulator instead");
         m_soundBackend = SoundBackend::CPU;
     }
     return m_soundPrepared ? CRAIG_SUCCESS : CRAIG_FAIL;
+}
+
+void Craig::Renderer::bakeSoundPathing() {
+    resetSoundProbeContext();
+    m_gpuPathing.clear();
+    mv_pathingProbes.clear();
+    m_pathingBake = {};
+    //The library's floor generator makes the probes for both, so the CPU scene has to be there either way
+    if (!m_cpuSoundReady) {
+        Logger::renderer().warn("Pathing needs the Steam Audio scene for its probes, and it isn't ready");
+        return;
+    }
+    SteamAudioSimulator::PathingBake cpu;
+    if (m_steamSimulator.bakePathing(m_pathingSettings, cpu) != CRAIG_SUCCESS) return;
+    mv_pathingProbes = cpu.probes;
+    m_pathingBake.probes = static_cast<uint32_t>(cpu.probes.size());
+    m_pathingBake.probesMs = cpu.probesMs;
+    m_pathingBake.cpuBakeMs = cpu.bakeMs;
+    m_pathingBake.baked = true;
+
+    //Same probes and settings, the visibility traced on the GPU then the path search on the CPU like upstream's baker
+    if (!m_gpuSoundReady) return;
+    try {
+        const auto pairs = SoundPathing::candidatePairs(cpu.probes, m_pathingSettings.visRange);
+        const auto visibility = m_soundPropagation.bakeProbeVisibility(*mp_SceneManager->getCurrentScene(), cpu.probes, pairs,
+            m_pathingSettings.visSamples, m_pathingSettings.visRadius, m_pathingSettings.visThreshold);
+        const auto start = SoundPropagation::Clock::now();
+        m_gpuPathing.build(cpu.probes, pairs, visibility.visible, m_pathingSettings.pathRange);
+        m_pathingBake.gpuSearchMs = std::chrono::duration<double, std::milli>(SoundPropagation::Clock::now() - start).count();
+        m_pathingBake.gpuVisibilityMs = visibility.gpuMs;
+        m_pathingBake.pairs = static_cast<uint32_t>(pairs.size());
+        m_pathingBake.edges = m_gpuPathing.getEdgeCount();
+        Logger::renderer().info("Pathing baked: {} probes, CPU (Steam Audio) {:.3f} ms, GPU visibility {:.3f} ms + path search {:.3f} ms, {} of {} pairs visible",
+            cpu.probes.size(), cpu.bakeMs, visibility.gpuMs, m_pathingBake.gpuSearchMs, m_pathingBake.edges, pairs.size());
+    }
+    catch (const std::exception& error) {
+        Logger::renderer().error("GPU pathing bake failed: {}", error.what());
+        m_gpuPathing.clear();
+    }
 }
 
 Craig::SteamAudioSimulator::Settings Craig::Renderer::steamSimulatorSettings() const {
@@ -137,6 +181,10 @@ void Craig::Renderer::acceptSoundResult(const SoundProbeReadout& result) {
             result.backend == SoundBackend::GPU ?
                 fmt::format("TLAS {:.3f} ms, rays {:.3f} ms, readback {:.3f} ms", t.gpuAccelerationStructureMs, t.gpuTraceMs, t.readbackMs) :
                 fmt::format("scene {:.3f} ms, direct {:.3f} ms, reflections {:.3f} ms", t.steamSceneMs, t.steamDirectMs, t.steamReflectionsMs));
+        if (result.pathing.valid) {
+            Logger::renderer().info("Pathing ({}): EQ {:.3f}/{:.3f}/{:.3f}, omni {:.4f}, {} legs, {:.3f} ms", result.backend == SoundBackend::GPU ? "GPU" : "CPU",
+                result.pathing.eq[0], result.pathing.eq[1], result.pathing.eq[2], result.pathing.sh[0], result.pathing.segments.size() / 2, t.steamPathingMs);
+        }
     }
     m_soundResult = result;
     m_soundResult->hasResult = true;
@@ -220,6 +268,16 @@ void Craig::Renderer::updateSoundProbe() {
         readout.reverbEnabled = result.reverbEnabled;
         readout.timings = result.timings;
         readout.inputTime = result.inputTime;
+        if (result.pathingRayCount > 0 && m_gpuPathing.isReady()) {
+            //Rays went listener to its probes, source to its probes, then listener to source
+            SoundPathing::Query query = result.pathingQuery;
+            for (uint32_t i = 0; i < query.listenerCount; ++i) query.listenerOccluded[i] = result.pathingBlocked[i];
+            for (uint32_t i = 0; i < query.sourceCount; ++i) query.sourceOccluded[i] = result.pathingBlocked[query.listenerCount + i];
+            query.directOccluded = result.pathingBlocked[query.listenerCount + query.sourceCount];
+            const auto start = SoundPropagation::Clock::now();
+            readout.pathing = m_gpuPathing.findPaths(query);
+            readout.timings.steamPathingMs = std::chrono::duration<double, std::milli>(SoundPropagation::Clock::now() - start).count();
+        }
         acceptSoundResult(readout);
         //Only the overlay keeps the bounce points, the readout doesn't need another copy
         mv_soundDebugBounces = std::move(result.bounces);
@@ -285,6 +343,28 @@ void Craig::Renderer::updateSoundProbe() {
     request.source = {endpoint.x, endpoint.y, endpoint.z};
     request.listener = makeListenerFrame(*pListener);
 
+    if (m_soundPathing && m_gpuPathing.isReady()) {
+        //IScene::isOccluded segments, from the point to the probe over the whole length like upstream's checkOcclusion
+        const auto steamRay = [](const glm::vec3& from, const glm::vec3& to) {
+            const glm::vec3 offset = to - from;
+            const float length = glm::length(offset);
+            if (!std::isfinite(length) || length <= 0.0f) return SoundPropagation::Ray{{from.x, from.y, from.z, 0.0f}, {0.0f, 1.0f, 0.0f, 0.0f}};
+            const glm::vec3 direction = offset / length;
+            return SoundPropagation::Ray{{from.x, from.y, from.z, 0.0f}, {direction.x, direction.y, direction.z, length}};
+        };
+        SoundPathing::Query& query = request.pathingQuery;
+        query.source = endpoint;
+        query.listener = origin;
+        query.order = static_cast<uint32_t>(m_soundPathingOrder);
+        query.listenerCount = m_gpuPathing.influencingProbes(origin, query.listenerProbes);
+        query.sourceCount = m_gpuPathing.influencingProbes(endpoint, query.sourceProbes);
+        uint32_t next = request.rayCount;
+        const auto& probes = m_gpuPathing.getProbes();
+        for (uint32_t i = 0; i < query.listenerCount; ++i) request.rays[next++] = steamRay(origin, probes[query.listenerProbes[i]].centre);
+        for (uint32_t i = 0; i < query.sourceCount; ++i) request.rays[next++] = steamRay(endpoint, probes[query.sourceProbes[i]].centre);
+        request.rays[next++] = steamRay(origin, endpoint);
+        request.pathingRayCount = next - request.rayCount;
+    }
 #if defined(IMGUI_ENABLED)
     request.captureBounces = m_showSoundBounces;
 #endif
@@ -327,6 +407,7 @@ void Craig::Renderer::updateSteamSimulator(Scene& scene, GameObject& listener, c
         readout.reflectionOrder = result.order;
         readout.timings = result.timings;
         readout.inputTime = result.inputTime;
+        readout.pathing = result.pathing;
         acceptSoundResult(readout);
         mv_soundDebugBounces.clear();
     }
@@ -342,6 +423,9 @@ void Craig::Renderer::updateSteamSimulator(Scene& scene, GameObject& listener, c
     request.reflectionRays = static_cast<uint32_t>(m_soundReflectionRayCount);
     request.bounces = static_cast<uint32_t>(m_soundMaxBounces);
     request.order = static_cast<uint32_t>(m_soundReflectionOrder);
+    request.pathing = m_soundPathing;
+    request.pathingSettings = m_pathingSettings;
+    request.pathingOrder = static_cast<uint32_t>(m_soundPathingOrder);
     request.sceneGeneration = m_soundSceneGeneration;
     request.sourceId = m_soundSourceId;
     request.sequenceId = m_soundSequence++;
@@ -428,6 +512,46 @@ void Craig::Renderer::drawSoundProbeReadout() {
             mv_soundDebugRays.size(), static_cast<unsigned long long>(m_soundDebugSequence));
         ImGui::SetItemTooltip("Neutral lines, not hit/miss colours. Frozen on pause.");
     }
+    if (ImGui::CollapsingHeader("Pathing")) {
+        //Turning it on bakes straight away, the bake settings need the button since they're slow on the CPU
+        if (ImGui::Checkbox("Sound round corners", &m_soundPathing) && m_soundPathing && !m_pathingBake.baked) bakeSoundPathing();
+        ImGui::SetItemTooltip("Steam Audio pathing: probes on the floor, paths between the ones that can see each other");
+        changed |= ImGui::SliderInt("Path order", &m_soundPathingOrder, 0, kMaxReflectionOrder);
+        m_soundPathingOrder = std::clamp(m_soundPathingOrder, 0, static_cast<int>(kMaxReflectionOrder));
+        PathingSettings& settings = m_pathingSettings;
+        ImGui::SliderFloat("Probe spacing (m)", &settings.probeSpacing, 0.5f, 8.0f);
+        ImGui::SliderFloat("Probe height (m)", &settings.probeHeight, 0.2f, 4.0f);
+        int samples = static_cast<int>(settings.visSamples);
+        ImGui::SliderInt("Visibility samples", &samples, 1, 32);
+        ImGui::SetItemTooltip("Each pair of probes traces samples^2 rays, this is the bit the GPU's for");
+        ImGui::SliderFloat("Visibility radius (m)", &settings.visRadius, 0.0f, 2.0f);
+        ImGui::SliderFloat("Visibility threshold", &settings.visThreshold, 0.0f, 1.0f);
+        ImGui::SliderFloat("Visibility range (m)", &settings.visRange, 1.0f, 200.0f);
+        ImGui::SliderFloat("Path range (m)", &settings.pathRange, 1.0f, 400.0f);
+        settings.visSamples = static_cast<uint32_t>(std::clamp(samples, 1, 32));
+        settings.probeSpacing = std::isfinite(settings.probeSpacing) ? std::clamp(settings.probeSpacing, 0.5f, 8.0f) : 2.0f;
+        settings.probeHeight = std::isfinite(settings.probeHeight) ? std::clamp(settings.probeHeight, 0.2f, 4.0f) : 1.5f;
+        if (ImGui::Button("Bake pathing")) bakeSoundPathing();
+        ImGui::SameLine();
+        ImGui::Checkbox("Show probes", &m_showSoundProbes);
+        const PathingBakeStats& bake = m_pathingBake;
+        if (!bake.baked) ImGui::TextDisabled("Not baked");
+        else {
+            ImGui::Text("%u probes (%.3f ms to place)", bake.probes, bake.probesMs);
+            ImGui::Text("CPU (Steam Audio bake): %.3f ms", bake.cpuBakeMs);
+            if (bake.gpuVisibilityMs >= 0.0 || bake.gpuSearchMs >= 0.0) {
+                ImGui::Text("GPU: visibility %.3f ms + path search %.3f ms", bake.gpuVisibilityMs, bake.gpuSearchMs);
+                ImGui::Text("%u of %u pairs can see each other", bake.edges, bake.pairs);
+            }
+            else ImGui::TextDisabled("GPU bake didn't run (no ray queries)");
+        }
+        if (readout.hasResult) {
+            const PathingResult& path = readout.pathing;
+            if (!path.valid) ImGui::TextDisabled("No path this frame");
+            else ImGui::Text("Path EQ %.3f / %.3f / %.3f, %zu legs, %.3f ms", path.eq[0], path.eq[1], path.eq[2], path.segments.size() / 2,
+                readout.timings.steamPathingMs);
+        }
+    }
     if (ImGui::CollapsingHeader("Tracing notes")) {
         ImGui::TextWrapped("Direct: Steam Audio's volumetric sphere, or the world-XY emitter with one ray at its centre. Reflections: listener to source, Steam Audio 4.8.1 method.");
         ImGui::TextWrapped("Reflections: 10 ms energy bins, 2 s after direct sound, SH projected by each listener ray's start direction.");
@@ -484,6 +608,7 @@ void Craig::Renderer::drawSoundProbeReadout() {
 void Craig::Renderer::drawSoundProbeRays() {
 #if defined(IMGUI_ENABLED)
     if ((!m_showSoundRays || mv_soundDebugRays.empty()) && (!m_showSoundPaths || !m_soundDebugHasPath) &&
+        (!m_showSoundProbes || mv_pathingProbes.empty()) &&
         (!m_showSoundBounces || mv_soundDebugBounces.empty())) return;
     const Camera& camera = mp_SceneManager->getCurrentScene()->getCamera();
     const glm::mat4 viewProj = camera.getProj() * camera.getView();
@@ -545,6 +670,22 @@ void Craig::Renderer::drawSoundProbeRays() {
     if (m_showSoundPaths) {
         //White line for the direct path from the last result
         if (m_soundDebugHasPath) drawSegment(m_soundDebugListener, m_soundDebugSource, IM_COL32(255, 255, 255, 200));
+        //Cyan for the routes pathing found round things
+        if (m_soundResult) {
+            const auto& segments = m_soundResult->pathing.segments;
+            for (size_t i = 0; i + 1 < segments.size(); i += 2) {
+                drawSegment(glm::vec3(segments[i][0], segments[i][1], segments[i][2]),
+                    glm::vec3(segments[i + 1][0], segments[i + 1][1], segments[i + 1][2]), IM_COL32(80, 220, 255, 220));
+            }
+        }
+    }
+    if (m_showSoundProbes) {
+        //Little crosses so you can see where the floor probes ended up
+        for (const ProbeSphere& probe : mv_pathingProbes) {
+            const glm::vec3 c = probe.centre;
+            drawSegment(c - glm::vec3(0.15f, 0.0f, 0.0f), c + glm::vec3(0.15f, 0.0f, 0.0f), IM_COL32(80, 220, 255, 160));
+            drawSegment(c - glm::vec3(0.0f, 0.0f, 0.15f), c + glm::vec3(0.0f, 0.0f, 0.15f), IM_COL32(80, 220, 255, 160));
+        }
     }
 #endif
 }

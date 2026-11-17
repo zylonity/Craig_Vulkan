@@ -20,6 +20,7 @@ namespace Craig {
 		bool muted = false;
 		bool directEnabled = true;
 		bool reflectionsEnabled = true;
+		bool pathingEnabled = true;
 		bool binaural = true;
 		bool reverbReady = false;
 		bool reverbFailed = false;
@@ -61,6 +62,7 @@ namespace Craig {
 		void setPathsEnabled(bool direct, bool reflections);
 		//Off pans with Steam Audio's speaker panning instead, to hear what the HRTF adds
 		void setBinaural(bool binaural) { m_binaural = binaural; }
+		void setPathingEnabled(bool pathing) { m_pathingEnabled = pathing; }
 		AudioStatus getStatus() const;
 		CraigError terminate();
 		static const char* stateName(AudioStatus::State state);
@@ -87,6 +89,12 @@ namespace Craig {
 			//The CPU simulator's own response, handed straight back to the library's reflection effect
 			bool steamReflections = false;
 			IPLReflectionEffectParams steamReflectionParams{};
+			//Sound that bent round to the listener, only heard as much as the direct path is blocked
+			bool pathing = false;
+			float pathingMix = 0.0f;
+			uint32_t pathingOrder = 1;
+			std::array<float, 3> pathingEQ{1.0f, 1.0f, 1.0f};
+			std::array<float, 16> pathingSH{};
 		};
 
 		//Triple buffer between the main thread (writes) and the audio callback (reads)
@@ -139,6 +147,7 @@ namespace Craig {
 		bool m_directEnabled = true;
 		bool m_reflectionsEnabled = true;
 		bool m_binaural = true;
+		bool m_pathingEnabled = true;
 		AudioStatus::State m_state = AudioStatus::State::Unavailable;
 		Mailbox m_mailbox;
 		Reverb m_reverb;
@@ -169,6 +178,8 @@ namespace Craig {
 		IPLPanningEffect m_panningEffect = nullptr;
 		IPLAmbisonicsDecodeEffect m_decodeEffect = nullptr;
 		IPLReflectionEffect m_reflectionEffect = nullptr;
+		IPLPathEffect m_pathEffect = nullptr;
+		float m_pathingMix = 0.0f; //Callback only, ramped across each block so the mix never jumps
 		bool m_steamReflectionsPlaying = false; //Callback only, a reflection effect starting up again shouldn't play an old tail
 
 		//Everything below here belongs to the audio thread while the callback's registered
@@ -178,6 +189,7 @@ namespace Craig {
 		std::array<float, kFrame> m_gainRamp{};
 		std::array<std::array<float, kFrame>, 2> m_directStereo{};
 		std::array<std::array<float, kFrame>, 2> m_reflectedStereo{};
+		std::array<std::array<float, kFrame>, 2> m_pathStereo{};
 		std::array<std::array<float, kFrame>, kChannels> m_ambisonics{};
 		std::array<float, kFrame * 2> m_interleaved{};
 		uint64_t m_previousCallbackStartNs = 0;

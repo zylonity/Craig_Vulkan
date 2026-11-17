@@ -2,6 +2,7 @@
 
 #include "Craig_Constants.hpp"
 #include "Craig_SoundProbe.hpp"
+#include "Craig_SoundPathing.hpp"
 #include <phonon.h>
 #include <array>
 #include <chrono>
@@ -47,6 +48,9 @@ namespace Craig {
 			uint32_t reflectionRays = 1024;
 			uint32_t bounces = 64;
 			uint32_t order = 1;
+			bool pathing = false; //Only does anything once the probes are baked
+			PathingSettings pathingSettings;
+			uint32_t pathingOrder = 1;
 			uint64_t sceneGeneration = 0;
 			uint64_t sourceId = 0;
 			uint64_t sequenceId = 0;
@@ -58,6 +62,7 @@ namespace Craig {
 			bool reflections = false;
 			IPLReflectionEffectParams reflectionParams{};
 			uint32_t order = 0;
+			PathingResult pathing;
 			SoundTimings timings;
 			std::array<float, 3> source{};
 			ListenerFrame listener;
@@ -87,6 +92,15 @@ namespace Craig {
 		//If the worker's still busy the queued request gets swapped for this newer one, it never waits
 		SubmitStatus trySubmit(Scene& scene, Request request);
 		bool poll(Result& result);
+		//Floor probes over the whole scene from the library's generator, then its own path bake
+		//The probes come back out so the GPU bake can use exactly the same ones
+		struct PathingBake {
+			std::vector<ProbeSphere> probes;
+			double probesMs = -1.0;
+			double bakeMs = -1.0;
+		};
+		CraigError bakePathing(const PathingSettings& settings, PathingBake& bake);
+		bool isPathingBaked() const { return m_probeBatch != nullptr; }
 		const Statistics& getStatistics() const { return m_statistics; }
 		CraigError terminate();
 
@@ -109,6 +123,7 @@ namespace Craig {
 
 		CraigError createSimulator(const Settings& settings);
 		void releaseScene();
+		void releaseProbes();
 		bool collectTransforms(Scene& scene, std::vector<IPLMatrix4x4>& transforms) const;
 		void work();
 		Result simulate(const Job& job);
@@ -122,6 +137,10 @@ namespace Craig {
 		std::vector<IPLSource> mv_retiredSources;
 		std::vector<IPLSimulator> mv_retiredSimulators;
 		IPLScene m_scene = nullptr;
+		IPLProbeBatch m_probeBatch = nullptr;
+		glm::vec3 m_boundsMin{0.0f};
+		glm::vec3 m_boundsMax{0.0f};
+		std::vector<std::array<float, 3>> mv_pathSegments; //Worker only, filled by the library's path callback
 		std::map<std::pair<std::string, uint32_t>, SubScene> m_subScenes;
 		std::vector<Instance> mv_instances;
 
