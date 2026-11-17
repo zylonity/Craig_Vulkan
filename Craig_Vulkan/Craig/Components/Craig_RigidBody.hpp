@@ -26,6 +26,9 @@ namespace Craig {
 
 			// Colliders call this when they're added, removed or changed, the body gets rebuilt next update
 			void markShapeDirty() { m_shapeDirty = true; }
+			glm::vec3 getLinearVelocity() const;
+			// put it back at the object's transform with no leftover velocity
+			void resetMotion();
 
 		private:
 			// Called from update() until the body exists (m_bodyId is valid). Done there instead of init() since init()
@@ -44,6 +47,7 @@ namespace Craig {
 
 			// NON_MOVING bodies are static, MOVING ones are dynamic
 			JPH::ObjectLayer m_layer = Physics::Layers::MOVING;
+			float m_restitution = 0.0f;
 		};
 	}
 

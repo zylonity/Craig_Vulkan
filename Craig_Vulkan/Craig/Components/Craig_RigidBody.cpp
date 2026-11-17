@@ -5,6 +5,8 @@
 #include "imgui.h"
 
 #include <glm/gtc/type_ptr.hpp>
+#include <algorithm>
+#include <cmath>
 #include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 
@@ -87,6 +89,8 @@ void Craig::Components::RigidBody::createPhysicsBody()
 		isStatic ? JPH::EMotionType::Static : JPH::EMotionType::Dynamic,
 		m_layer);
 
+	bodySettings.mRestitution = m_restitution;
+
 	m_bodyId = mp_owner->getScene()->getPhysicsEngine()->getBodyInterface()->CreateAndAddBody(bodySettings,
 		isStatic ? JPH::EActivation::DontActivate : JPH::EActivation::Activate);
 
@@ -133,6 +137,17 @@ void Craig::Components::RigidBody::pushTransformToBody()
 	// wake it up or it'll just hang there asleep wherever you dragged it
 	const bool isStatic = m_layer == Physics::Layers::NON_MOVING;
 	bodyInterface->SetPositionAndRotation(m_bodyId, objectPos, objectRot, isStatic ? JPH::EActivation::DontActivate : JPH::EActivation::Activate);
+}
+
+glm::vec3 Craig::Components::RigidBody::getLinearVelocity() const {
+	if (m_bodyId.IsInvalid()) return glm::vec3(0.0f);
+	const JPH::Vec3 velocity = mp_owner->getScene()->getPhysicsEngine()->getBodyInterface()->GetLinearVelocity(m_bodyId);
+	return {velocity.GetX(), velocity.GetY(), velocity.GetZ()};
+}
+
+void Craig::Components::RigidBody::resetMotion() {
+	// update() rebuilds it from the new transform, rather than copying the old body back onto the object
+	destroyPhysicsBody();
 }
 
 CraigError Craig::Components::RigidBody::update() {
@@ -205,6 +220,8 @@ CraigError Craig::Components::RigidBody::loadFromJson(const nlohmann::json& json
 	// Saved as a string so the scene file is readable, missing key keeps the default
 	const std::string layer = json.value("layer", m_layer == Physics::Layers::NON_MOVING ? "nonMoving" : "moving");
 	m_layer = layer == "nonMoving" ? Physics::Layers::NON_MOVING : Physics::Layers::MOVING;
+	const float restitution = json.value("restitution", m_restitution);
+	m_restitution = std::isfinite(restitution) ? std::clamp(restitution, 0.0f, 1.0f) : 0.0f;
 
 	return ret;
 }
@@ -212,6 +229,7 @@ CraigError Craig::Components::RigidBody::loadFromJson(const nlohmann::json& json
 void Craig::Components::RigidBody::saveToJson(nlohmann::json& json) const {
 
 	json["layer"] = m_layer == Physics::Layers::NON_MOVING ? "nonMoving" : "moving";
+	json["restitution"] = m_restitution;
 }
 
 void Craig::Components::RigidBody::displayImGuiAttributes()
@@ -223,6 +241,11 @@ void Craig::Components::RigidBody::displayImGuiAttributes()
 	{
 		m_layer = static_cast<JPH::ObjectLayer>(layerIndex);
 		destroyPhysicsBody(); // update() makes the new one
+	}
+
+	if (ImGui::SliderFloat("Restitution", &m_restitution, 0.0f, 1.0f))
+	{
+		destroyPhysicsBody();
 	}
 
 	// Collider and scale changes get picked up on their own, this is for putting the body back

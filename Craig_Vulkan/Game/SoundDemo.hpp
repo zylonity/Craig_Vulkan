@@ -15,8 +15,10 @@ namespace Game {
 		void drawImGui() override;
 
 	private:
-		enum class ReferenceCase { MovingDoor, Clear, Half, Blocked, Reflection, Hall, SportsHall };
+		enum class ReferenceCase { MovingDoor, Clear, Half, Blocked, Reflection, Hall, MediumHall, SmallHall, SportsHall };
 		CraigError selectReferenceCase(ReferenceCase referenceCase);
+		void prepareSound();
+		void dropBasketball();
 		Craig::GameServices* mp_services = nullptr;
 		ReferenceCase m_referenceCase = ReferenceCase::MovingDoor;
 		bool m_referenceFailed = false;
@@ -25,6 +27,8 @@ namespace Game {
 		float m_time = 0.0f;
 		float m_reflectorDistance = 15.0f; //Metres from the listener/source line to the wall's face
 		int m_sound = 0;
+		bool m_ballDropping = false;
+		float m_previousBallVelocity = 0.0f;
 	};
 
 }

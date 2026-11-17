@@ -46,7 +46,8 @@ namespace Craig {
 		CraigError terminate();
 
 		//Builds the sound geometry here, not in the per frame update
-		CraigError configureSoundProbe(const std::string& listener, const std::string& source, uint64_t sourceId);
+		CraigError configureSoundProbe(const std::string& listener, const std::string& source, uint64_t sourceId,
+			glm::vec2 emitterSize = {2.0f, 1.0f});
 		void disableSoundProbe();
 		void setSoundProbeMode(uint32_t mode, bool running);
 		SoundProbeReadout getSoundProbeReadout() const;

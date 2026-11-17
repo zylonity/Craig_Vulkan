@@ -10,8 +10,11 @@
 #include "imgui.h"
 #endif
 
-CraigError Craig::Renderer::configureSoundProbe(const std::string& listener, const std::string& source, uint64_t sourceId) {
+CraigError Craig::Renderer::configureSoundProbe(const std::string& listener, const std::string& source, uint64_t sourceId, glm::vec2 emitterSize) {
     resetSoundProbeContext();
+    for (int i = 0; i < 2; ++i) {
+        m_soundEmitterSize[i] = std::isfinite(emitterSize[i]) ? std::clamp(emitterSize[i], 0.0f, 4.0f) : 0.0f;
+    }
     m_soundListener = listener;
     m_soundSource = source;
     m_soundSourceId = sourceId;
@@ -229,57 +232,63 @@ void Craig::Renderer::drawSoundProbeReadout() {
     m_soundReflectionRayCount = std::clamp(m_soundReflectionRayCount, 1, static_cast<int>(SoundPropagation::kMaxReflectionRayCount));
     m_soundMaxBounces = std::clamp(m_soundMaxBounces, 0, static_cast<int>(kReverbBounces));
     changed |= ImGui::InputInt("Seed", &m_soundSeed);
-    changed |= ImGui::SliderFloat2("Emitter width / height (m)", m_soundEmitterSize, 0.0f, 4.0f);
+    changed |= ImGui::SliderFloat2("Emitter size (m)", m_soundEmitterSize, 0.0f, 4.0f);
     m_soundRayCount = std::clamp(m_soundRayCount, 1, static_cast<int>(SoundPropagation::kMaxRayCount));
     for (float& size : m_soundEmitterSize) size = std::isfinite(size) ? std::clamp(size, 0.0f, 4.0f) : 0.0f;
-    changed |= ImGui::Checkbox("GPU reflections (Steam Audio method)", &m_soundReverbEnabled);
+    changed |= ImGui::Checkbox("Trace reflections", &m_soundReverbEnabled);
+    ImGui::SetItemTooltip("Steam Audio method, traced on the GPU. Separate from playback's Reflections toggle.");
     if (changed) resetSoundProbeContext();
     ImGui::Checkbox("Show sound paths", &m_showSoundPaths);
     ImGui::SameLine();
     if (ImGui::Checkbox("Show bouncing rays", &m_showSoundBounces) && !m_showSoundBounces) mv_soundDebugBounces.clear();
     if (ImGui::Checkbox("Show direct samples", &m_showSoundRays) && !m_showSoundRays) mv_soundDebugRays.clear();
     if (m_showSoundRays) {
-        ImGui::TextUnformatted("Neutral lines through walls, not hit/miss colours");
-        if (mv_soundDebugRays.empty()) ImGui::TextUnformatted("Waiting for a submitted ray snapshot");
-        else ImGui::Text("Last submitted: %zu rays, sequence %llu (frozen on pause)",
+        if (mv_soundDebugRays.empty()) ImGui::TextDisabled("Waiting for ray snapshot");
+        else ImGui::Text("Samples: %zu | Sequence %llu",
             mv_soundDebugRays.size(), static_cast<unsigned long long>(m_soundDebugSequence));
+        ImGui::SetItemTooltip("Neutral lines, not hit/miss colours. Frozen on pause.");
     }
-    ImGui::TextUnformatted("Direct: uniform world-XY rectangle, 1 ray uses its centre");
-    ImGui::TextUnformatted("Reflections: Steam Audio 4.8.1's method, rays start at the listener and connect to the source");
-    ImGui::TextUnformatted("Order 0 energy in 10 ms bins after the direct sound, 2 s long");
-    ImGui::TextUnformatted("Centred mono reflections, no HRTF or diffraction");
-    ImGui::TextUnformatted("Purple rays start at the listener, only the first 128 get drawn");
+    if (ImGui::CollapsingHeader("Tracing notes")) {
+        ImGui::TextWrapped("Direct: world-XY emitter, one ray at its centre. Reflections: listener to source, Steam Audio 4.8.1 method.");
+        ImGui::TextWrapped("Reflections: 10 ms energy bins, 2 s after direct sound. Order 0 mono; no HRTF or diffraction.");
+        ImGui::TextWrapped("Purple: first 128 listener rays, not confirmed source paths. Readout: last completed GPU result.");
+    }
     if (readout.hasResult && !changed) {
-        ImGui::Text("Obstruction: %.3f (%u / %u blocked), seed %u", readout.obstruction, readout.blockedRays, readout.rayCount, readout.seed);
-        ImGui::Text("Input age: %.2f ms, sequence %llu", readout.ageMs, static_cast<unsigned long long>(readout.sequenceId));
-        ImGui::Text("Direct taps: %u, reflections are in the energy bins, not separate taps", readout.arrivalCount);
-        if (ImGui::BeginTable("Arrivals", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY, ImVec2(0, 160))) {
-            ImGui::TableSetupColumn("Order");
-            ImGui::TableSetupColumn("Length (m)");
-            ImGui::TableSetupColumn("Delay (ms)");
-            ImGui::TableSetupColumn("Low / mid / high gain");
-            ImGui::TableSetupColumn("Pan");
-            ImGui::TableSetupColumn("Level (dB)");
-            ImGui::TableHeadersRow();
-            for (uint32_t i = 0; i < readout.arrivalCount; ++i) {
-                const SoundArrival& arrival = readout.arrivals[i];
-                ImGui::TableNextRow();
-                ImGui::TableNextColumn(); ImGui::Text("%u", arrival.order);
-                ImGui::TableNextColumn(); ImGui::Text("%.3f", arrival.length);
-                ImGui::TableNextColumn(); ImGui::Text("%.2f", arrival.delaySeconds * 1000.0f);
-                ImGui::TableNextColumn(); ImGui::Text("%.3f / %.3f / %.3f", arrival.gains[0], arrival.gains[1], arrival.gains[2]);
-                ImGui::TableNextColumn(); ImGui::Text("%+.2f", arrival.pan);
-                //Average of the three bands, just to have one number to look at
-                const float level = (arrival.gains[0] + arrival.gains[1] + arrival.gains[2]) / 3.0f;
-                ImGui::TableNextColumn(); ImGui::Text("%.1f", 20.0f * std::log10(std::max(level, 1e-6f)));
+        ImGui::Text("Blocked: %u / %u (%.1f%%)", readout.blockedRays, readout.rayCount, readout.obstruction * 100.0f);
+        ImGui::Text("Age: %.1f ms | Sequence %llu | Seed %u", readout.ageMs, static_cast<unsigned long long>(readout.sequenceId), readout.seed);
+        if (ImGui::TreeNode("Direct arrivals", "Direct arrivals (%u)", readout.arrivalCount)) {
+            ImGui::TextDisabled("Reflections are in energy bins, not taps");
+            if (ImGui::BeginTable("Arrivals", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY, ImVec2(0, 160))) {
+                ImGui::TableSetupColumn("Order");
+                ImGui::TableSetupColumn("Length (m)");
+                ImGui::TableSetupColumn("Delay (ms)");
+                ImGui::TableSetupColumn("Low / mid / high gain");
+                ImGui::TableSetupColumn("Pan");
+                ImGui::TableSetupColumn("Level (dB)");
+                ImGui::TableHeadersRow();
+                for (uint32_t i = 0; i < readout.arrivalCount; ++i) {
+                    const SoundArrival& arrival = readout.arrivals[i];
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn(); ImGui::Text("%u", arrival.order);
+                    ImGui::TableNextColumn(); ImGui::Text("%.3f", arrival.length);
+                    ImGui::TableNextColumn(); ImGui::Text("%.2f", arrival.delaySeconds * 1000.0f);
+                    ImGui::TableNextColumn(); ImGui::Text("%.3f / %.3f / %.3f", arrival.gains[0], arrival.gains[1], arrival.gains[2]);
+                    ImGui::TableNextColumn(); ImGui::Text("%+.2f", arrival.pan);
+                    //Average of the three bands, just to have one number to look at
+                    const float level = (arrival.gains[0] + arrival.gains[1] + arrival.gains[2]) / 3.0f;
+                    ImGui::TableNextColumn(); ImGui::Text("%.1f", 20.0f * std::log10(std::max(level, 1e-6f)));
+                }
+                ImGui::EndTable();
             }
-            ImGui::EndTable();
+            ImGui::TreePop();
         }
     }
-    const auto& stats = m_soundPropagation.getStatistics();
-    ImGui::Text("Submitted %llu, completed %llu, skipped %llu, discarded %llu",
-        static_cast<unsigned long long>(stats.submitted), static_cast<unsigned long long>(stats.completed),
-        static_cast<unsigned long long>(stats.skipped), static_cast<unsigned long long>(stats.discarded));
+    if (ImGui::CollapsingHeader("GPU diagnostics")) {
+        const auto& stats = m_soundPropagation.getStatistics();
+        ImGui::Text("Submitted %llu | Completed %llu | Skipped %llu | Discarded %llu",
+            static_cast<unsigned long long>(stats.submitted), static_cast<unsigned long long>(stats.completed),
+            static_cast<unsigned long long>(stats.skipped), static_cast<unsigned long long>(stats.discarded));
+    }
     ImGui::End();
     drawSoundProbeRays();
 #endif

@@ -4,6 +4,7 @@
 #include "Craig_Audio.hpp"
 
 #include <string>
+#include <glm/vec2.hpp>
 
 namespace Craig {
 
@@ -21,12 +22,13 @@ namespace Craig {
 		// swaps straight away, don't call it from inside a scene/game object loop
 		CraigError loadScene(const std::string& scenePath);
 		Craig::Scene* getCurrentScene() const;
-		CraigError configureSoundProbe(const std::string& listener, const std::string& source, uint64_t sourceId);
+		CraigError configureSoundProbe(const std::string& listener, const std::string& source, uint64_t sourceId,
+			glm::vec2 emitterSize = {2.0f, 1.0f});
 		void disableSoundProbe();
 		SoundProbeReadout getSoundProbeReadout() const;
 		CraigError playSoundLoop(const std::string& path);
 		CraigError prepareSoundEffect(const std::string& path);
-		void playSoundEffect();
+		void playSoundEffect(float gain = 1.0f);
 		void stopSoundLoop();
 		void setSoundMuted(bool muted);
 		void setSoundPathsEnabled(bool direct, bool reflections);

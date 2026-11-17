@@ -64,15 +64,16 @@ CraigError Craig::Audio::playLoop(const std::string& path) { return openSound(pa
 
 CraigError Craig::Audio::prepareOneShot(const std::string& path) { return openSound(path, false); }
 
-void Craig::Audio::playOneShot() {
-	if (!m_playing || m_looping) return;
+void Craig::Audio::playOneShot(float gain) {
+	if (!m_playing || m_looping || !std::isfinite(gain)) return;
 	const uint64_t command = m_playbackCommand.load(std::memory_order_relaxed);
-	m_playbackCommand.store((command & ~kShotCountMask) | static_cast<uint32_t>(command + 1), std::memory_order_release);
+	const uint64_t strength = static_cast<uint64_t>(std::lround(std::clamp(gain, 0.0f, 1.0f) * 255.0f));
+	m_playbackCommand.store((command & kShotGenerationMask) | (strength << 24) | ((command + 1) & kShotCountMask), std::memory_order_release);
 }
 
 void Craig::Audio::cancelOneShot() {
 	const uint64_t command = m_playbackCommand.load(std::memory_order_relaxed);
-	m_playbackCommand.store((command & ~kShotCountMask) + (kShotCountMask + 1), std::memory_order_release);
+	m_playbackCommand.store((command & kShotGenerationMask) + (1ull << 32), std::memory_order_release);
 }
 
 CraigError Craig::Audio::openSound(const std::string& path, bool looping) {
@@ -354,19 +355,21 @@ void Craig::Audio::mix(const SDL_AudioSpec& spec, float* buffer, int bytes, uint
 		if (!m_looping) {
 			const uint64_t command = m_playbackCommand.load(std::memory_order_acquire);
 			//New cancel generation, stop every voice and forget what's in the delay lines
-			if ((command & ~kShotCountMask) != (m_consumedPlaybackCommand & ~kShotCountMask)) {
+			if ((command & kShotGenerationMask) != (m_consumedPlaybackCommand & kShotGenerationMask)) {
 				m_voices = {};
 				m_lowSplit = m_highSplit = 0.0f;
 				m_delayFrames = 0;
-				m_consumedPlaybackCommand = command & ~kShotCountMask;
+				m_consumedPlaybackCommand = command & kShotGenerationMask;
 			}
 			//Only start once the paths are actually audible, otherwise the start of the sound gets faded in
-			uint32_t pending = static_cast<uint32_t>(command) - static_cast<uint32_t>(m_consumedPlaybackCommand);
+			uint32_t pending = static_cast<uint32_t>((command - m_consumedPlaybackCommand) & kShotCountMask);
+			// presses queued together share the latest strength, existing voices keep their own
+			const float strength = static_cast<float>((command >> 24) & 0xff) / 255.0f;
 			if (pending && audible && m_gain >= 0.999f) {
 				//If all 16 are busy extra presses get ignored, better than cutting one off halfway
 				for (auto& voice : m_voices) {
 					if (!pending) break;
-					if (!voice.active) { voice = {0.0, true}; --pending; }
+					if (!voice.active) { voice = {0.0, true, strength}; --pending; }
 				}
 				m_consumedPlaybackCommand = command;
 			}
@@ -376,7 +379,7 @@ void Craig::Audio::mix(const SDL_AudioSpec& spec, float* buffer, int bytes, uint
 		if (!m_looping) {
 			for (auto& voice : m_voices) {
 				if (!voice.active) continue;
-				dry += readSample(voice.cursor, false);
+				dry += voice.gain * readSample(voice.cursor, false);
 				voice.active = voice.cursor < mv_wave.size();
 			}
 		}

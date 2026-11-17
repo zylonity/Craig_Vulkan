@@ -18,9 +18,9 @@ CraigError Craig::GameServices::loadScene(const std::string& scenePath)
 	return mp_renderer->loadScene(scenePath);
 }
 
-CraigError Craig::GameServices::configureSoundProbe(const std::string& listener, const std::string& source, uint64_t sourceId)
+CraigError Craig::GameServices::configureSoundProbe(const std::string& listener, const std::string& source, uint64_t sourceId, glm::vec2 emitterSize)
 {
-	return mp_renderer->configureSoundProbe(listener, source, sourceId);
+	return mp_renderer->configureSoundProbe(listener, source, sourceId, emitterSize);
 }
 
 void Craig::GameServices::disableSoundProbe()
@@ -35,7 +35,7 @@ Craig::SoundProbeReadout Craig::GameServices::getSoundProbeReadout() const
 
 CraigError Craig::GameServices::playSoundLoop(const std::string& path) { return mp_audio->playLoop(path); }
 CraigError Craig::GameServices::prepareSoundEffect(const std::string& path) { return mp_audio->prepareOneShot(path); }
-void Craig::GameServices::playSoundEffect() { mp_audio->playOneShot(); }
+void Craig::GameServices::playSoundEffect(float gain) { mp_audio->playOneShot(gain); }
 void Craig::GameServices::stopSoundLoop() { mp_audio->stop(); }
 void Craig::GameServices::setSoundMuted(bool muted) { mp_audio->setMuted(muted); }
 void Craig::GameServices::setSoundPathsEnabled(bool direct, bool reflections) { mp_audio->setPathsEnabled(direct, reflections); }

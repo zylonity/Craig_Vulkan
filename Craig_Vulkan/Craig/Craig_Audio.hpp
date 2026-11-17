@@ -48,7 +48,7 @@ namespace Craig {
 		//Loads it but doesn't play until playOneShot
 		CraigError prepareOneShot(const std::string& path);
 		//Each press adds another voice, ones already playing carry on
-		void playOneShot();
+		void playOneShot(float gain = 1.0f);
 		void stop();
 		//Goes silent until the next valid result, scene swaps and pauses call this
 		void invalidate();
@@ -66,6 +66,7 @@ namespace Craig {
 		struct Voice {
 			double cursor = 0.0;
 			bool active = false;
+			float gain = 1.0f;
 		};
 		struct Tap {
 			float delaySeconds;
@@ -111,7 +112,8 @@ namespace Craig {
 		};
 
 		static constexpr uint32_t kMaxOneShotVoices = 16;
-		static constexpr uint64_t kShotCountMask = 0xffffffffull;
+		static constexpr uint64_t kShotCountMask = 0x00ffffffull;
+		static constexpr uint64_t kShotGenerationMask = 0xffffffff00000000ull;
 		static constexpr int kWaveRate = 48000;
 		static constexpr float kOutputGain = 1.2f;
 		static constexpr float kTransitionSeconds = 0.03f; //Crossfade between two arrival sets
@@ -151,7 +153,7 @@ namespace Craig {
 		std::atomic<float> m_reportedGain{0.0f};
 		std::atomic<uint32_t> m_reportedArrivals{0};
 		//Main thread writes it, callback reads it, both halves in one atomic so a cancel and a play can't tear
-		//High word cancels a generation, low word counts presses so two quick presses don't merge into one
+		//High word cancels a generation, low word packs an 8-bit gain and 24-bit press count
 		std::atomic<uint64_t> m_playbackCommand{0};
 		bool m_looping = true; //Doesn't change while the callback's registered
 

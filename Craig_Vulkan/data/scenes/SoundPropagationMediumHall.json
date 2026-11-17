@@ -1,0 +1,20 @@
+{
+  "name": "Sound propagation — medium mixed-material hall",
+  "camera": {"position":[6.75,3.5,-4.5],"rotation":[-15,113]},
+  "gameObjects": [
+    {"name":"Floor","position":[0,-0.15,0],"scale":[7.8,0.15,5.3],"components":{"model":{"path":"data/models/halls/Court_7p8_0p15_5p3.glb","acousticMaterial":"Wood"},"boxCollider":{"scale":[2,2,2]},"rigidBody":{"layer":"nonMoving"}}},
+    {"name":"Ceiling","position":[0,4.15,0],"scale":[7.8,0.15,5.3],"components":{"model":{"path":"data/models/halls/Carpet_7p8_0p15_5p3.glb","acousticMaterial":"Carpet"}}},
+    {"name": "Left wall low", "position": [-7.65, 0.6666666666666666, 0], "scale": [0.15, 0.6666666666666666, 5.3], "components": {"model": {"path": "data/models/halls/Brick_0p15_0p666667_5p3.glb", "acousticMaterial": "Brick"}}},
+    {"name": "Left wall high", "position": [-7.65, 2.6666666666666665, 0], "scale": [0.15, 1.3333333333333333, 5.3], "components": {"model": {"path": "data/models/halls/Plaster_0p15_1p33333_5p3.glb", "acousticMaterial": "Plaster"}}},
+    {"name": "Right wall low", "position": [7.65, 0.6666666666666666, 0], "scale": [0.15, 0.6666666666666666, 5.3], "components": {"model": {"path": "data/models/halls/Brick_0p15_0p666667_5p3.glb", "acousticMaterial": "Brick"}}},
+    {"name": "Right wall high", "position": [7.65, 2.6666666666666665, 0], "scale": [0.15, 1.3333333333333333, 5.3], "components": {"model": {"path": "data/models/halls/Plaster_0p15_1p33333_5p3.glb", "acousticMaterial": "Plaster"}}},
+    {"name": "Front wall low", "position": [0, 0.6666666666666666, -5.15], "scale": [7.8, 0.6666666666666666, 0.15], "components": {"model": {"path": "data/models/halls/Brick_7p8_0p666667_0p15.glb", "acousticMaterial": "Brick"}}},
+    {"name": "Front wall panels", "position": [0, 2.6666666666666665, -5.15], "scale": [7.8, 1.3333333333333333, 0.15], "components": {"model": {"path": "data/models/halls/Carpet_7p8_1p33333_0p15.glb", "acousticMaterial": "Carpet"}}},
+    {"name": "Back wall low", "position": [0, 0.6666666666666666, 5.15], "scale": [7.8, 0.6666666666666666, 0.15], "components": {"model": {"path": "data/models/halls/Brick_7p8_0p666667_0p15.glb", "acousticMaterial": "Brick"}}},
+    {"name": "Back wall panels", "position": [0, 2.6666666666666665, 5.15], "scale": [7.8, 1.3333333333333333, 0.15], "components": {"model": {"path": "data/models/halls/Carpet_7p8_1p33333_0p15.glb", "acousticMaterial": "Carpet"}}},
+    {"name":"Listener","position":[6,1.7,0],"scale":[0.2,0.2,0.2],"components":{"model":{"path":"data/models/BlankBox.glb","acousticBlocker":false}}},
+    {"name":"Source","position":[-6,1,0],"scale":[0.3,0.3,0.3],"components":{"model":{"path":"data/models/BlankBox.glb","acousticBlocker":false}}},
+    {"name":"Basketball","position":[-6,0.12,0],"scale":[0.12,0.12,0.12],"components":{"model":{"path":"data/models/Basketball.glb","acousticBlocker":false},"sphereCollider":{"radius":1},"rigidBody":{"layer":"moving","restitution":0.84}}},
+    {"name":"Sun","rotation":[45,-30,0],"components":{"sun":{"intensity":2}}}
+  ]
+}

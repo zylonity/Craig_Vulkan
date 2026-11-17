@@ -1,15 +1,20 @@
 {
-  "name": "Sound propagation — big concrete hall",
+  "name": "Sound propagation — big mixed-material hall",
   "camera": {"position": [13.5, 7.0, -9.0], "rotation": [-15.0, 113.0]},
   "gameObjects": [
-    {"name": "Floor", "position": [0.0, -0.15, 0.0], "scale": [15.3, 0.15, 10.3], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticMaterial": "Concrete"}}},
-    {"name": "Ceiling", "position": [0.0, 8.15, 0.0], "scale": [15.3, 0.15, 10.3], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticMaterial": "Concrete"}}},
-    {"name": "Left wall", "position": [-15.15, 4.0, 0.0], "scale": [0.15, 4.0, 10.3], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticMaterial": "Concrete"}}},
-    {"name": "Right wall", "position": [15.15, 4.0, 0.0], "scale": [0.15, 4.0, 10.3], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticMaterial": "Concrete"}}},
-    {"name": "Front wall", "position": [0.0, 4.0, -10.15], "scale": [15.3, 4.0, 0.15], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticMaterial": "Concrete"}}},
-    {"name": "Back wall", "position": [0.0, 4.0, 10.15], "scale": [15.3, 4.0, 0.15], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticMaterial": "Concrete"}}},
+    {"name":"Floor","position":[0,-0.15,0],"scale":[15.3,0.15,10.3],"components":{"model":{"path":"data/models/halls/Court_15p3_0p15_10p3.glb","acousticMaterial":"Wood"},"boxCollider":{"scale":[2,2,2]},"rigidBody":{"layer":"nonMoving"}}},
+    {"name": "Ceiling", "position": [0.0, 8.15, 0.0], "scale": [15.3, 0.15, 10.3], "components": {"model": {"path": "data/models/halls/Carpet_15p3_0p15_10p3.glb", "acousticMaterial": "Carpet"}}},
+    {"name": "Left wall low", "position": [-15.15, 1.3333333333333333, 0], "scale": [0.15, 1.3333333333333333, 10.3], "components": {"model": {"path": "data/models/halls/Brick_0p15_1p33333_10p3.glb", "acousticMaterial": "Brick"}}},
+    {"name": "Left wall high", "position": [-15.15, 5.333333333333333, 0], "scale": [0.15, 2.6666666666666665, 10.3], "components": {"model": {"path": "data/models/halls/Plaster_0p15_2p66667_10p3.glb", "acousticMaterial": "Plaster"}}},
+    {"name": "Right wall low", "position": [15.15, 1.3333333333333333, 0], "scale": [0.15, 1.3333333333333333, 10.3], "components": {"model": {"path": "data/models/halls/Brick_0p15_1p33333_10p3.glb", "acousticMaterial": "Brick"}}},
+    {"name": "Right wall high", "position": [15.15, 5.333333333333333, 0], "scale": [0.15, 2.6666666666666665, 10.3], "components": {"model": {"path": "data/models/halls/Plaster_0p15_2p66667_10p3.glb", "acousticMaterial": "Plaster"}}},
+    {"name": "Front wall low", "position": [0, 1.3333333333333333, -10.15], "scale": [15.3, 1.3333333333333333, 0.15], "components": {"model": {"path": "data/models/halls/Brick_15p3_1p33333_0p15.glb", "acousticMaterial": "Brick"}}},
+    {"name": "Front wall panels", "position": [0, 5.333333333333333, -10.15], "scale": [15.3, 2.6666666666666665, 0.15], "components": {"model": {"path": "data/models/halls/Carpet_15p3_2p66667_0p15.glb", "acousticMaterial": "Carpet"}}},
+    {"name": "Back wall low", "position": [0, 1.3333333333333333, 10.15], "scale": [15.3, 1.3333333333333333, 0.15], "components": {"model": {"path": "data/models/halls/Brick_15p3_1p33333_0p15.glb", "acousticMaterial": "Brick"}}},
+    {"name": "Back wall panels", "position": [0, 5.333333333333333, 10.15], "scale": [15.3, 2.6666666666666665, 0.15], "components": {"model": {"path": "data/models/halls/Carpet_15p3_2p66667_0p15.glb", "acousticMaterial": "Carpet"}}},
     {"name": "Listener", "position": [12.0, 1.7, 0.0], "scale": [0.2, 0.2, 0.2], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticBlocker": false}}},
     {"name": "Source", "position": [-12.0, 1.0, 0.0], "scale": [0.3, 0.3, 0.3], "components": {"model": {"path": "data/models/BlankBox.glb", "acousticBlocker": false}}},
+    {"name":"Basketball","position":[-12,0.12,0],"scale":[0.12,0.12,0.12],"components":{"model":{"path":"data/models/Basketball.glb","acousticBlocker":false},"sphereCollider":{"radius":1},"rigidBody":{"layer":"moving","restitution":0.84}}},
     {"name": "Sun", "rotation": [45.0, -30.0, 0.0], "components": {"sun": {"intensity": 2.0}}}
   ]
 }

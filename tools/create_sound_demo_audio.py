@@ -96,3 +96,14 @@ with wave.open(str(ROOT / "basketball.wav"), "wb") as wav:
     wav.setframerate(RATE)
     wav.writeframes(frames)
 print(ROOT / "basketball.wav", f"{len(impacts)} bounces, {length / RATE:.2f} s")
+
+# physics decides when it hits now, so each impact needs just the first thump, not a whole bouncing recording
+first = round(impacts[0][0] * RATE)
+hit = samples[first:first + round(RATE * 0.25)]
+frames = b"".join(struct.pack("<h", round(sample / peak * 0.8 * min(1.0, (len(hit) - i) / fade) * 32767)) for i, sample in enumerate(hit))
+with wave.open(str(ROOT / "basketball_hit.wav"), "wb") as wav:
+    wav.setnchannels(1)
+    wav.setsampwidth(2)
+    wav.setframerate(RATE)
+    wav.writeframes(frames)
+print(ROOT / "basketball_hit.wav")
