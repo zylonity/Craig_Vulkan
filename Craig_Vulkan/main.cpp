@@ -30,6 +30,10 @@
 #define SDL_MAIN_HANDLED
 
 #include <cassert>
+#if defined(__APPLE__) && defined(CRAIG_MOLTENVK_RT_ICD)
+#include <cstdio>
+#include <cstdlib>
+#endif
 
 #include "Craig/Craig_Framework.hpp"
 #include "Game/SoundDemo.hpp"
@@ -41,6 +45,15 @@ Game::SoundDemo g_game;
 //===============================================================================
 
 int main() {
+#if defined(__APPLE__) && defined(CRAIG_MOLTENVK_RT_ICD)
+    // SDL loads Vulkan when the window is created, so driver selection has to happen before framework init
+    if (setenv("VK_DRIVER_FILES", CRAIG_MOLTENVK_RT_ICD, 1) != 0 ||
+        setenv("VK_ICD_FILENAMES", CRAIG_MOLTENVK_RT_ICD, 1) != 0 ||
+        setenv("MVK_CONFIG_ENABLE_EXPERIMENTAL_RAY_TRACING", "1", 1) != 0) {
+        std::perror("Could not configure experimental MoltenVK");
+        return EXIT_FAILURE;
+    }
+#endif
 
     CraigError ret = CRAIG_SUCCESS;
 

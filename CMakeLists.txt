@@ -113,6 +113,21 @@ target_include_directories(Craig_Vulkan SYSTEM PRIVATE
         ${CMAKE_SOURCE_DIR}/Craig_Vulkan/External
 )
 
+#select the local experimental driver before SDL/Vulkan starts, including when launched by CLion
+if(APPLE)
+    option(ENABLE_MACOS_RT "Use experimental MoltenVK ray queries" ON)
+    set(CRAIG_MOLTENVK_RT_ROOT "$ENV{HOME}/Library/Caches/Craig_Vulkan/MoltenVK-ray-query"
+            CACHE PATH "Built experimental MoltenVK checkout")
+    if(ENABLE_MACOS_RT)
+        set(MOLTENVK_RT_DIR "${CRAIG_MOLTENVK_RT_ROOT}/Package/Release/MoltenVK/dynamic/dylib/macOS")
+        if(NOT EXISTS "${MOLTENVK_RT_DIR}/MoltenVK_icd.json" OR NOT EXISTS "${MOLTENVK_RT_DIR}/libMoltenVK.dylib")
+            message(FATAL_ERROR "Experimental MoltenVK missing from ${MOLTENVK_RT_DIR}. Set CRAIG_MOLTENVK_RT_ROOT or disable ENABLE_MACOS_RT.")
+        endif()
+        set_property(SOURCE Craig_Vulkan/main.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+                "CRAIG_MOLTENVK_RT_ICD=\"${MOLTENVK_RT_DIR}/MoltenVK_icd.json\"")
+    endif()
+endif()
+
 #Imgui flag for CLION, id rather set this in the IDE
 option(ENABLE_IMGUI "Enable ImGui" OFF)
 if(ENABLE_IMGUI)
