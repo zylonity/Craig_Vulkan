@@ -4,7 +4,6 @@
 #include <cassert>
 #include <cmath>
 #include <cstring>
-#include <limits>
 #include <stdexcept>
 
 #include "Craig_CommandManager.hpp"
@@ -14,6 +13,7 @@
 #include "Craig/Craig_Scene.hpp"
 #include "Craig/Components/Craig_Model.hpp"
 #include "Craig/Craig_AcousticMaterial.hpp"
+#include "Craig/Craig_AcousticGeometry.hpp"
 
 //Acceleration structure building adapted from Sascha Willems' rayquery example
 //Copyright (C) 2020-2025 Sascha Willems, MIT - https://github.com/SaschaWillems/Vulkan/tree/master/examples/rayquery
@@ -166,64 +166,11 @@ void Craig::SoundPropagation::destroyAccelerationStructure(AccelerationStructure
     accelerationStructure = {};
 }
 
-namespace {
-    //Walks the model's nodes the same way drawNode does, and bakes each node's matrix into the positions
-    void collectAcousticTriangles(const Craig::Node& node, std::vector<std::array<float, 3>>& positions, std::vector<uint32_t>& indices) {
-        //Same accumulated matrix the raster shader gets pushed
-        const glm::mat4 nodeMatrix = node.getWorldMatrix();
-
-        for (const Craig::SubMesh* pMesh : node.subMeshes) {
-            if (pMesh->indexCount == 0) continue;
-
-            if (pMesh->indexCount > pMesh->m_indices.size() || pMesh->indexCount % 3 != 0 ||
-                positions.size() + pMesh->m_vertices.size() > std::numeric_limits<uint32_t>::max()) {
-                throw std::runtime_error("invalid acoustic triangle list");
-            }
-
-            //Submesh indices start at 0, so they get moved up past everything already in the buffer
-            const uint32_t baseVertex = static_cast<uint32_t>(positions.size());
-            for (const Craig::Vertex& vertex : pMesh->m_vertices) {
-                const glm::vec3 position(nodeMatrix * glm::vec4(vertex.m_pos, 1.0f));
-                if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) {
-                    throw std::runtime_error("non-finite acoustic vertex");
-                }
-                positions.push_back({position.x, position.y, position.z});
-            }
-            for (uint32_t i = 0; i < pMesh->indexCount; i++) {
-                if (pMesh->m_indices[i] >= pMesh->m_vertices.size()) {
-                    throw std::runtime_error("acoustic index outside vertex buffer");
-                }
-                indices.push_back(baseVertex + pMesh->m_indices[i]);
-            }
-        }
-
-        for (const Craig::Node* pChild : node.children) {
-            collectAcousticTriangles(*pChild, positions, indices);
-        }
-    }
-
-    //A scale of 0 (or NaNs) would squash the instance flat, so those get skipped
-    bool validAcousticTransform(const glm::mat4& transform) {
-        for (int column = 0; column < 4; column++) {
-            for (int row = 0; row < 4; row++) {
-                if (!std::isfinite(transform[column][row])) return false;
-            }
-        }
-        const float determinant = glm::determinant(glm::mat3(transform));
-        return std::isfinite(determinant) && determinant != 0.0f;
-    }
-}
-
 void Craig::SoundPropagation::createModelGeometry(const Model& model, ModelGeometry& geometry) {
-    std::vector<std::array<float, 3>> positions;
-    std::vector<uint32_t> indices;
-    for (const Node* pNode : model.nodes) {
-        collectAcousticTriangles(*pNode, positions, indices);
-    }
+    const AcousticMesh mesh = collectAcousticMesh(model);
+    const auto& positions = mesh.positions;
+    const auto& indices = mesh.indices;
     if (indices.empty()) return;
-    if (indices.size() / 3 > std::numeric_limits<uint32_t>::max()) {
-        throw std::runtime_error("too many acoustic triangles");
-    }
 
     //Reflections need to know which way the hit surface faces, and the BLAS can't give its vertices back without position fetch
     geometry.normalOffset = static_cast<uint32_t>(mv_normals.size());
@@ -269,8 +216,8 @@ bool Craig::SoundPropagation::collectSceneInstances(Scene& scene, std::vector<Vk
 
     for (size_t objectIndex = 0; objectIndex < objects.size(); objectIndex++) {
         GameObject* pObject = objects[objectIndex];
+        if (!isAcousticObject(*pObject)) continue;
         const auto* pModel = pObject->getComponent<Components::Model>();
-        if (!pModel || !pModel->hasModel() || !pModel->isAcousticBlocker()) continue;
 
         const glm::mat4 transform = pObject->GetModelMatrix();
         if (!validAcousticTransform(transform)) {
@@ -316,9 +263,9 @@ bool Craig::SoundPropagation::collectSceneInstances(Scene& scene, std::vector<Vk
 void Craig::SoundPropagation::createPipeline() {
     const vk::Device device = mp_Device->getLogicalDevice();
 
-    //0 = TLAS, then 8 storage buffers: rays, results, samples, instance info, normals, materials, hits, reflections
-    constexpr std::array<uint32_t, 8> storageBindings = {1, 2, 3, 4, 5, 6, 7, 8};
-    std::array<vk::DescriptorSetLayoutBinding, 9> bindings{};
+    //0 = TLAS, then 9 storage buffers: rays, results, samples, instance info, normals, materials, hits, reflections, transmission
+    constexpr std::array<uint32_t, 9> storageBindings = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    std::array<vk::DescriptorSetLayoutBinding, 10> bindings{};
     bindings[0] = {0, vk::DescriptorType::eAccelerationStructureKHR, 1, vk::ShaderStageFlagBits::eCompute};
     for (uint32_t i = 0; i < storageBindings.size(); ++i) {
         bindings[i + 1] = {storageBindings[i], vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute};
@@ -327,7 +274,7 @@ void Craig::SoundPropagation::createPipeline() {
 
     const std::array<vk::DescriptorPoolSize, 2> sizes = {{
         {vk::DescriptorType::eAccelerationStructureKHR, kResultSlotCount},
-        {vk::DescriptorType::eStorageBuffer, 8 * kResultSlotCount}
+        {vk::DescriptorType::eStorageBuffer, 9 * kResultSlotCount}
     }};
     m_VK_descriptorPool = device.createDescriptorPool(vk::DescriptorPoolCreateInfo().setMaxSets(kResultSlotCount).setPoolSizes(sizes));
 
@@ -351,8 +298,8 @@ void Craig::SoundPropagation::createPipeline() {
 void Craig::SoundPropagation::writeQueryDescriptors(const ResultSlot& slot) {
     vk::WriteDescriptorSetAccelerationStructureKHR accelerationStructure{};
     accelerationStructure.setAccelerationStructures(slot.tlas.handle);
-    constexpr std::array<uint32_t, 8> storageBindings = {1, 2, 3, 4, 5, 6, 7, 8};
-    const std::array<vk::DescriptorBufferInfo, 8> buffers = {{
+    constexpr std::array<uint32_t, 9> storageBindings = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    const std::array<vk::DescriptorBufferInfo, 9> buffers = {{
         {slot.rays.buffer, 0, sizeof(Ray) * kMaxRayCount},
         {slot.results.buffer, 0, sizeof(uint32_t) * kMaxRayCount},
         {slot.samples.buffer, 0, VK_WHOLE_SIZE},
@@ -360,10 +307,11 @@ void Craig::SoundPropagation::writeQueryDescriptors(const ResultSlot& slot) {
         {m_normalBuffer.buffer, 0, VK_WHOLE_SIZE},
         {m_materialBuffer.buffer, 0, VK_WHOLE_SIZE},
         {slot.hits.buffer, 0, VK_WHOLE_SIZE},
-        {slot.reverb.buffer, 0, VK_WHOLE_SIZE}
+        {slot.reverb.buffer, 0, VK_WHOLE_SIZE},
+        {slot.transmission.buffer, 0, VK_WHOLE_SIZE}
     }};
 
-    std::array<vk::WriteDescriptorSet, 9> writes{};
+    std::array<vk::WriteDescriptorSet, 10> writes{};
     writes[0].setDstSet(slot.descriptorSet).setDstBinding(0).setDescriptorType(vk::DescriptorType::eAccelerationStructureKHR)
         .setDescriptorCount(1).setPNext(&accelerationStructure);
     for (uint32_t i = 0; i < buffers.size(); ++i) {
@@ -399,14 +347,14 @@ void Craig::SoundPropagation::recordQuery(vk::CommandBuffer commandBuffer, const
 
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eCompute, m_VK_pipeline);
     commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, m_VK_pipelineLayout, 0, slot.descriptorSet, {});
-    static_assert(sizeof(QuerySettings) == 52, "push constants have to match SoundPropagation.comp");
+    static_assert(sizeof(QuerySettings) == 56, "push constants have to match SoundPropagation.comp");
     //Reflection rays off means 0 of them, the direct rays still go
     const uint32_t reflectionRays = request.reverbEnabled ? request.reflectionRayCount : 0u;
     const QuerySettings settings{
         {request.listener.origin[0], request.listener.origin[1], request.listener.origin[2], 0.0f},
         {request.source[0], request.source[1], request.source[2], 0.0f},
         request.rayCount, reflectionRays, request.maxBounces, request.seed,
-        request.captureBounces ? 1u : 0u};
+        request.captureBounces ? 1u : 0u, request.transmissionRays};
     commandBuffer.pushConstants(m_VK_pipelineLayout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(settings), &settings);
     //One thread does a direct ray and/or a reflection ray, so enough groups for whichever there's more of
     commandBuffer.dispatch((std::max(request.rayCount, reflectionRays) + 63) / 64, 1, 1);
@@ -449,6 +397,7 @@ CraigError Craig::SoundPropagation::terminate() {
         destroyBuffer(slot.samples);
         destroyBuffer(slot.hits);
         destroyBuffer(slot.reverb);
+        destroyBuffer(slot.transmission);
     }
     destroyBuffer(m_materialBuffer);
     destroyBuffer(m_normalBuffer);

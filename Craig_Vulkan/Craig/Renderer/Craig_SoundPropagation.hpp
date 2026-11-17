@@ -36,6 +36,10 @@ namespace Craig {
 			uint32_t reflectionRayCount = 1024;
 			uint32_t maxBounces = 0;
 			uint32_t reflectionOrder = 0; //Ambisonic order the energy gets binned at, 0-3
+			uint32_t transmissionRays = 3; //Steam Audio's numTransmissionRays, 0 turns transmission off
+			//Rays come in pairs, source to sample then listener to sample, the same as Steam Audio's volumetric occlusion
+			//Off means every ray goes from an emitter sample to the listener, the area obstruction metric
+			bool volumetric = false;
 			ListenerFrame listener; //Origin is the listener's position, the rest is which way it's facing
 			std::array<float, 3> source{};
 			bool captureBounces = false; //Copies the listener rays' bounce points back for the overlay
@@ -107,6 +111,7 @@ namespace Craig {
 			uint32_t maxBounces;
 			uint32_t seed;
 			uint32_t captureBounces;
+			uint32_t transmissionRays;
 		};
 
 		//Per TLAS instance, the shader finds it with the instance custom index
@@ -127,6 +132,7 @@ namespace Craig {
 			std::vector<float> shCoefficients; //Order 3 SH of every listener ray's start direction, remade with the samples
 			Buffer hits;
 			Buffer reverb;
+			Buffer transmission;
 			AccelerationStructure tlas;
 			vk::CommandPool commandPool;
 			vk::CommandBuffer commandBuffer;

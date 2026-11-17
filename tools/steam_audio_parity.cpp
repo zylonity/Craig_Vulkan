@@ -272,30 +272,31 @@ static void checkGPU(const std::filesystem::path& shader) {
     geometry.geometry.instances.data.deviceAddress = instances.address;
     auto tlas = gpu.build(VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR, geometry, 1);
     constexpr uint32_t maxRays = 4096;
-    std::array<GPU::Buffer*, 8> storage = {&gpu.buffer(32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT),
+    std::array<GPU::Buffer*, 9> storage = {&gpu.buffer(32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT),
                                            &gpu.buffer(4, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT),
                                            &gpu.buffer((maxRays + 1024) * sizeof(V4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT),
                                            &gpu.buffer(8, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT),
                                            &gpu.buffer(64, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT),
                                            &gpu.buffer(32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT),
                                            &gpu.buffer(maxRays * 64 * sizeof(V4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT),
-                                           &gpu.buffer(maxRays * 64 * sizeof(V4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)};
+                                           &gpu.buffer(maxRays * 64 * sizeof(V4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT),
+                                           &gpu.buffer(sizeof(V4), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)};
     std::memset(storage[3]->mapped, 0, 8);
     const V4 normals[] = {{0, 1, 0, 0}, {0, 1, 0, 0}, {0, -1, 0, 0}, {0, -1, 0, 0}};
     std::memcpy(storage[4]->mapped, normals, sizeof(normals));
     const glm::vec3 listener(0, 2, 0), source(1, 1, 2), direct = glm::normalize(listener - source);
     const V4 ray[] = {{source.x, source.y, source.z, .001f}, {direct.x, direct.y, direct.z, glm::length(listener - source) - .001f}};
     std::memcpy(storage[0]->mapped, ray, sizeof(ray));
-    constexpr uint32_t bindings[] = {1, 2, 3, 4, 5, 6, 7, 8};
-    std::array<VkDescriptorSetLayoutBinding, 9> layoutBindings{};
+    constexpr uint32_t bindings[] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    std::array<VkDescriptorSetLayoutBinding, 10> layoutBindings{};
     layoutBindings[0] = {0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
-    for (int i = 0; i < 8; ++i) layoutBindings[i + 1] = {bindings[i], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
+    for (int i = 0; i < 9; ++i) layoutBindings[i + 1] = {bindings[i], VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_COMPUTE_BIT, nullptr};
     VkDescriptorSetLayoutCreateInfo lc{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
-    lc.bindingCount = 9;
+    lc.bindingCount = 10;
     lc.pBindings = layoutBindings.data();
     VkDescriptorSetLayout layout{};
     vkCheck(vkCreateDescriptorSetLayout(gpu.device, &lc, nullptr, &layout));
-    const VkDescriptorPoolSize sizes[] = {{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1}, {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 8}};
+    const VkDescriptorPoolSize sizes[] = {{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1}, {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 9}};
     VkDescriptorPoolCreateInfo pc{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pc.maxSets = 1;
     pc.poolSizeCount = 2;
@@ -311,15 +312,15 @@ static void checkGPU(const std::filesystem::path& shader) {
     VkWriteDescriptorSetAccelerationStructureKHR aw{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR};
     aw.accelerationStructureCount = 1;
     aw.pAccelerationStructures = &tlas;
-    std::array<VkWriteDescriptorSet, 9> writes{};
-    std::array<VkDescriptorBufferInfo, 8> bufferInfo{};
+    std::array<VkWriteDescriptorSet, 10> writes{};
+    std::array<VkDescriptorBufferInfo, 9> bufferInfo{};
     writes[0] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
     writes[0].pNext = &aw;
     writes[0].dstSet = set;
     writes[0].dstBinding = 0;
     writes[0].descriptorCount = 1;
     writes[0].descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 9; ++i) {
         bufferInfo[i] = {storage[i]->handle, 0, VK_WHOLE_SIZE};
         writes[i + 1] = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
         writes[i + 1].dstSet = set;
@@ -328,12 +329,12 @@ static void checkGPU(const std::filesystem::path& shader) {
         writes[i + 1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         writes[i + 1].pBufferInfo = &bufferInfo[i];
     }
-    vkUpdateDescriptorSets(gpu.device, 9, writes.data(), 0, nullptr);
+    vkUpdateDescriptorSets(gpu.device, 10, writes.data(), 0, nullptr);
     struct Settings {
         V4 listener, source;
-        uint32_t directRays, reflectionRays, bounces, seed, capture;
+        uint32_t directRays, reflectionRays, bounces, seed, capture, transmissionRays;
     };
-    static_assert(sizeof(Settings) == 52);
+    static_assert(sizeof(Settings) == 56);
     VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(Settings)};
     VkPipelineLayoutCreateInfo pl{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     pl.setLayoutCount = 1;
@@ -375,7 +376,7 @@ static void checkGPU(const std::filesystem::path& shader) {
                 auto* table = static_cast<std::array<float, 4>*>(storage[2]->mapped);
                 Craig::fillSteamAudioSamples(std::span(table, count), std::span(table + maxRays, 1024));
                 std::memset(storage[7]->mapped, 0xff, count * 64 * sizeof(V4));
-                Settings settings{{0, 2, 0, 0}, {1, 1, 2, 0}, 1, count, depth, 17, 1};
+                Settings settings{{0, 2, 0, 0}, {1, 1, 2, 0}, 1, count, depth, 17, 1, 0};
                 gpu.begin();
                 vkCmdBindPipeline(gpu.command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
                 vkCmdBindDescriptorSets(gpu.command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &set, 0, nullptr);
@@ -465,6 +466,55 @@ static void checkGPU(const std::filesystem::path& shader) {
             }
     std::cout << "GPU production shader / Steam CPU shade: " << compared << " rays; peak energy error " << largestEnergyError << ", delay error "
               << largestTimeError << " s\n";
+
+    //Steam's transmission() loop on the CPU against the same floor at y 0 and ceiling at y 8
+    const float transmissionMaterial[] = {.05f, .07f, .08f, .05f, .5f, .25f, .1f, 0};
+    std::memcpy(storage[5]->mapped, transmissionMaterial, sizeof(transmissionMaterial));
+    double largestTransmissionError = 0;
+    for (const auto& [from, to] : {std::pair{glm::vec3(0, 2, 0), glm::vec3(1, 1, 2)}, std::pair{glm::vec3(0, 2, 0), glm::vec3(1, -1, 2)},
+                                   std::pair{glm::vec3(0, 9, 0), glm::vec3(1, -1, 2)}, std::pair{glm::vec3(3, 12, -2), glm::vec3(-1, -4, 2)}})
+        for (uint32_t rays : {1u, 2u, 3u, 8u}) {
+            Settings settings{{from.x, from.y, from.z, 0}, {to.x, to.y, to.z, 0}, 1, 0, 0, 17, 0, rays};
+            gpu.begin();
+            vkCmdBindPipeline(gpu.command, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+            vkCmdBindDescriptorSets(gpu.command, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &set, 0, nullptr);
+            vkCmdPushConstants(gpu.command, pipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(settings), &settings);
+            vkCmdDispatch(gpu.command, 1, 1, 1);
+            VkMemoryBarrier barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+            barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+            vkCmdPipelineBarrier(gpu.command, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+            gpu.end();
+            //direct_simulator.cpp transmission(), with closestHit swapped for the two planes
+            const float maxDistance = glm::length(to - from);
+            const glm::vec3 origins[] = {from, to}, directions[] = {glm::normalize(to - from), glm::normalize(from - to)};
+            float minDistances[] = {0, 0}, accumulated[] = {1, 1, 1};
+            int current = 0, hits = 0;
+            for (uint32_t i = 0; i < rays; ++i) {
+                const glm::vec3 o = origins[current], d = directions[current];
+                float t = INFINITY;
+                for (float plane : {0.0f, 8.0f}) {
+                    if (d.y == 0) continue;
+                    const float candidate = (plane - o.y) / d.y;
+                    if (candidate >= minDistances[current] && candidate <= maxDistance) t = std::min(t, candidate);
+                }
+                if (!std::isfinite(t)) break;
+                hits++;
+                for (int b = 0; b < 3; ++b) accumulated[b] *= transmissionMaterial[4 + b];
+                minDistances[current] = t + 1e-2f;
+                if (minDistances[current] >= maxDistance) break;
+                if (minDistances[0] + minDistances[1] >= maxDistance) break;
+                current = 1 - current;
+            }
+            const auto* gpuResult = static_cast<const V4*>(storage[8]->mapped);
+            require((*gpuResult)[3] == float(hits), "GPU/Steam CPU transmission hit count mismatch");
+            for (int b = 0; b < 3; ++b) {
+                const float expected = hits <= 1 ? accumulated[b] : std::sqrt(accumulated[b]);
+                largestTransmissionError = std::max(largestTransmissionError, double(std::abs((*gpuResult)[b] - expected)));
+            }
+        }
+    require(largestTransmissionError < 1e-6, "GPU/Steam CPU transmission mismatch");
+    std::cout << "GPU transmission / Steam CPU transmission(): peak error " << largestTransmissionError << '\n';
     vkDestroyPipeline(gpu.device, pipeline, nullptr);
     vkDestroyShaderModule(gpu.device, module, nullptr);
     vkDestroyPipelineLayout(gpu.device, pipelineLayout, nullptr);

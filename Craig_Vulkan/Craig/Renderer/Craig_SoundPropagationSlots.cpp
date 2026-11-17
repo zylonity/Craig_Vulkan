@@ -37,6 +37,7 @@ void Craig::SoundPropagation::createResultSlots(uint32_t instanceCapacity) {
         createBuffer(slot.samples, sizeof(std::array<float, 4>) * (kMaxReflectionRayCount + kSteamDiffuseSamples), vk::BufferUsageFlagBits::eStorageBuffer, true);
         createBuffer(slot.hits, sizeof(std::array<float, 4>) * kMaxReflectionRayCount * kReverbBounces, vk::BufferUsageFlagBits::eStorageBuffer, true);
         createBuffer(slot.reverb, sizeof(std::array<float, 4>) * kMaxReflectionRayCount * kReverbBounces, vk::BufferUsageFlagBits::eStorageBuffer, true);
+        createBuffer(slot.transmission, sizeof(std::array<float, 4>), vk::BufferUsageFlagBits::eStorageBuffer, true);
 
         //The TLAS gets made once at full capacity and rebuilt in place every submission
         VkAccelerationStructureGeometryKHR geometry{VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR};
@@ -237,7 +238,6 @@ void Craig::SoundPropagation::collectCompleted() {
             const auto* hits = static_cast<const std::array<float, 4>*>(slot.hits.pMapped);
             result.bounces.assign(hits, hits + (slot.request.reverbEnabled ? slot.request.reflectionRayCount * kReverbBounces : 0u));
         }
-        result.rayCount = slot.request.rayCount;
         result.seed = slot.request.seed;
         result.source = slot.request.source;
         result.listener = slot.request.listener;
@@ -255,23 +255,42 @@ void Craig::SoundPropagation::collectCompleted() {
 void Craig::SoundPropagation::buildDirect(const ResultSlot& slot, Result& result) {
     const Request& request = slot.request;
     const auto* blocked = static_cast<const uint32_t*>(slot.results.pMapped);
-    std::array<float, 3> transmission{};
     for (uint32_t i = 0; i < request.rayCount; ++i) {
         //Still 0xffffffff means the shader never wrote it
         if (blocked[i] > kAcousticMaterials.size()) throw std::runtime_error("result-slot dispatch did not produce a valid obstruction result");
-        if (blocked[i] == 0) continue;
-        result.blocked++;
-        for (uint32_t band = 0; band < kAcousticBandCount; ++band) {
-            transmission[band] += kAcousticMaterials[blocked[i] - 1].transmission[band];
-        }
     }
 
-    //Steam Audio's direct effect does occlusion + (1 - occlusion) * transmission per band
-    //So with transmission averaged over just the blocked samples, that comes out the same as the old per sample average
     DirectPath& direct = result.direct;
-    direct.occlusion = 1.0f - static_cast<float>(result.blocked) / static_cast<float>(request.rayCount);
+    if (request.volumetric) {
+        //Valve Corporation's Steam Audio 4.8.1 direct_simulator.cpp volumetricOcclusion(), Apache-2.0
+        //A sample the source itself can't see (inside a wall) doesn't count either way
+        uint32_t valid = 0;
+        uint32_t visible = 0;
+        for (uint32_t sample = 0; sample + 1 < request.rayCount; sample += 2) {
+            if (blocked[sample] != 0) continue;
+            valid++;
+            if (blocked[sample + 1] == 0) visible++;
+        }
+        direct.occlusion = valid ? static_cast<float>(visible) / static_cast<float>(valid) : 0.0f;
+        result.blocked = valid - visible;
+        result.rayCount = valid;
+    }
+    else {
+        for (uint32_t i = 0; i < request.rayCount; ++i) {
+            if (blocked[i] != 0) result.blocked++;
+        }
+        direct.occlusion = 1.0f - static_cast<float>(result.blocked) / static_cast<float>(request.rayCount);
+        result.rayCount = request.rayCount;
+    }
+
+    //Steam Audio's alternating transmission rays along the centre line, the direct effect does occlusion + (1 - occlusion) * transmission
+    if (vmaInvalidateAllocation(mp_Device->getVmaAllocator(), slot.transmission.allocation, 0, VK_WHOLE_SIZE) != VK_SUCCESS) {
+        throw std::runtime_error("transmission readback invalidation failed");
+    }
+    const auto& transmission = *static_cast<const std::array<float, 4>*>(slot.transmission.pMapped);
     for (uint32_t band = 0; band < kAcousticBandCount; ++band) {
-        direct.transmission[band] = result.blocked ? transmission[band] / static_cast<float>(result.blocked) : 1.0f;
+        if (!std::isfinite(transmission[band]) || transmission[band] < 0.0f) throw std::runtime_error("invalid transmission result");
+        direct.transmission[band] = transmission[band];
     }
 
     //Distance and air from the library itself, the same models its CPU simulator uses

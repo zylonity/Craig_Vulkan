@@ -170,6 +170,10 @@ namespace Craig {
 		int m_soundMaxBounces = 64;
 		bool m_soundReverbEnabled = true;
 		int m_soundReflectionOrder = 1;
+		bool m_soundVolumetric = true; //Steam Audio's sphere occlusion, what the CPU simulator can do too
+		float m_soundOcclusionRadius = 1.0f;
+		int m_soundTransmissionRays = 3;
+		std::vector<std::array<float, 4>> mv_soundVolumeSamples; //Unit sphere points, remade when the count changes
 		bool m_showSoundRays = false;
 		bool m_showSoundPaths = true;
 		bool m_showSoundBounces = false;

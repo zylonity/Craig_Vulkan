@@ -18,6 +18,7 @@ layout(push_constant) uniform QuerySettings {
     uint maxBounces;
     uint seed;
     uint captureBounces;
+    uint transmissionRays;
 };
 
 layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
@@ -42,6 +43,8 @@ layout(std430, set = 0, binding = 6) readonly buffer Materials { Material materi
 layout(std430, set = 0, binding = 7) writeonly buffer PathHits { vec4 hits[]; };
 //xyz is the energy per band before the SH projection, w is how long after the direct sound it arrives
 layout(std430, set = 0, binding = 8) writeonly buffer ReflectionResults { vec4 reflected[]; };
+//xyz is the transmission per band along the centre line, w is how many surfaces it went through
+layout(std430, set = 0, binding = 9) writeonly buffer TransmissionResult { vec4 transmission; };
 const uint kMaxReflectionBounces = 64u;
 const float kReflectionDuration = 2.0;
 
@@ -72,6 +75,32 @@ bool occluded(vec3 origin, vec3 direction, float tmax) {
         0xff, origin, 0.0, direction, tmax);
     while (rayQueryProceedEXT(query)) {}
     return rayQueryGetIntersectionTypeEXT(query, true) == gl_RayQueryCommittedIntersectionTriangleEXT;
+}
+
+//Valve Corporation's Steam Audio v4.8.1 direct_simulator.cpp transmission(), Apache-2.0
+//Alternates a ray from each end, so the wall nearest the listener counts even with others in the way
+void traceTransmission() {
+    const float kRayOffset = 1e-2;
+    float maxDistance = length(source.xyz - listener.xyz);
+    vec3 origins[2] = vec3[2](listener.xyz, source.xyz);
+    vec3 directions[2] = vec3[2](normalize(source.xyz - listener.xyz), normalize(listener.xyz - source.xyz));
+    float minDistances[2] = float[2](0.0, 0.0);
+    uint current = 0u;
+    uint hits = 0u;
+    vec3 accumulated = vec3(1.0);
+    for (uint i = 0u; i < transmissionRays; ++i) {
+        Hit hit;
+        if (!traceClosest(origins[current], directions[current], minDistances[current], maxDistance, hit)) break;
+        hits++;
+        accumulated *= materials[hit.material].transmission.xyz;
+        minDistances[current] = hit.t + kRayOffset;
+        if (minDistances[current] >= maxDistance) break;
+        //Both rays have met in the middle
+        if (minDistances[0] + minDistances[1] >= maxDistance) break;
+        current = 1u - current;
+    }
+    //More than one hit is probably both sides of the same wall, so upstream takes the square root instead of counting it twice
+    transmission = vec4(hits <= 1u ? accumulated : sqrt(accumulated), float(hits));
 }
 
 //xorshift, not the same random numbers as the CPU library (that uses std::default_random_engine, which changes per platform)
@@ -154,4 +183,8 @@ void main() {
         blocked[index] = traceClosest(ray.origin.xyz, ray.direction.xyz, ray.origin.w, ray.direction.w, hit) ? 1u + hit.material : 0u;
     }
     if (index < reflectionRayCount) traceReflections(index);
+    if (index == 0u) {
+        if (transmissionRays > 0u) traceTransmission();
+        else transmission = vec4(1.0, 1.0, 1.0, 0.0);
+    }
 }
