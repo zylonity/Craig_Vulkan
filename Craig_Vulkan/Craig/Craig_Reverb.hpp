@@ -12,7 +12,7 @@
 namespace Craig {
 
 	//Turns the GPU's reflection energy into an impulse response and convolves the sound with it
-	//The reconstruction is Valve's Steam Audio 4.8.1 (Apache-2.0), vendored in External/SteamAudio - https://github.com/ValveSoftware/steam-audio
+	//The reconstruction is Valve's Steam Audio 4.8.1 (Apache-2.0), through the library's public reconstructor - https://github.com/ValveSoftware/steam-audio
 	//This class just owns when filters get built and swapped, so the audio callback never builds one itself
 	class Reverb {
 	public:

@@ -54,25 +54,29 @@ if(NOT MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
             APPEND PROPERTY COMPILE_OPTIONS $<$<CONFIG:Debug>:-O2>)
 endif()
 
-#Valve Corporation, Apache-2.0 - Steam Audio v4.8.1 (0da18255cca520771f363ee01f100572b39a308e)
-#Only the bit that turns an energy field into an impulse response, not the simulator itself
-set(STEAM_DSP_DIR ${CMAKE_SOURCE_DIR}/Craig_Vulkan/External/SteamAudio)
-add_library(SteamAudioReconstruction STATIC
-        ${STEAM_DSP_DIR}/reconstructor.cpp
-        ${STEAM_DSP_DIR}/energy_field.cpp
-        ${STEAM_DSP_DIR}/impulse_response.cpp
-        ${STEAM_DSP_DIR}/iir.cpp
-        ${STEAM_DSP_DIR}/array_math.cpp
-        ${STEAM_DSP_DIR}/memory_allocator.cpp
-        ${STEAM_DSP_DIR}/standalone_memory.cpp
-        ${STEAM_DSP_DIR}/math_functions.cpp
-        ${STEAM_DSP_DIR}/bands.cpp
-        ${STEAM_DSP_DIR}/air_absorption.cpp
+#Valve Corporation, Apache-2.0 - Steam Audio v4.8.1 SDK, the prebuilt release from https://github.com/ValveSoftware/steam-audio
+#The whole library now, it renders everything and its CPU simulator is what the GPU gets compared against
+#It's about 180 MB, so the first configure takes a while
+FetchContent_Declare(
+        SteamAudio
+        URL https://github.com/ValveSoftware/steam-audio/releases/download/v4.8.1/steamaudio_4.8.1.zip
+        URL_HASH SHA256=4a0aa5ec1176f38f0b0993a37c2259d9e86f27e22d5e24f83ec4c3cb9a1d5449
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
-target_precompile_headers(SteamAudioReconstruction PRIVATE <algorithm> <cmath> <cstring>)
-if(NOT MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(SteamAudioReconstruction PRIVATE $<$<CONFIG:Debug>:-O2>)
+#No CMakeLists in the zip, so this just downloads and unpacks it
+FetchContent_MakeAvailable(SteamAudio)
+
+add_library(phonon SHARED IMPORTED)
+set_target_properties(phonon PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${steamaudio_SOURCE_DIR}/include)
+if(WIN32)
+    set(PHONON_LIBRARY ${steamaudio_SOURCE_DIR}/lib/windows-x64/phonon.dll)
+    set_target_properties(phonon PROPERTIES IMPORTED_IMPLIB ${steamaudio_SOURCE_DIR}/lib/windows-x64/phonon.lib)
+elseif(APPLE)
+    set(PHONON_LIBRARY ${steamaudio_SOURCE_DIR}/lib/osx/libphonon.dylib)
+else()
+    set(PHONON_LIBRARY ${steamaudio_SOURCE_DIR}/lib/linux-x64/libphonon.so)
 endif()
+set_target_properties(phonon PROPERTIES IMPORTED_LOCATION ${PHONON_LIBRARY})
 #reverb filters get built on their own thread
 find_package(Threads REQUIRED)
 
@@ -146,9 +150,15 @@ target_link_libraries(Craig_Vulkan PUBLIC
         glm::glm
         Jolt
         FFTConvolver
-        SteamAudioReconstruction
+        phonon
         Threads::Threads
 )
+
+#mac/linux find it through the build rpath, windows only looks next to the exe
+if(WIN32)
+    add_custom_command(TARGET Craig_Vulkan POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PHONON_LIBRARY} $<TARGET_FILE_DIR:Craig_Vulkan>)
+endif()
 
 
 # GLSL shaders get compiled to SPIR-V with glslc (ships with the Vulkan SDK) before building

@@ -6,7 +6,7 @@
 #include <iomanip>
 #include <limits>
 #include <stdexcept>
-#include "SteamAudio/reconstructor.h"
+#include "Craig_SteamAudio.hpp"
 
 //The callback reads all of these, none of them can be allowed to lock
 static_assert(std::atomic<uint8_t>::is_always_lock_free);
@@ -54,32 +54,56 @@ std::array<std::vector<float>, 2> Craig::Reverb::reconstruct(const ReverbEnergy&
 	if (!std::isfinite(directDelaySeconds) || directDelaySeconds < 0.0f) throw std::runtime_error("invalid reflection pre-delay");
 	constexpr float duration = kReverbBins * kReverbBinSeconds;
 
+	const IPLContext context = SteamAudio::getInstance().getContext();
+	if (!context) throw std::runtime_error("Steam Audio isn't initialised");
+
 	//Copy our bins into Steam Audio's energy field, order 0 so just the one channel
-	ipl::EnergyField field(duration, 0);
-	for (uint32_t bin = 0; bin < kReverbBins; ++bin) {
-		for (uint32_t band = 0; band < 3; ++band) {
+	//The public API does the same Linear reconstruction with the default air model that the vendored copy did
+	IPLEnergyFieldSettings fieldSettings{duration, 0};
+	IPLImpulseResponseSettings responseSettings{duration, 0, rate};
+	IPLReconstructorSettings reconstructorSettings{duration, 0, rate};
+	IPLEnergyField field = nullptr;
+	IPLImpulseResponse response = nullptr;
+	IPLReconstructor reconstructor = nullptr;
+	const auto release = [&] {
+		if (field) iplEnergyFieldRelease(&field);
+		if (response) iplImpulseResponseRelease(&response);
+		if (reconstructor) iplReconstructorRelease(&reconstructor);
+	};
+	if (iplEnergyFieldCreate(context, &fieldSettings, &field) != IPL_STATUS_SUCCESS ||
+		iplImpulseResponseCreate(context, &responseSettings, &response) != IPL_STATUS_SUCCESS ||
+		iplReconstructorCreate(context, &reconstructorSettings, &reconstructor) != IPL_STATUS_SUCCESS) {
+		release();
+		throw std::runtime_error("couldn't allocate the reflection reconstruction");
+	}
+	for (uint32_t band = 0; band < 3; ++band) {
+		float* bins = iplEnergyFieldGetBand(field, 0, static_cast<IPLint32>(band));
+		for (uint32_t bin = 0; bin < kReverbBins; ++bin) {
 			const float e = energy[bin][band];
-			if (!std::isfinite(e) || e < 0.0f) throw std::runtime_error("invalid reflection energy");
-			field[0][band][bin] = e;
+			if (!std::isfinite(e) || e < 0.0f) {
+				release();
+				throw std::runtime_error("invalid reflection energy");
+			}
+			bins[bin] = e;
 		}
 	}
-	ipl::ImpulseResponse response(duration, 0, rate);
-	ipl::Reconstructor reconstructor(duration, 0, rate);
-	const ipl::EnergyField* fields[] = {&field};
-	const float* corrections[] = {nullptr};
-	ipl::AirAbsorptionModel air;
-	ipl::ImpulseResponse* responses[] = {&response};
-	reconstructor.reconstruct(1, fields, corrections, &air, responses, ipl::ReconstructionType::Linear, duration, 0);
+	IPLReconstructorInputs inputs{field};
+	IPLReconstructorSharedInputs shared{duration, 0};
+	IPLReconstructorOutputs outputs{response};
+	iplReconstructorReconstruct(reconstructor, 1, &inputs, &shared, &outputs);
+	const int samples = iplImpulseResponseGetNumSamples(response);
+	const float* reconstructed = iplImpulseResponseGetChannel(response, 0);
 
 	//Upstream's IR starts at the direct sound, so put the travel time back once, capped the same as the direct tap's delay
 	const size_t preDelay = static_cast<size_t>(std::min(std::round(static_cast<double>(directDelaySeconds) * rate),
 		static_cast<double>(kSoundDelayCapacity - 1)));
 	std::array<std::vector<float>, 2> result;
 	for (auto& channel : result) {
-		channel.assign(preDelay + response.numSamples(), 0.0f);
+		channel.assign(preDelay + samples, 0.0f);
 		//Order 0 is the same in both ears, it's a centred mono preview, not proper directional/HRTF stuff
-		for (int i = 0; i < response.numSamples(); ++i) channel[preDelay + i] = response[0][i] * std::sqrt(0.5f);
+		for (int i = 0; i < samples; ++i) channel[preDelay + i] = reconstructed[i] * std::sqrt(0.5f);
 	}
+	release();
 	return result;
 }
 

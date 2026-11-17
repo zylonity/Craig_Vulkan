@@ -12,6 +12,7 @@
 #include "Craig_PhysicsEngine.hpp"
 #include "Craig_Profiler.hpp"
 #include "Craig_Logger.hpp"
+#include "Craig_SteamAudio.hpp"
 
 #include <chrono>
 
@@ -58,6 +59,9 @@ CraigError Craig::Framework::init() {
 	assert(mp_Renderer != nullptr && "mp_Renderer failed to allocate memory");
 	assert(mp_PhysicsEngine != nullptr && "mp_PhysicsEngine failed to allocate memory");
 	assert(mp_Audio != nullptr && "mp_Audio failed to allocate memory");
+
+	//Before anything that renders or simulates sound, not asserted, the engine still runs without it
+	logIfFailed(Craig::SteamAudio::getInstance().init(), "Steam Audio init");
 
 	//Initialise the objects
 	ret = mp_Window->init();
@@ -251,6 +255,9 @@ CraigError Craig::Framework::terminate() {
 	assert(ret == CRAIG_SUCCESS && "mp_Audio didn't terminate properly");
 	delete mp_Audio;
 	mp_Audio = nullptr;
+
+	//Last thing that uses it is gone
+	Craig::SteamAudio::getInstance().terminate();
 
 	ret = mp_Window->terminate(); //Delete left over items in memory
 	logIfFailed(ret, "Window terminate");

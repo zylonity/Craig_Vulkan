@@ -1,8 +1,10 @@
 //Offline check against Steam Audio's shade maths, not the full stock CPU simulator or a benchmark
 //Build the Debug engine first, then from the repo root:
 //   g++ -std=c++20 -O2 -pthread -ICraig_Vulkan/Craig -ICraig_Vulkan/External tools/steam_audio_parity.cpp \
-//     cmake-build-debug/CMakeFiles/Craig_Vulkan.dir/Craig_Vulkan/Craig/{Craig_Reverb,Craig_Logger}.cpp.o \
-//     cmake-build-debug/libFFTConvolver.a cmake-build-debug/libSteamAudioReconstruction.a -lvulkan -o /tmp/craig-steam-parity
+//     -Icmake-build-debug/_deps/steamaudio-src/include \
+//     cmake-build-debug/CMakeFiles/Craig_Vulkan.dir/Craig_Vulkan/Craig/{Craig_Reverb,Craig_Logger,Craig_SteamAudio}.cpp.o \
+//     cmake-build-debug/libFFTConvolver.a -Lcmake-build-debug/_deps/steamaudio-src/lib/osx -lphonon \
+//     -Wl,-rpath,$PWD/cmake-build-debug/_deps/steamaudio-src/lib/osx -lvulkan -o /tmp/craig-steam-parity
 //AS setup follows Sascha Willems' ray query example (MIT) - https://github.com/SaschaWillems/Vulkan
 //The Steam Audio CPU formula reference and credit are in steam_audio_reference.hpp
 #include <vulkan/vulkan.h>
@@ -21,7 +23,7 @@
 #include "steam_audio_reference.hpp"
 #include "Craig_Reverb.hpp"
 #include "Renderer/Craig_SteamAudioSampling.hpp"
-#include "SteamAudio/reconstructor.h"
+#include "Craig_SteamAudio.hpp"
 
 static void require(bool ok, const char* message) {
     if (!ok) throw std::runtime_error(message);
@@ -57,6 +59,13 @@ struct GPU {
         app.apiVersion = VK_API_VERSION_1_2;
         VkInstanceCreateInfo info{VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
         info.pApplicationInfo = &app;
+#if defined(__APPLE__)
+        //MoltenVK is a portability driver, the loader hides it unless we ask for those
+        const char* instanceExtensions[] = {VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME};
+        info.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+        info.enabledExtensionCount = 1;
+        info.ppEnabledExtensionNames = instanceExtensions;
+#endif
         vkCheck(vkCreateInstance(&info, nullptr, &instance));
         uint32_t count = 0;
         vkCheck(vkEnumeratePhysicalDevices(instance, &count, nullptr));
@@ -96,12 +105,16 @@ struct GPU {
         f12.bufferDeviceAddress = VK_TRUE;
         f12.pNext = &af;
         const char* extensions[] = {VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, VK_KHR_RAY_QUERY_EXTENSION_NAME,
-                                    VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME};
+                                    VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, "VK_KHR_portability_subset"};
         VkDeviceCreateInfo dc{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
         dc.pNext = &f12;
         dc.queueCreateInfoCount = 1;
         dc.pQueueCreateInfos = &q;
+#if defined(__APPLE__)
+        dc.enabledExtensionCount = 4; //the spec says it has to be enabled when the driver has it
+#else
         dc.enabledExtensionCount = 3;
+#endif
         dc.ppEnabledExtensionNames = extensions;
         vkCheck(vkCreateDevice(physical, &dc, nullptr, &device));
         vkGetDeviceQueue(device, family, 0, &queue);
@@ -459,29 +472,41 @@ static void checkGPU(const std::filesystem::path& shader) {
 }
 
 static void checkReconstruction() {
+    const IPLContext context = Craig::SteamAudio::getInstance().getContext();
     for (int rate : {44100, 48000, 96000}) {
         Craig::ReverbEnergy e{};
         e[0] = {.01f, .02f, .03f};
         e[30] = {.02f, .015f, .01f};
         e[199] = {.004f, .003f, .002f};
-        ipl::EnergyField field(2, 0);
+        //Straight through the library, so the adapter's only job left is the pre-delay and scaling
+        IPLEnergyFieldSettings fieldSettings{2, 0};
+        IPLImpulseResponseSettings irSettings{2, 0, rate};
+        IPLReconstructorSettings reconstructorSettings{2, 0, rate};
+        IPLEnergyField field = nullptr;
+        IPLImpulseResponse ir = nullptr;
+        IPLReconstructor upstream = nullptr;
+        require(iplEnergyFieldCreate(context, &fieldSettings, &field) == IPL_STATUS_SUCCESS &&
+                iplImpulseResponseCreate(context, &irSettings, &ir) == IPL_STATUS_SUCCESS &&
+                iplReconstructorCreate(context, &reconstructorSettings, &upstream) == IPL_STATUS_SUCCESS, "library objects");
         for (int b = 0; b < 3; ++b)
-            for (int i = 0; i < 200; ++i) field[0][b][i] = e[i][b];
-        ipl::ImpulseResponse ir(2, 0, rate);
-        ipl::Reconstructor upstream(2, 0, rate);
-        ipl::AirAbsorptionModel air;
-        const ipl::EnergyField* fields[] = {&field};
-        const float* curves[] = {nullptr};
-        ipl::ImpulseResponse* irs[] = {&ir};
-        upstream.reconstruct(1, fields, curves, &air, irs, ipl::ReconstructionType::Linear, 2, 0);
+            for (int i = 0; i < 200; ++i) iplEnergyFieldGetBand(field, 0, b)[i] = e[i][b];
+        IPLReconstructorInputs inputs{field};
+        IPLReconstructorSharedInputs shared{2, 0};
+        IPLReconstructorOutputs outputs{ir};
+        iplReconstructorReconstruct(upstream, 1, &inputs, &shared, &outputs);
+        const int samples = iplImpulseResponseGetNumSamples(ir);
+        const float* expectedIR = iplImpulseResponseGetChannel(ir, 0);
         const auto actual = Craig::Reverb::reconstruct(e, rate, .07f);
         const size_t offset = std::lround(.07f * rate);
-        require(actual[0].size() == offset + ir.numSamples(), "reflection pre-delay size mismatch");
+        require(actual[0].size() == offset + samples, "reflection pre-delay size mismatch");
         for (size_t i = 0; i < actual[0].size(); ++i) {
-            const float expected = i < offset ? 0 : ir[0][i - offset] * std::sqrt(.5f);
-            require(actual[0][i] == expected && actual[1][i] == expected, "upstream reconstruction changed in adapter");
+            const float expected = i < offset ? 0 : expectedIR[i - offset] * std::sqrt(.5f);
+            require(actual[0][i] == expected && actual[1][i] == expected, "library reconstruction changed in adapter");
         }
-        require(std::any_of(ir[0], ir[0] + rate / 20, [](float x) { return x != 0; }), "early reflections were cut off");
+        require(std::any_of(expectedIR, expectedIR + rate / 20, [](float x) { return x != 0; }), "early reflections were cut off");
+        iplEnergyFieldRelease(&field);
+        iplImpulseResponseRelease(&ir);
+        iplReconstructorRelease(&upstream);
         //Upstream IIR adds 1e-9 to avoid denormals, so its zero-input IR isn't bitwise zero
         Craig::ReverbEnergy zero{};
         const auto silent = Craig::Reverb::reconstruct(zero, rate);
@@ -489,7 +514,7 @@ static void checkReconstruction() {
         for (float sample : silent[0]) floor = std::max(floor, std::abs(sample));
         std::cout << "Upstream zero-field filter floor: " << floor << '\n';
         require(floor < 1e-8f, "zero field exceeded upstream filter bias");
-        std::cout << "Native Steam reconstruction + absolute pre-delay: exact at " << rate << " Hz\n";
+        std::cout << "Library reconstruction + absolute pre-delay: exact at " << rate << " Hz\n";
     }
 }
 
@@ -541,9 +566,11 @@ int main() {
                     ("craig-steam-check-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
         std::filesystem::create_directories(temp / "logs");
         std::filesystem::current_path(temp);
+        require(Craig::SteamAudio::getInstance().init() == CRAIG_SUCCESS, "Steam Audio init");
         checkGPU(shader);
         checkReconstruction();
         checkDrain();
+        Craig::SteamAudio::getInstance().terminate();
         std::cout << "PASS (development conformance checks, not a full stock-library CPU benchmark)\n";
     } catch (const std::exception& e) {
         std::cerr << "FAIL: " << e.what() << '\n';
