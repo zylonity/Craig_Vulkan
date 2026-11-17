@@ -6,7 +6,6 @@ const float kSteamPi = 3.14159265358979323846;
 const float kSteamSoundSpeed = 340.0;
 const float kSteamSurfaceOffset = 0.01;
 const float kSteamReceiverRadius = 0.1;
-const float kSteamY00 = 0.28209479177387814;
 const uint kSteamDiffuseSamples = 1024u;
 
 //Turns a hemisphere sample (pointing down -z) into one around the surface normal
@@ -38,6 +37,7 @@ vec3 steamReflectionEnergy(vec3 accumulatedEnergy, vec3 absorption, float scatte
     float attenuation = 1.0 / max(sourceDistance, 1.0);
     float distanceTerm = (1.0 / (4.0 * kSteamPi)) * attenuation * attenuation;
     float scalar = (4.0 * kSteamPi) / float(count);
-    //Order 0 SH only, omnidirectional source. Air absorption gets done later by the reconstruction, not here
-    return kSteamY00 * scalar * distanceTerm * (diffuse + specular) * (vec3(1.0) - absorption) * accumulatedEnergy;
+    //No SH factor here, the CPU projects it onto the listener ray's direction for whatever order's picked
+    //Omnidirectional source. Air absorption gets done later by the reconstruction, not here
+    return scalar * distanceTerm * (diffuse + specular) * (vec3(1.0) - absorption) * accumulatedEnergy;
 }

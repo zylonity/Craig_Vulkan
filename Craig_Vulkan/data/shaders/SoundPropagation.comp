@@ -6,7 +6,8 @@
 
 //Ray query setup adapted from Sascha Willems' rayquery example (MIT) - https://github.com/SaschaWillems/Vulkan/tree/master/shaders/glsl/rayquery
 //Reflections adapted from Valve Corporation's Steam Audio v4.8.1 reflection_simulator.cpp, Apache-2.0
-//Changed for ray queries, one omnidirectional source, order 0 energy and a random number generator per ray on the GPU
+//Changed for ray queries, one omnidirectional source and a random number generator per ray on the GPU
+//Energy comes back without the SH factor, the CPU spreads it over the ambisonic channels by the ray's start direction
 layout(local_size_x = 64) in;
 
 layout(push_constant) uniform QuerySettings {
@@ -39,7 +40,7 @@ layout(std430, set = 0, binding = 5) readonly buffer Normals { vec4 normals[]; }
 layout(std430, set = 0, binding = 6) readonly buffer Materials { Material materials[]; };
 //Only for the bouncing rays overlay, w is 1 for a hit and 2 for flying off into nothing
 layout(std430, set = 0, binding = 7) writeonly buffer PathHits { vec4 hits[]; };
-//xyz is the order 0 SH energy, w is how long after the direct sound it arrives
+//xyz is the energy per band before the SH projection, w is how long after the direct sound it arrives
 layout(std430, set = 0, binding = 8) writeonly buffer ReflectionResults { vec4 reflected[]; };
 const uint kMaxReflectionBounces = 64u;
 const float kReflectionDuration = 2.0;

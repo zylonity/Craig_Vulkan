@@ -39,6 +39,7 @@ void Craig::GameServices::playSoundEffect(float gain) { mp_audio->playOneShot(ga
 void Craig::GameServices::stopSoundLoop() { mp_audio->stop(); }
 void Craig::GameServices::setSoundMuted(bool muted) { mp_audio->setMuted(muted); }
 void Craig::GameServices::setSoundPathsEnabled(bool direct, bool reflections) { mp_audio->setPathsEnabled(direct, reflections); }
+void Craig::GameServices::setSoundBinaural(bool binaural) { mp_audio->setBinaural(binaural); }
 Craig::AudioStatus Craig::GameServices::getAudioStatus() const { return mp_audio->getStatus(); }
 
 Craig::Scene* Craig::GameServices::getCurrentScene() const

@@ -24,6 +24,7 @@
 #include "Craig_Reverb.hpp"
 #include "Renderer/Craig_SteamAudioSampling.hpp"
 #include "Craig_SteamAudio.hpp"
+#include "Craig_SphericalHarmonics.hpp"
 
 static void require(bool ok, const char* message) {
     if (!ok) throw std::runtime_error(message);
@@ -425,7 +426,7 @@ static void checkGPU(const std::filesystem::path& shader) {
                                             SteamReference::Vector3f(offsetPoint), energy, accumulated, 4 * SteamReference::Math::kPi / count, bands,
                                             delay) &&
                             delay >= 0 && delay < 2) {
-                            for (int b = 0; b < 3; ++b) expected[bounce][b] = .28209479177387814f * bands[b];
+                            for (int b = 0; b < 3; ++b) expected[bounce][b] = bands[b]; //no SH factor, the CPU applies it per order now
                             expected[bounce][3] = delay;
                         }
                         for (int b = 0; b < 3; ++b) energy[b] *= 1 - rm.absorption[b];
@@ -471,92 +472,141 @@ static void checkGPU(const std::filesystem::path& shader) {
     vkDestroyDescriptorSetLayout(gpu.device, layout, nullptr);
 }
 
+static Craig::ReflectionField testField(uint32_t order, float scale = 1) {
+    Craig::ReflectionField field;
+    field.reset(order);
+    for (uint32_t c = 0; c < Craig::ReflectionField::channelsFor(order); ++c) {
+        //Higher channels are signed, the omni one has to stay positive
+        const float sign = c == 0 ? 1.0f : (c % 2 ? -.5f : .5f);
+        field.at(c, 0, 0) = sign * .01f * scale;
+        field.at(c, 1, 30) = sign * .015f * scale;
+        field.at(c, 2, 199) = sign * .002f * scale;
+    }
+    return field;
+}
+
 static void checkReconstruction() {
     const IPLContext context = Craig::SteamAudio::getInstance().getContext();
-    for (int rate : {44100, 48000, 96000}) {
-        Craig::ReverbEnergy e{};
-        e[0] = {.01f, .02f, .03f};
-        e[30] = {.02f, .015f, .01f};
-        e[199] = {.004f, .003f, .002f};
-        //Straight through the library, so the adapter's only job left is the pre-delay and scaling
-        IPLEnergyFieldSettings fieldSettings{2, 0};
-        IPLImpulseResponseSettings irSettings{2, 0, rate};
-        IPLReconstructorSettings reconstructorSettings{2, 0, rate};
-        IPLEnergyField field = nullptr;
+    for (uint32_t order = 0; order <= Craig::kMaxReflectionOrder; ++order) {
+        const auto field = testField(order);
+        //Straight through the library, so the adapter only has to copy the channels in the right layout
+        IPLEnergyFieldSettings fieldSettings{2, int(order)};
+        IPLImpulseResponseSettings irSettings{2, int(order), Craig::SteamAudio::kSamplingRate};
+        IPLReconstructorSettings reconstructorSettings{2, int(order), Craig::SteamAudio::kSamplingRate};
+        IPLEnergyField energy = nullptr;
         IPLImpulseResponse ir = nullptr;
         IPLReconstructor upstream = nullptr;
-        require(iplEnergyFieldCreate(context, &fieldSettings, &field) == IPL_STATUS_SUCCESS &&
+        require(iplEnergyFieldCreate(context, &fieldSettings, &energy) == IPL_STATUS_SUCCESS &&
                 iplImpulseResponseCreate(context, &irSettings, &ir) == IPL_STATUS_SUCCESS &&
                 iplReconstructorCreate(context, &reconstructorSettings, &upstream) == IPL_STATUS_SUCCESS, "library objects");
-        for (int b = 0; b < 3; ++b)
-            for (int i = 0; i < 200; ++i) iplEnergyFieldGetBand(field, 0, b)[i] = e[i][b];
-        IPLReconstructorInputs inputs{field};
-        IPLReconstructorSharedInputs shared{2, 0};
+        const uint32_t channels = Craig::ReflectionField::channelsFor(order);
+        for (uint32_t c = 0; c < channels; ++c)
+            for (int b = 0; b < 3; ++b)
+                for (int i = 0; i < 200; ++i) iplEnergyFieldGetBand(energy, c, b)[i] = field.at(c, b, i);
+        IPLReconstructorInputs inputs{energy};
+        IPLReconstructorSharedInputs shared{2, int(order)};
         IPLReconstructorOutputs outputs{ir};
         iplReconstructorReconstruct(upstream, 1, &inputs, &shared, &outputs);
-        const int samples = iplImpulseResponseGetNumSamples(ir);
-        const float* expectedIR = iplImpulseResponseGetChannel(ir, 0);
-        const auto actual = Craig::Reverb::reconstruct(e, rate, .07f);
-        const size_t offset = std::lround(.07f * rate);
-        require(actual[0].size() == offset + samples, "reflection pre-delay size mismatch");
-        for (size_t i = 0; i < actual[0].size(); ++i) {
-            const float expected = i < offset ? 0 : expectedIR[i - offset] * std::sqrt(.5f);
-            require(actual[0][i] == expected && actual[1][i] == expected, "library reconstruction changed in adapter");
+        const auto actual = Craig::Reverb::reconstruct(field);
+        require(actual.size() == channels, "wrong channel count");
+        for (uint32_t c = 0; c < channels; ++c) {
+            const float* expected = iplImpulseResponseGetChannel(ir, c);
+            require(actual[c].size() == size_t(iplImpulseResponseGetNumSamples(ir)), "response size mismatch");
+            for (size_t i = 0; i < actual[c].size(); ++i) require(actual[c][i] == expected[i], "library reconstruction changed in adapter");
         }
-        require(std::any_of(expectedIR, expectedIR + rate / 20, [](float x) { return x != 0; }), "early reflections were cut off");
-        iplEnergyFieldRelease(&field);
+        require(std::any_of(actual[0].begin(), actual[0].begin() + 2400, [](float x) { return x != 0; }), "early reflections were cut off");
+        iplEnergyFieldRelease(&energy);
         iplImpulseResponseRelease(&ir);
         iplReconstructorRelease(&upstream);
-        //Upstream IIR adds 1e-9 to avoid denormals, so its zero-input IR isn't bitwise zero
-        Craig::ReverbEnergy zero{};
-        const auto silent = Craig::Reverb::reconstruct(zero, rate);
-        float floor = 0;
-        for (float sample : silent[0]) floor = std::max(floor, std::abs(sample));
-        std::cout << "Upstream zero-field filter floor: " << floor << '\n';
-        require(floor < 1e-8f, "zero field exceeded upstream filter bias");
-        std::cout << "Library reconstruction + absolute pre-delay: exact at " << rate << " Hz\n";
+        std::cout << "Library reconstruction exact at order " << order << " (" << channels << " channels)\n";
     }
+    //Upstream IIR adds 1e-9 to avoid denormals, so its zero-input IR isn't bitwise zero
+    Craig::ReflectionField zero;
+    zero.reset(0);
+    const auto silent = Craig::Reverb::reconstruct(zero);
+    float floor = 0;
+    for (float sample : silent[0]) floor = std::max(floor, std::abs(sample));
+    std::cout << "Upstream zero-field filter floor: " << floor << '\n';
+    require(floor < 1e-8f, "zero field exceeded upstream filter bias");
 }
 
 static void checkDrain() {
-    for (int rate : {44100, 48000, 96000}) {
+    for (uint32_t order : {0u, 3u}) {
+        const uint32_t channels = Craig::ReflectionField::channelsFor(order);
+        constexpr uint32_t block = Craig::SteamAudio::kFrameSize;
+        std::vector<std::vector<float>> out(channels, std::vector<float>(block));
+        std::vector<float*> pointers(channels);
+        for (uint32_t c = 0; c < channels; ++c) pointers[c] = out[c].data();
+        std::vector<float> input(block, 0.0f);
+        const auto run = [&](Craig::Reverb& r) {
+            for (auto& channel : out) std::fill(channel.begin(), channel.end(), 0.0f);
+            r.process(input.data(), block, pointers.data(), channels);
+        };
         Craig::Reverb r;
         r.start();
-        float l = 0, h = 0;
-        r.processSample(0, rate, l, h);
-        Craig::ReverbEnergy old{};
-        old[30] = {.02f, .015f, .01f};
-        old[199] = {.004f, .003f, .002f};
-        r.submit(old, .3f);
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        run(r);
+        const auto old = std::make_shared<Craig::ReflectionField>(testField(order));
+        r.submit(old);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         while (!r.ready()) {
-            l = h = 0;
-            r.processSample(0, rate, l, h);
+            run(r);
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             require(std::chrono::steady_clock::now() < deadline, "worker did not prepare response");
         }
-        const auto expected = Craig::Reverb::reconstruct(old, rate, .3f);
-        const int frames = rate * 3;
+        const auto expected = Craig::Reverb::reconstruct(*old);
+        const uint32_t blocks = 3 * Craig::SteamAudio::kSamplingRate / block;
         double error = 0;
-        for (int i = 0; i < frames; ++i) {
-            if (i == rate / 10) {
-                auto newer = old;
-                newer[30][0] *= 2;
-                r.submit(newer, .02f);
-            }
-            l = h = 0;
-            r.processSample(i == 0 ? 1.0f : 0.0f, rate, l, h);
-            const float want = i < int(expected[0].size()) ? expected[0][i] : 0;
-            error = std::max(error, double(std::abs(l - want)));
-            error = std::max(error, double(std::abs(h - want)));
-            if (i >= rate / 10 && r.changes() < 2) std::this_thread::sleep_for(std::chrono::microseconds(100));
+        for (uint32_t b = 0; b < blocks; ++b) {
+            //Swap to a different room 100 ms in, everything the old one already got still has to come out unchanged
+            if (b == Craig::SteamAudio::kSamplingRate / 10 / block)
+                r.submit(std::make_shared<Craig::ReflectionField>(testField(order, 2)));
+            std::fill(input.begin(), input.end(), 0.0f);
+            if (b == 0) input[0] = 1;
+            run(r);
+            for (uint32_t c = 0; c < channels; ++c)
+                for (uint32_t i = 0; i < block; ++i) {
+                    const size_t t = size_t(b) * block + i;
+                    const float want = t < expected[c].size() ? expected[c][t] : 0;
+                    error = std::max(error, double(std::abs(out[c][i] - want)));
+                }
+            if (b >= Craig::SteamAudio::kSamplingRate / 10 / block && r.changes() < 2) std::this_thread::sleep_for(std::chrono::milliseconds(2));
         }
         require(r.changes() == 2, "changed filter never activated");
         require(!r.failed(), "worker failed");
         require(error < 2e-6, "replacement erased or changed previously emitted response");
         r.stop();
-        std::cout << "Old response including pre-delay/final bin drains at " << rate << " Hz; peak error " << error << '\n';
+        std::cout << "Old order " << order << " response drains across a filter change; peak error " << error << '\n';
     }
+}
+
+static void checkSphericalHarmonics() {
+    //The library's encoder projects a mono sound onto the same basis, so a constant input comes out as the coefficients
+    const IPLContext context = Craig::SteamAudio::getInstance().getContext();
+    IPLAudioSettings audio = Craig::SteamAudio::getInstance().getAudioSettings();
+    IPLAmbisonicsEncodeEffectSettings settings{3};
+    IPLAmbisonicsEncodeEffect encode = nullptr;
+    require(iplAmbisonicsEncodeEffectCreate(context, &audio, &settings, &encode) == IPL_STATUS_SUCCESS, "encode effect");
+    std::vector<float> mono(audio.frameSize, 1.0f);
+    std::vector<std::vector<float>> channels(16, std::vector<float>(audio.frameSize));
+    float* inPointer = mono.data();
+    std::vector<float*> outPointers(16);
+    for (int c = 0; c < 16; ++c) outPointers[c] = channels[c].data();
+    IPLAudioBuffer in{1, audio.frameSize, &inPointer};
+    IPLAudioBuffer out{16, audio.frameSize, outPointers.data()};
+    double worst = 0;
+    for (const glm::vec3 raw : {glm::vec3(1, 0, 0), glm::vec3(0, 1, 0), glm::vec3(0, 0, -1), glm::vec3(.3f, -.5f, .8f), glm::vec3(-.7f, .2f, -.1f)}) {
+        const glm::vec3 d = glm::normalize(raw);
+        IPLAmbisonicsEncodeEffectParams params{{d.x, d.y, d.z}, 3};
+        //Twice, the first frame can still be fading from the last direction
+        iplAmbisonicsEncodeEffectApply(encode, &params, &in, &out);
+        iplAmbisonicsEncodeEffectApply(encode, &params, &in, &out);
+        float ours[16];
+        Craig::SphericalHarmonics::evaluate(3, d.x, d.y, d.z, ours);
+        for (int c = 0; c < 16; ++c) worst = std::max(worst, double(std::abs(channels[c].back() - ours[c])));
+    }
+    iplAmbisonicsEncodeEffectRelease(&encode);
+    std::cout << "SH basis / Steam Audio encoder: peak difference " << worst << '\n';
+    require(worst < 1e-4, "SH basis doesn't match the library's");
 }
 
 int main() {
@@ -567,6 +617,7 @@ int main() {
         std::filesystem::create_directories(temp / "logs");
         std::filesystem::current_path(temp);
         require(Craig::SteamAudio::getInstance().init() == CRAIG_SUCCESS, "Steam Audio init");
+        checkSphericalHarmonics();
         checkGPU(shader);
         checkReconstruction();
         checkDrain();

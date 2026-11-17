@@ -169,11 +169,12 @@ namespace Craig {
 		int m_soundReflectionRayCount = 1024;
 		int m_soundMaxBounces = 64;
 		bool m_soundReverbEnabled = true;
+		int m_soundReflectionOrder = 1;
 		bool m_showSoundRays = false;
 		bool m_showSoundPaths = true;
 		bool m_showSoundBounces = false;
 		std::vector<std::array<float, 4>> mv_soundDebugBounces; //kReverbBounces per listener ray, off unless the box is ticked
-		std::vector<SoundArrival> mv_soundDebugPaths; //Copied from the last result so pausing keeps them on screen
+		bool m_soundDebugHasPath = false; //Kept from the last result so pausing leaves it on screen
 		glm::vec3 m_soundDebugListener{0.0f};
 		glm::vec3 m_soundDebugSource{0.0f};
 		std::vector<SoundPropagation::Ray> mv_soundDebugRays;

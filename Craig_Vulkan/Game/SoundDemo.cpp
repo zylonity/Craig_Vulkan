@@ -239,11 +239,15 @@ void Game::SoundDemo::drawImGui() {
 		if (ImGui::Checkbox("Direct", &direct)) mp_services->setSoundPathsEnabled(direct, reflections);
 		ImGui::SameLine();
 		if (ImGui::Checkbox("Reflections", &reflections)) mp_services->setSoundPathsEnabled(direct, reflections);
+		ImGui::SameLine();
+		bool binaural = audio.binaural;
+		if (ImGui::Checkbox("HRTF", &binaural)) mp_services->setSoundBinaural(binaural);
+		ImGui::SetItemTooltip("Steam Audio's default HRTF, use headphones. Off is its plain stereo panning.");
 		if (ImGui::Combo("Sound", &m_sound, kSoundNames.data(), static_cast<int>(kSoundNames.size()))) prepareSound();
 		ImGui::Text("Reflections: %s", audio.reverbFailed ? "filter failed" :
 			(audio.reverbReady ? "ready" : "off / preparing"));
 		if (ImGui::CollapsingHeader("Audio diagnostics")) {
-			ImGui::Text("Arrivals %u | Gain %.3f", audio.arrivals, audio.gain);
+			ImGui::Text("Reflection order %u | Gain %.3f", audio.reflectionOrder, audio.gain);
 			ImGui::Text("Callback: %.2f / %.2f ms (%u frames @ %d Hz)", audio.callbackMs, audio.callbackBudgetMs,
 				audio.callbackBufferFrames, audio.callbackRate);
 			ImGui::Text("Peak %.1f%% | Over budget %llu | Gaps %llu (max %.2f ms)", 100.0f * audio.callbackPeakLoad,
@@ -251,7 +255,7 @@ void Game::SoundDemo::drawImGui() {
 			ImGui::SetItemTooltip("Since sound opened; not actual underrun counts");
 			ImGui::Text("Tail banks %u | Filter starts %llu | Resets %llu", audio.reverbBanks,
 				static_cast<unsigned long long>(audio.reverbChanges), static_cast<unsigned long long>(audio.reverbInvalidations));
-			ImGui::TextDisabled("Direct: equal-power pan. Reflections: mono, no HRTF.");
+			ImGui::TextDisabled("Direct: Steam Audio direct + binaural. Reflections: ambisonic, decoded with the same HRTF.");
 		}
 	}
 	ImGui::End();

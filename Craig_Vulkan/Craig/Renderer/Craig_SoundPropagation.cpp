@@ -403,7 +403,7 @@ void Craig::SoundPropagation::recordQuery(vk::CommandBuffer commandBuffer, const
     //Reflection rays off means 0 of them, the direct rays still go
     const uint32_t reflectionRays = request.reverbEnabled ? request.reflectionRayCount : 0u;
     const QuerySettings settings{
-        {request.listener[0], request.listener[1], request.listener[2], 0.0f},
+        {request.listener.origin[0], request.listener.origin[1], request.listener.origin[2], 0.0f},
         {request.source[0], request.source[1], request.source[2], 0.0f},
         request.rayCount, reflectionRays, request.maxBounces, request.seed,
         request.captureBounces ? 1u : 0u};

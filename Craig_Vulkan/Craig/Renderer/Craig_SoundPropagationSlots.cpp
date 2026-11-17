@@ -9,6 +9,8 @@
 
 #include "Craig/Craig_Scene.hpp"
 #include "Craig/Craig_AcousticMaterial.hpp"
+#include "Craig/Craig_SphericalHarmonics.hpp"
+#include "Craig/Craig_SteamAudio.hpp"
 
 //Slot/timeline setup adapted from Sascha Willems' timelinesemaphore example
 //Copyright (C) 2024-2025 Sascha Willems, MIT - https://github.com/SaschaWillems/Vulkan/tree/master/examples/timelinesemaphore
@@ -140,6 +142,12 @@ void Craig::SoundPropagation::submitSlot(ResultSlot& slot, const Request& reques
         fillSteamAudioSamples(std::span(samples).first(request.reflectionRayCount), std::span(samples).last(kSteamDiffuseSamples));
         uploadBuffer(slot.samples, samples.data(), sizeof(samples));
         slot.samplingRayCount = request.reflectionRayCount;
+        //Each listener ray's energy gets spread over the channels by where it started, the same as mListenerCoeffs upstream
+        slot.shCoefficients.resize(static_cast<size_t>(request.reflectionRayCount) * SphericalHarmonics::kMaxCoefficients);
+        for (uint32_t i = 0; i < request.reflectionRayCount; ++i) {
+            SphericalHarmonics::evaluate(kMaxReflectionOrder, samples[i][0], samples[i][1], samples[i][2],
+                &slot.shCoefficients[static_cast<size_t>(i) * SphericalHarmonics::kMaxCoefficients]);
+        }
     }
 
     device.resetCommandPool(slot.commandPool);
@@ -214,25 +222,13 @@ void Craig::SoundPropagation::collectCompleted() {
         }
 
         Result result{};
-        buildArrivals(slot, result);
+        buildDirect(slot, result);
         result.reverbEnabled = slot.request.reverbEnabled;
         if (result.reverbEnabled) {
             if (vmaInvalidateAllocation(mp_Device->getVmaAllocator(), slot.reverb.allocation, 0, VK_WHOLE_SIZE) != VK_SUCCESS) {
                 throw std::runtime_error("reverb-slot readback invalidation failed");
             }
-            //Add every bounce's energy into the 10 ms bin it lands in
-            const auto* records = static_cast<const std::array<float, 4>*>(slot.reverb.pMapped);
-            for (uint32_t i = 0; i < slot.request.reflectionRayCount * kReverbBounces; ++i) {
-                const auto& record = records[i];
-                if (!std::isfinite(record[3]) || record[3] < 0.0f || record[3] >= kReverbBins * kReverbBinSeconds) {
-                    throw std::runtime_error("invalid reverb delay");
-                }
-                const uint32_t bin = std::min(kReverbBins - 1, static_cast<uint32_t>(record[3] / kReverbBinSeconds));
-                for (uint32_t band = 0; band < 3; ++band) {
-                    if (!std::isfinite(record[band]) || record[band] < 0.0f) throw std::runtime_error("invalid reverb energy");
-                    result.reverbEnergy[bin][band] += record[band];
-                }
-            }
+            buildReflections(slot, result);
         }
         if (slot.request.captureBounces) {
             if (vmaInvalidateAllocation(mp_Device->getVmaAllocator(), slot.hits.allocation, 0, VK_WHOLE_SIZE) != VK_SUCCESS) {
@@ -243,6 +239,8 @@ void Craig::SoundPropagation::collectCompleted() {
         }
         result.rayCount = slot.request.rayCount;
         result.seed = slot.request.seed;
+        result.source = slot.request.source;
+        result.listener = slot.request.listener;
         result.sceneGeneration = slot.request.sceneGeneration;
         result.sourceId = slot.request.sourceId;
         result.sequenceId = slot.request.sequenceId;
@@ -254,47 +252,68 @@ void Craig::SoundPropagation::collectCompleted() {
     }
 }
 
-namespace {
-    float distanceGain(float length) {
-        //Amplitude drops off as 1/r, capped at 1 m so something right next to the listener doesn't blow up
-        return 1.0f / std::max(length, 1.0f);
-    }
-
-    Craig::SoundArrival makeArrival(const glm::vec3& direction, float length, const std::array<float, 3>& bandGains,
-        const std::array<float, 3>& listenerRight, uint32_t order) {
-        Craig::SoundArrival arrival{};
-        arrival.delaySeconds = length / Craig::kSpeedOfSound;
-        arrival.length = length;
-        arrival.order = order;
-        //Positive if it's coming from the listener's right
-        arrival.pan = std::clamp(glm::dot(direction, glm::vec3(listenerRight[0], listenerRight[1], listenerRight[2])), -1.0f, 1.0f);
-        for (uint32_t band = 0; band < Craig::kAcousticBandCount; ++band) {
-            arrival.gains[band] = bandGains[band] * distanceGain(length) * std::exp(-Craig::kAirAbsorption[band] * length);
-        }
-        return arrival;
-    }
-}
-
-void Craig::SoundPropagation::buildArrivals(const ResultSlot& slot, Result& result) {
+void Craig::SoundPropagation::buildDirect(const ResultSlot& slot, Result& result) {
     const Request& request = slot.request;
     const auto* blocked = static_cast<const uint32_t*>(slot.results.pMapped);
     std::array<float, 3> transmission{};
     for (uint32_t i = 0; i < request.rayCount; ++i) {
         //Still 0xffffffff means the shader never wrote it
         if (blocked[i] > kAcousticMaterials.size()) throw std::runtime_error("result-slot dispatch did not produce a valid obstruction result");
-        if (blocked[i] != 0) result.blocked++;
+        if (blocked[i] == 0) continue;
+        result.blocked++;
         for (uint32_t band = 0; band < kAcousticBandCount; ++band) {
-            //A blocked sample still lets that wall's transmission through, so a door doesn't go completely silent
-            transmission[band] += blocked[i] == 0 ? 1.0f : kAcousticMaterials[blocked[i] - 1].transmission[band];
+            transmission[band] += kAcousticMaterials[blocked[i] - 1].transmission[band];
         }
     }
-    for (float& gain : transmission) gain /= static_cast<float>(request.rayCount);
 
-    const glm::vec3 listener(request.listener[0], request.listener[1], request.listener[2]);
-    const glm::vec3 source(request.source[0], request.source[1], request.source[2]);
-    const float directLength = glm::length(source - listener);
-    result.arrivals[0] = makeArrival((source - listener) / directLength, directLength, transmission, request.listenerRight, 0);
-    result.arrivalCount = 1;
+    //Steam Audio's direct effect does occlusion + (1 - occlusion) * transmission per band
+    //So with transmission averaged over just the blocked samples, that comes out the same as the old per sample average
+    DirectPath& direct = result.direct;
+    direct.occlusion = 1.0f - static_cast<float>(result.blocked) / static_cast<float>(request.rayCount);
+    for (uint32_t band = 0; band < kAcousticBandCount; ++band) {
+        direct.transmission[band] = result.blocked ? transmission[band] / static_cast<float>(result.blocked) : 1.0f;
+    }
+
+    //Distance and air from the library itself, the same models its CPU simulator uses
+    const IPLContext context = SteamAudio::getInstance().getContext();
+    const IPLVector3 source{request.source[0], request.source[1], request.source[2]};
+    const IPLVector3 listener{request.listener.origin[0], request.listener.origin[1], request.listener.origin[2]};
+    IPLDistanceAttenuationModel distanceModel{};
+    distanceModel.type = IPL_DISTANCEATTENUATIONTYPE_DEFAULT;
+    IPLAirAbsorptionModel airModel{};
+    airModel.type = IPL_AIRABSORPTIONTYPE_DEFAULT;
+    direct.distanceAttenuation = iplDistanceAttenuationCalculate(context, source, listener, &distanceModel);
+    iplAirAbsorptionCalculate(context, source, listener, &airModel, direct.airAbsorption.data());
+    direct.distance = glm::length(glm::vec3(source.x, source.y, source.z) - glm::vec3(listener.x, listener.y, listener.z));
+}
+
+void Craig::SoundPropagation::buildReflections(const ResultSlot& slot, Result& result) {
+    const Request& request = slot.request;
+    auto field = std::make_shared<ReflectionField>();
+    field->reset(request.reflectionOrder);
+    const uint32_t channels = ReflectionField::channelsFor(request.reflectionOrder);
+
+    //Add every bounce's energy into the 10 ms bin it lands in, once per ambisonic channel
+    const auto* records = static_cast<const std::array<float, 4>*>(slot.reverb.pMapped);
+    for (uint32_t ray = 0; ray < request.reflectionRayCount; ++ray) {
+        const float* coefficients = &slot.shCoefficients[static_cast<size_t>(ray) * SphericalHarmonics::kMaxCoefficients];
+        for (uint32_t bounce = 0; bounce < kReverbBounces; ++bounce) {
+            const auto& record = records[ray * kReverbBounces + bounce];
+            if (!std::isfinite(record[3]) || record[3] < 0.0f || record[3] >= kReverbBins * kReverbBinSeconds) {
+                throw std::runtime_error("invalid reverb delay");
+            }
+            for (uint32_t band = 0; band < kReverbBands; ++band) {
+                if (!std::isfinite(record[band]) || record[band] < 0.0f) throw std::runtime_error("invalid reverb energy");
+            }
+            //Most bounces don't see the source, no point spreading zeros over 16 channels
+            if (record[0] == 0.0f && record[1] == 0.0f && record[2] == 0.0f) continue;
+            const uint32_t bin = std::min(kReverbBins - 1, static_cast<uint32_t>(record[3] / kReverbBinSeconds));
+            for (uint32_t channel = 0; channel < channels; ++channel) {
+                for (uint32_t band = 0; band < kReverbBands; ++band) field->at(channel, band, bin) += coefficients[channel] * record[band];
+            }
+        }
+    }
+    result.reflections = std::move(field);
 }
 
 bool Craig::SoundPropagation::poll(Result& result) {

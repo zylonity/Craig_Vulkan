@@ -10,6 +10,27 @@
 #include "imgui.h"
 #endif
 
+namespace {
+    //The listener object's +X is its right ear and -Z is ahead, not the editor camera's
+    //Steam Audio wants the same right handed, -Z forward convention, so no flips
+    Craig::ListenerFrame makeListenerFrame(Craig::GameObject& listener) {
+        const glm::mat4 model = listener.GetModelMatrix();
+        const auto unit = [](glm::vec3 axis, glm::vec3 fallback) {
+            const float length = glm::length(axis);
+            return std::isfinite(length) && length > 0.0f ? axis / length : fallback;
+        };
+        const glm::vec3 right = unit(glm::vec3(model[0]), {1.0f, 0.0f, 0.0f});
+        const glm::vec3 up = unit(glm::vec3(model[1]), {0.0f, 1.0f, 0.0f});
+        const glm::vec3 ahead = -unit(glm::vec3(model[2]), {0.0f, 0.0f, 1.0f});
+        Craig::ListenerFrame frame;
+        frame.origin = {model[3].x, model[3].y, model[3].z};
+        frame.right = {right.x, right.y, right.z};
+        frame.up = {up.x, up.y, up.z};
+        frame.ahead = {ahead.x, ahead.y, ahead.z};
+        return frame;
+    }
+}
+
 CraigError Craig::Renderer::configureSoundProbe(const std::string& listener, const std::string& source, uint64_t sourceId, glm::vec2 emitterSize) {
     resetSoundProbeContext();
     for (int i = 0; i < 2; ++i) {
@@ -47,7 +68,7 @@ CraigError Craig::Renderer::prepareSoundProbe() {
 void Craig::Renderer::resetSoundProbeContext(bool clearDebugRays) {
     if (clearDebugRays) {
         mv_soundDebugRays.clear();
-        mv_soundDebugPaths.clear();
+        m_soundDebugHasPath = false;
         mv_soundDebugBounces.clear();
     }
     if (m_soundInvalidated) m_soundInvalidated();
@@ -88,9 +109,10 @@ Craig::SoundProbeReadout Craig::Renderer::getSoundProbeReadout() const {
         readout.sceneGeneration = m_soundResult->sceneGeneration;
         readout.sourceId = m_soundResult->sourceId;
         readout.sequenceId = m_soundResult->sequenceId;
-        readout.arrivals = m_soundResult->arrivals;
-        readout.arrivalCount = m_soundResult->arrivalCount;
-        readout.reverbEnergy = m_soundResult->reverbEnergy;
+        readout.source = m_soundResult->source;
+        readout.listener = m_soundResult->listener;
+        readout.direct = m_soundResult->direct;
+        readout.reflections = m_soundResult->reflections;
         readout.reverbEnabled = m_soundResult->reverbEnabled;
         //Always work this out again, leaving a result on screen for a second doesn't make it a fresh one
         readout.ageMs = std::chrono::duration<double, std::milli>(SoundPropagation::Clock::now() - m_soundResult->inputTime).count();
@@ -141,12 +163,12 @@ void Craig::Renderer::updateSoundProbe() {
         //Only log when it becomes fully clear/blocked, not every small sample change
         if (!m_soundResult || (result.blocked == 0) != (m_soundResult->blocked == 0) ||
             (result.blocked == result.rayCount) != (m_soundResult->blocked == m_soundResult->rayCount)) {
-            Logger::renderer().info("Live sound probe: {}/{} rays blocked, {} arrivals (scene {}, source {}, sequence {}, input age {:.2f} ms)",
-                result.blocked, result.rayCount, result.arrivalCount, result.sceneGeneration, result.sourceId, result.sequenceId, result.ageMs);
+            Logger::renderer().info("Live sound probe: {}/{} rays blocked (scene {}, source {}, sequence {}, input age {:.2f} ms)",
+                result.blocked, result.rayCount, result.sceneGeneration, result.sourceId, result.sequenceId, result.ageMs);
         }
         m_soundResult = result;
-        //Copied so pausing keeps them on screen
-        mv_soundDebugPaths.assign(result.arrivals.begin(), result.arrivals.begin() + result.arrivalCount);
+        //Kept so pausing leaves the line on screen
+        m_soundDebugHasPath = true;
         //Only the overlay keeps the bounce points, the readout doesn't need another copy
         mv_soundDebugBounces = std::move(result.bounces);
         m_soundResult->bounces.clear();
@@ -186,13 +208,9 @@ void Craig::Renderer::updateSoundProbe() {
     request.reflectionRayCount = static_cast<uint32_t>(m_soundReflectionRayCount);
     request.maxBounces = static_cast<uint32_t>(m_soundMaxBounces);
     request.reverbEnabled = m_soundReverbEnabled;
-    request.listener = {origin.x, origin.y, origin.z};
+    request.reflectionOrder = static_cast<uint32_t>(m_soundReflectionOrder);
     request.source = {endpoint.x, endpoint.y, endpoint.z};
-    //The listener object's +X is its right ear, not the editor camera's
-    const glm::vec3 right = glm::vec3(pListener->GetModelMatrix()[0]);
-    const float rightLength = glm::length(right);
-    const glm::vec3 ear = std::isfinite(rightLength) && rightLength > 0.0f ? right / rightLength : glm::vec3(1.0f, 0.0f, 0.0f);
-    request.listenerRight = {ear.x, ear.y, ear.z};
+    request.listener = makeListenerFrame(*pListener);
 
 #if defined(IMGUI_ENABLED)
     request.captureBounces = m_showSoundBounces;
@@ -235,6 +253,9 @@ void Craig::Renderer::drawSoundProbeReadout() {
     changed |= ImGui::SliderFloat2("Emitter size (m)", m_soundEmitterSize, 0.0f, 4.0f);
     m_soundRayCount = std::clamp(m_soundRayCount, 1, static_cast<int>(SoundPropagation::kMaxRayCount));
     for (float& size : m_soundEmitterSize) size = std::isfinite(size) ? std::clamp(size, 0.0f, 4.0f) : 0.0f;
+    changed |= ImGui::SliderInt("Ambisonic order", &m_soundReflectionOrder, 0, kMaxReflectionOrder);
+    m_soundReflectionOrder = std::clamp(m_soundReflectionOrder, 0, static_cast<int>(kMaxReflectionOrder));
+    ImGui::SetItemTooltip("How directional the reflections are, (order + 1)^2 channels. 0 is just the energy, no direction.");
     changed |= ImGui::Checkbox("Trace reflections", &m_soundReverbEnabled);
     ImGui::SetItemTooltip("Steam Audio method, traced on the GPU. Separate from playback's Reflections toggle.");
     if (changed) resetSoundProbeContext();
@@ -250,37 +271,27 @@ void Craig::Renderer::drawSoundProbeReadout() {
     }
     if (ImGui::CollapsingHeader("Tracing notes")) {
         ImGui::TextWrapped("Direct: world-XY emitter, one ray at its centre. Reflections: listener to source, Steam Audio 4.8.1 method.");
-        ImGui::TextWrapped("Reflections: 10 ms energy bins, 2 s after direct sound. Order 0 mono; no HRTF or diffraction.");
+        ImGui::TextWrapped("Reflections: 10 ms energy bins, 2 s after direct sound, SH projected by each listener ray's start direction.");
         ImGui::TextWrapped("Purple: first 128 listener rays, not confirmed source paths. Readout: last completed GPU result.");
     }
     if (readout.hasResult && !changed) {
         ImGui::Text("Blocked: %u / %u (%.1f%%)", readout.blockedRays, readout.rayCount, readout.obstruction * 100.0f);
         ImGui::Text("Age: %.1f ms | Sequence %llu | Seed %u", readout.ageMs, static_cast<unsigned long long>(readout.sequenceId), readout.seed);
-        if (ImGui::TreeNode("Direct arrivals", "Direct arrivals (%u)", readout.arrivalCount)) {
-            ImGui::TextDisabled("Reflections are in energy bins, not taps");
-            if (ImGui::BeginTable("Arrivals", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY, ImVec2(0, 160))) {
-                ImGui::TableSetupColumn("Order");
-                ImGui::TableSetupColumn("Length (m)");
-                ImGui::TableSetupColumn("Delay (ms)");
-                ImGui::TableSetupColumn("Low / mid / high gain");
-                ImGui::TableSetupColumn("Pan");
-                ImGui::TableSetupColumn("Level (dB)");
-                ImGui::TableHeadersRow();
-                for (uint32_t i = 0; i < readout.arrivalCount; ++i) {
-                    const SoundArrival& arrival = readout.arrivals[i];
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn(); ImGui::Text("%u", arrival.order);
-                    ImGui::TableNextColumn(); ImGui::Text("%.3f", arrival.length);
-                    ImGui::TableNextColumn(); ImGui::Text("%.2f", arrival.delaySeconds * 1000.0f);
-                    ImGui::TableNextColumn(); ImGui::Text("%.3f / %.3f / %.3f", arrival.gains[0], arrival.gains[1], arrival.gains[2]);
-                    ImGui::TableNextColumn(); ImGui::Text("%+.2f", arrival.pan);
-                    //Average of the three bands, just to have one number to look at
-                    const float level = (arrival.gains[0] + arrival.gains[1] + arrival.gains[2]) / 3.0f;
-                    ImGui::TableNextColumn(); ImGui::Text("%.1f", 20.0f * std::log10(std::max(level, 1e-6f)));
-                }
-                ImGui::EndTable();
-            }
+        const DirectPath& direct = readout.direct;
+        if (ImGui::TreeNode("Direct path")) {
+            ImGui::Text("Distance %.2f m | Attenuation %.3f", direct.distance, direct.distanceAttenuation);
+            ImGui::Text("Occlusion %.3f (1 is clear)", direct.occlusion);
+            ImGui::Text("Air: %.3f / %.3f / %.3f", direct.airAbsorption[0], direct.airAbsorption[1], direct.airAbsorption[2]);
+            ImGui::Text("Transmission: %.3f / %.3f / %.3f", direct.transmission[0], direct.transmission[1], direct.transmission[2]);
+            ImGui::TextDisabled("Low / mid / high bands, what Steam Audio's direct effect gets");
             ImGui::TreePop();
+        }
+        if (readout.reflections) {
+            //Just the omni channel, the rest are signed direction weights
+            float total = 0.0f;
+            for (uint32_t bin = 0; bin < kReverbBins; ++bin) total += readout.reflections->at(0, 1, bin);
+            ImGui::Text("Reflections: order %u, %u channels, mid omni energy %.3g", readout.reflections->order,
+                ReflectionField::channelsFor(readout.reflections->order), total);
         }
     }
     if (ImGui::CollapsingHeader("GPU diagnostics")) {
@@ -296,7 +307,7 @@ void Craig::Renderer::drawSoundProbeReadout() {
 
 void Craig::Renderer::drawSoundProbeRays() {
 #if defined(IMGUI_ENABLED)
-    if ((!m_showSoundRays || mv_soundDebugRays.empty()) && (!m_showSoundPaths || mv_soundDebugPaths.empty()) &&
+    if ((!m_showSoundRays || mv_soundDebugRays.empty()) && (!m_showSoundPaths || !m_soundDebugHasPath) &&
         (!m_showSoundBounces || mv_soundDebugBounces.empty())) return;
     const Camera& camera = mp_SceneManager->getCurrentScene()->getCamera();
     const glm::mat4 viewProj = camera.getProj() * camera.getView();
@@ -357,9 +368,7 @@ void Craig::Renderer::drawSoundProbeRays() {
     }
     if (m_showSoundPaths) {
         //White line for the direct path from the last result
-        for (const SoundArrival& arrival : mv_soundDebugPaths) {
-            if (arrival.order == 0) drawSegment(m_soundDebugListener, m_soundDebugSource, IM_COL32(255, 255, 255, 200));
-        }
+        if (m_soundDebugHasPath) drawSegment(m_soundDebugListener, m_soundDebugSource, IM_COL32(255, 255, 255, 200));
     }
 #endif
 }

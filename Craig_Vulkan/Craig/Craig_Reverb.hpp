@@ -4,6 +4,7 @@
 #include "FFTConvolver/TwoStageFFTConvolver.h"
 #include <atomic>
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -11,24 +12,30 @@
 
 namespace Craig {
 
-	//Turns the GPU's reflection energy into an impulse response and convolves the sound with it
+	//Turns the GPU's reflection energy into an ambisonic impulse response and convolves the sound with it
 	//The reconstruction is Valve's Steam Audio 4.8.1 (Apache-2.0), through the library's public reconstructor - https://github.com/ValveSoftware/steam-audio
+	//The library has no public way to hand its reflection effect our own response, so the convolution stays FFTConvolver
 	//This class just owns when filters get built and swapped, so the audio callback never builds one itself
 	class Reverb {
 	public:
+		static constexpr uint32_t kMaxChannels = ReflectionField::channelsFor(kMaxReflectionOrder);
+		static constexpr uint32_t kMaxFrames = 1024; //Biggest block process() takes in one go
+
 		~Reverb() { stop(); }
 		void start();
 		void stop(); //Only once SDL's taken the callback off
 		void invalidate();
-		void submit(const ReverbEnergy& energy, float directDelaySeconds = 0.0f); //Main thread, never the callback
-		void processSample(float input, int rate, float& left, float& right);
+		void submit(std::shared_ptr<const ReflectionField> field); //Main thread, never the callback
+		//Adds each ambisonic channel into out, channels past what out has still get run so their history stays right
+		void process(const float* input, uint32_t frames, float* const* out, uint32_t channels);
 		bool ready() const { return m_ready.load(std::memory_order_relaxed); }
 		bool failed() const { return m_failed.load(std::memory_order_relaxed); }
 		//Just for the timing log/demo window
 		uint32_t activeBanks() const { return m_activeBanks.load(std::memory_order_relaxed); }
 		uint64_t changes() const { return m_changes.load(std::memory_order_relaxed); }
 		uint64_t invalidations() const { return m_invalidations.load(std::memory_order_relaxed); }
-		static std::array<std::vector<float>, 2> reconstruct(const ReverbEnergy& energy, int rate, float directDelaySeconds = 0.0f);
+		//One response per ambisonic channel, at Steam Audio's sampling rate
+		static std::vector<std::vector<float>> reconstruct(const ReflectionField& field);
 
 	private:
 		//Free -> Building (worker) -> Ready -> Active (callback) -> Free
@@ -36,20 +43,17 @@ namespace Craig {
 		struct Bank {
 			std::atomic<uint8_t> state{Free};
 			uint32_t epoch = 0;
-			int rate = 0;
+			uint32_t channels = 0;
 			uint32_t responseFrames = 0;
-			std::array<fftconvolver::TwoStageFFTConvolver, 2> filters; //Left and right
+			std::array<fftconvolver::TwoStageFFTConvolver, kMaxChannels> filters;
 		};
 		struct Job {
-			ReverbEnergy energy;
+			std::shared_ptr<const ReflectionField> field;
 			uint32_t epoch;
-			int rate;
-			float directDelaySeconds;
 		};
 		void work();
 		std::array<Bank, 3> m_banks;
 		std::atomic<uint32_t> m_epoch{1}; //Goes up on invalidate, anything built for an older one gets thrown away
-		std::atomic<int> m_rate{48000};
 		std::atomic<bool> m_ready{false};
 		std::atomic<bool> m_failed{false};
 		std::atomic<uint32_t> m_activeBanks{0};
@@ -66,5 +70,7 @@ namespace Craig {
 		int m_previous = -1;
 		float m_fade = 1.0f;
 		uint32_t m_drainFrames = 0; //The old filter keeps going until everything it was given has come back out
+		std::array<float, kMaxFrames> m_weighted{};
+		std::array<float, kMaxFrames> m_filtered{};
 	};
 }

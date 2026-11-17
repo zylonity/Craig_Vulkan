@@ -35,9 +35,9 @@ namespace Craig {
 			uint32_t seed = 1;
 			uint32_t reflectionRayCount = 1024;
 			uint32_t maxBounces = 0;
-			std::array<float, 3> listener{};
+			uint32_t reflectionOrder = 0; //Ambisonic order the energy gets binned at, 0-3
+			ListenerFrame listener; //Origin is the listener's position, the rest is which way it's facing
 			std::array<float, 3> source{};
-			std::array<float, 3> listenerRight{1.0f, 0.0f, 0.0f}; //For panning
 			bool captureBounces = false; //Copies the listener rays' bounce points back for the overlay
 			bool reverbEnabled = true;
 			uint64_t sceneGeneration = 0;
@@ -50,9 +50,10 @@ namespace Craig {
 			uint32_t blocked = 0;
 			uint32_t rayCount = 1;
 			uint32_t seed = 1;
-			std::array<SoundArrival, kMaxSoundArrivals> arrivals{};
-			uint32_t arrivalCount = 0;
-			ReverbEnergy reverbEnergy{};
+			std::array<float, 3> source{};
+			ListenerFrame listener;
+			DirectPath direct;
+			std::shared_ptr<const ReflectionField> reflections; //Null unless the reflection rays were traced
 			bool reverbEnabled = false;
 			std::vector<std::array<float, 4>> bounces; //kReverbBounces per listener ray, empty unless captureBounces was on
 			uint64_t sceneGeneration = 0;
@@ -123,6 +124,7 @@ namespace Craig {
 			Buffer instanceInfo;
 			Buffer samples; //Steam Audio's direction tables
 			uint32_t samplingRayCount = 0; //What the samples table was last made for
+			std::vector<float> shCoefficients; //Order 3 SH of every listener ray's start direction, remade with the samples
 			Buffer hits;
 			Buffer reverb;
 			AccelerationStructure tlas;
@@ -158,7 +160,8 @@ namespace Craig {
 		void writeQueryDescriptors(const ResultSlot& slot);
 		void createResultSlots(uint32_t instanceCapacity);
 		void recordQuery(vk::CommandBuffer commandBuffer, const ResultSlot& slot, const Request& request);
-		void buildArrivals(const ResultSlot& slot, Result& result);
+		void buildDirect(const ResultSlot& slot, Result& result);
+		void buildReflections(const ResultSlot& slot, Result& result);
 		void collectCompleted();
 		void submitSlot(ResultSlot& slot, const Request& request);
 

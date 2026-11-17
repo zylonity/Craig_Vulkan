@@ -1,25 +1,88 @@
 #include "Craig_Reverb.hpp"
 #include "Craig_Logger.hpp"
+#include "Craig_SteamAudio.hpp"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <limits>
 #include <stdexcept>
-#include "Craig_SteamAudio.hpp"
 
 //The callback reads all of these, none of them can be allowed to lock
 static_assert(std::atomic<uint8_t>::is_always_lock_free);
 static_assert(std::atomic<uint32_t>::is_always_lock_free);
 static_assert(std::atomic<uint64_t>::is_always_lock_free);
-static_assert(std::atomic<int>::is_always_lock_free);
 static_assert(std::atomic<bool>::is_always_lock_free);
 
 namespace {
+	constexpr float kDuration = Craig::kReverbBins * Craig::kReverbBinSeconds;
+
+	//The library objects one reconstruction needs, made once for the biggest order so the worker can reuse them
+	struct Reconstruction {
+		IPLEnergyField field = nullptr;
+		IPLImpulseResponse response = nullptr;
+		IPLReconstructor reconstructor = nullptr;
+
+		Reconstruction() {
+			const IPLContext context = Craig::SteamAudio::getInstance().getContext();
+			if (!context) throw std::runtime_error("Steam Audio isn't initialised");
+			const int order = static_cast<int>(Craig::kMaxReflectionOrder);
+			IPLEnergyFieldSettings fieldSettings{kDuration, order};
+			IPLImpulseResponseSettings responseSettings{kDuration, order, Craig::SteamAudio::kSamplingRate};
+			IPLReconstructorSettings reconstructorSettings{kDuration, order, Craig::SteamAudio::kSamplingRate};
+			if (iplEnergyFieldCreate(context, &fieldSettings, &field) != IPL_STATUS_SUCCESS ||
+				iplImpulseResponseCreate(context, &responseSettings, &response) != IPL_STATUS_SUCCESS ||
+				iplReconstructorCreate(context, &reconstructorSettings, &reconstructor) != IPL_STATUS_SUCCESS) {
+				release();
+				throw std::runtime_error("couldn't allocate the reflection reconstruction");
+			}
+		}
+		~Reconstruction() { release(); }
+		Reconstruction(const Reconstruction&) = delete;
+		Reconstruction& operator=(const Reconstruction&) = delete;
+
+		void release() {
+			if (field) iplEnergyFieldRelease(&field);
+			if (response) iplImpulseResponseRelease(&response);
+			if (reconstructor) iplReconstructorRelease(&reconstructor);
+		}
+
+		//Same Linear reconstruction with the default air model that the old vendored copy did
+		std::vector<std::vector<float>> run(const Craig::ReflectionField& input) {
+			if (input.order > Craig::kMaxReflectionOrder) throw std::runtime_error("reflection order too high");
+			const uint32_t channels = Craig::ReflectionField::channelsFor(input.order);
+			if (input.energy.size() != channels * Craig::kReverbBands * Craig::kReverbBins) throw std::runtime_error("reflection field is the wrong size");
+			//Higher channels than this order hold the last job's data, the reconstruction only reads up to the order asked for
+			iplEnergyFieldReset(field);
+			for (uint32_t channel = 0; channel < channels; ++channel) {
+				for (uint32_t band = 0; band < Craig::kReverbBands; ++band) {
+					float* bins = iplEnergyFieldGetBand(field, static_cast<IPLint32>(channel), static_cast<IPLint32>(band));
+					for (uint32_t bin = 0; bin < Craig::kReverbBins; ++bin) {
+						const float e = input.at(channel, band, bin);
+						//The higher channels are signed, only the omni one has to be positive
+						if (!std::isfinite(e) || (channel == 0 && e < 0.0f)) throw std::runtime_error("invalid reflection energy");
+						bins[bin] = e;
+					}
+				}
+			}
+			IPLReconstructorInputs inputs{field};
+			IPLReconstructorSharedInputs shared{kDuration, static_cast<IPLint32>(input.order)};
+			IPLReconstructorOutputs outputs{response};
+			iplReconstructorReconstruct(reconstructor, 1, &inputs, &shared, &outputs);
+
+			const int samples = iplImpulseResponseGetNumSamples(response);
+			std::vector<std::vector<float>> result(channels);
+			for (uint32_t channel = 0; channel < channels; ++channel) {
+				const float* data = iplImpulseResponseGetChannel(response, static_cast<int>(channel));
+				result[channel].assign(data, data + samples);
+			}
+			return result;
+		}
+	};
+
 	//Dumps what the last prepared tail was made from, so I can plot it and see where a gap or spike came from
 	//Overwritten every time, it's not necessarily the one that's playing yet
-	CraigError saveTailSnapshot(const Craig::ReverbEnergy& energy, const std::array<std::vector<float>, 2>& ir,
-		int rate, uint32_t epoch, float directDelaySeconds) {
+	CraigError saveTailSnapshot(const Craig::ReflectionField& field, const std::vector<std::vector<float>>& ir, uint32_t epoch) {
 		constexpr const char* path = "logs/reverb-energy.csv";
 		std::ofstream file(path);
 		if (!file) {
@@ -29,13 +92,13 @@ namespace {
 		file << std::setprecision(std::numeric_limits<double>::max_digits10);
 		double irEnergy = 0.0;
 		for (const auto& channel : ir) for (float sample : channel) irEnergy += static_cast<double>(sample) * sample;
-		file << "# prepared response, not necessarily active; Steam Audio 4.8.1 order-0 SH, direct-relative bins\n"
-			<< "# epoch=" << epoch << ",sample_rate=" << rate << ",direct_delay_seconds=" << directDelaySeconds
-			<< ",ir_frames=" << ir[0].size() << ",stereo_ir_energy=" << irEnergy << '\n'
+		file << "# prepared response, not necessarily active; Steam Audio 4.8.1 SH energy, direct-relative bins, omni channel below\n"
+			<< "# epoch=" << epoch << ",sample_rate=" << Craig::SteamAudio::kSamplingRate << ",order=" << field.order
+			<< ",ir_frames=" << (ir.empty() ? 0 : ir[0].size()) << ",ir_energy_all_channels=" << irEnergy << '\n'
 			<< "bin,relative_start_seconds,low,mid,high\n";
 		for (uint32_t bin = 0; bin < Craig::kReverbBins; ++bin) {
 			file << bin << ',' << static_cast<double>(bin) * Craig::kReverbBinSeconds;
-			for (float e : energy[bin]) file << ',' << e;
+			for (uint32_t band = 0; band < Craig::kReverbBands; ++band) file << ',' << field.at(0, band, bin);
 			file << '\n';
 		}
 		file.close();
@@ -43,68 +106,14 @@ namespace {
 			Craig::Logger::audio().warn("Couldn't finish reverb diagnostic snapshot {}", path);
 			return CRAIG_FAIL;
 		}
-		Craig::Logger::audio().info("Prepared Steam Audio reflection snapshot: {} (epoch {}, {} Hz, direct delay {:.3f} ms)",
-			path, epoch, rate, 1000.0f * directDelaySeconds);
+		Craig::Logger::audio().info("Prepared Steam Audio reflection snapshot: {} (epoch {}, order {})", path, epoch, field.order);
 		return CRAIG_SUCCESS;
 	}
 }
 
-std::array<std::vector<float>, 2> Craig::Reverb::reconstruct(const ReverbEnergy& energy, int rate, float directDelaySeconds) {
-	if (rate < 8000 || rate > 192000) throw std::runtime_error("unsupported reverb sample rate");
-	if (!std::isfinite(directDelaySeconds) || directDelaySeconds < 0.0f) throw std::runtime_error("invalid reflection pre-delay");
-	constexpr float duration = kReverbBins * kReverbBinSeconds;
-
-	const IPLContext context = SteamAudio::getInstance().getContext();
-	if (!context) throw std::runtime_error("Steam Audio isn't initialised");
-
-	//Copy our bins into Steam Audio's energy field, order 0 so just the one channel
-	//The public API does the same Linear reconstruction with the default air model that the vendored copy did
-	IPLEnergyFieldSettings fieldSettings{duration, 0};
-	IPLImpulseResponseSettings responseSettings{duration, 0, rate};
-	IPLReconstructorSettings reconstructorSettings{duration, 0, rate};
-	IPLEnergyField field = nullptr;
-	IPLImpulseResponse response = nullptr;
-	IPLReconstructor reconstructor = nullptr;
-	const auto release = [&] {
-		if (field) iplEnergyFieldRelease(&field);
-		if (response) iplImpulseResponseRelease(&response);
-		if (reconstructor) iplReconstructorRelease(&reconstructor);
-	};
-	if (iplEnergyFieldCreate(context, &fieldSettings, &field) != IPL_STATUS_SUCCESS ||
-		iplImpulseResponseCreate(context, &responseSettings, &response) != IPL_STATUS_SUCCESS ||
-		iplReconstructorCreate(context, &reconstructorSettings, &reconstructor) != IPL_STATUS_SUCCESS) {
-		release();
-		throw std::runtime_error("couldn't allocate the reflection reconstruction");
-	}
-	for (uint32_t band = 0; band < 3; ++band) {
-		float* bins = iplEnergyFieldGetBand(field, 0, static_cast<IPLint32>(band));
-		for (uint32_t bin = 0; bin < kReverbBins; ++bin) {
-			const float e = energy[bin][band];
-			if (!std::isfinite(e) || e < 0.0f) {
-				release();
-				throw std::runtime_error("invalid reflection energy");
-			}
-			bins[bin] = e;
-		}
-	}
-	IPLReconstructorInputs inputs{field};
-	IPLReconstructorSharedInputs shared{duration, 0};
-	IPLReconstructorOutputs outputs{response};
-	iplReconstructorReconstruct(reconstructor, 1, &inputs, &shared, &outputs);
-	const int samples = iplImpulseResponseGetNumSamples(response);
-	const float* reconstructed = iplImpulseResponseGetChannel(response, 0);
-
-	//Upstream's IR starts at the direct sound, so put the travel time back once, capped the same as the direct tap's delay
-	const size_t preDelay = static_cast<size_t>(std::min(std::round(static_cast<double>(directDelaySeconds) * rate),
-		static_cast<double>(kSoundDelayCapacity - 1)));
-	std::array<std::vector<float>, 2> result;
-	for (auto& channel : result) {
-		channel.assign(preDelay + samples, 0.0f);
-		//Order 0 is the same in both ears, it's a centred mono preview, not proper directional/HRTF stuff
-		for (int i = 0; i < samples; ++i) channel[preDelay + i] = reconstructed[i] * std::sqrt(0.5f);
-	}
-	release();
-	return result;
+std::vector<std::vector<float>> Craig::Reverb::reconstruct(const ReflectionField& field) {
+	Reconstruction reconstruction;
+	return reconstruction.run(field);
 }
 
 void Craig::Reverb::start() {
@@ -145,19 +154,31 @@ void Craig::Reverb::invalidate() {
 	m_lastSubmitted.reset();
 }
 
-void Craig::Reverb::submit(const ReverbEnergy& energy, float directDelaySeconds) {
-	Job job{energy, m_epoch.load(std::memory_order_acquire), m_rate.load(std::memory_order_relaxed), directDelaySeconds};
+void Craig::Reverb::submit(std::shared_ptr<const ReflectionField> field) {
+	if (!field) return;
+	Job job{std::move(field), m_epoch.load(std::memory_order_acquire)};
 	std::lock_guard lock(m_mutex);
 	if (!m_worker.joinable() || m_stopping) return;
 	//If nothing's moving don't keep rebuilding the same filter, that restarts its delay history every time
-	if (m_lastSubmitted && job.epoch == m_lastSubmitted->epoch && job.rate == m_lastSubmitted->rate &&
-		job.directDelaySeconds == m_lastSubmitted->directDelaySeconds && job.energy == m_lastSubmitted->energy) return;
+	if (m_lastSubmitted && job.epoch == m_lastSubmitted->epoch && job.field->order == m_lastSubmitted->field->order &&
+		job.field->energy == m_lastSubmitted->field->energy) return;
 	m_lastSubmitted = job;
 	m_pending = job;
 	m_wake.notify_one();
 }
 
 void Craig::Reverb::work() {
+	//Made on this thread and only used here, the library objects aren't shared with anything
+	std::optional<Reconstruction> reconstruction;
+	try {
+		reconstruction.emplace();
+	}
+	catch (const std::exception& error) {
+		Logger::audio().error("Reflection reconstruction unavailable: {}", error.what());
+		m_failed.store(true, std::memory_order_relaxed);
+		return;
+	}
+
 	for (;;) {
 		Job job;
 		{
@@ -188,32 +209,33 @@ void Craig::Reverb::work() {
 		}
 
 		try {
-			const auto ir = reconstruct(job.energy, job.rate, job.directDelaySeconds);
-			for (uint32_t i = 0; i < 2; ++i) {
+			const auto ir = reconstruction->run(*job.field);
+			for (size_t i = 0; i < ir.size(); ++i) {
 				if (!target->filters[i].init(128, 2048, ir[i].data(), ir[i].size())) throw std::runtime_error("convolver initialisation failed");
 			}
 			//Written here on the worker, never in the callback
-			if (job.epoch == m_epoch.load(std::memory_order_acquire)) saveTailSnapshot(job.energy, ir, job.rate, job.epoch, job.directDelaySeconds);
+			if (job.epoch == m_epoch.load(std::memory_order_acquire)) saveTailSnapshot(*job.field, ir, job.epoch);
+			target->channels = static_cast<uint32_t>(ir.size());
 			target->responseFrames = static_cast<uint32_t>(ir[0].size());
 			target->epoch = job.epoch;
-			target->rate = job.rate;
 			//Invalidated while we were building it, don't hand it over
 			target->state.store(job.epoch == m_epoch.load(std::memory_order_acquire) ? Ready : Free, std::memory_order_release);
 		}
-		catch (...) {
+		catch (const std::exception& error) {
+			Logger::audio().error("Reflection filter failed: {}", error.what());
 			m_failed.store(true, std::memory_order_relaxed);
 			target->state.store(Free, std::memory_order_release);
 		}
 	}
 }
 
-void Craig::Reverb::processSample(float input, int rate, float& left, float& right) {
-	m_rate.store(rate, std::memory_order_relaxed);
+void Craig::Reverb::process(const float* input, uint32_t frames, float* const* out, uint32_t channels) {
+	frames = std::min(frames, kMaxFrames);
 	const uint32_t epoch = m_epoch.load(std::memory_order_acquire);
 
-	//Drop anything from an old epoch or for a different sample rate
+	//Drop anything from an old epoch
 	for (int* index : {&m_current, &m_previous}) {
-		if (*index >= 0 && (m_banks[*index].epoch != epoch || m_banks[*index].rate != rate)) {
+		if (*index >= 0 && m_banks[*index].epoch != epoch) {
 			m_banks[*index].state.store(Free, std::memory_order_release);
 			*index = -1;
 			m_activeBanks.store((m_current >= 0) + (m_previous >= 0), std::memory_order_relaxed);
@@ -227,33 +249,41 @@ void Craig::Reverb::processSample(float input, int rate, float& left, float& rig
 		//Claim it before reading anything, the worker's allowed to replace one that's only Ready
 		uint8_t expected = Ready;
 		if (!bank.state.compare_exchange_strong(expected, Active, std::memory_order_acq_rel)) continue;
-		if (bank.epoch != epoch || bank.rate != rate) { bank.state.store(Free, std::memory_order_release); continue; }
+		if (bank.epoch != epoch) { bank.state.store(Free, std::memory_order_release); continue; }
 		m_previous = m_current;
 		m_current = i;
 		m_changes.fetch_add(1, std::memory_order_relaxed);
 		m_activeBanks.store((m_current >= 0) + (m_previous >= 0), std::memory_order_relaxed);
 		m_fade = m_previous >= 0 ? 0.0f : 1.0f;
-		m_drainFrames = m_previous >= 0 ? m_banks[m_previous].responseFrames + static_cast<uint32_t>(std::ceil(0.05 * rate)) : 0;
+		m_drainFrames = m_previous >= 0 ?
+			m_banks[m_previous].responseFrames + static_cast<uint32_t>(std::ceil(0.05 * SteamAudio::kSamplingRate)) : 0;
 		break;
 	}
 	m_ready.store(m_current >= 0, std::memory_order_relaxed);
 
+	const float fadeStep = 1.0f / (0.05f * SteamAudio::kSamplingRate);
 	for (int pass = 0; pass < 2; ++pass) {
 		const int index = pass == 0 ? m_current : m_previous;
 		if (index < 0) continue;
-		const float weight = pass == 0 ? m_fade : 1.0f - m_fade;
-		float l = 0.0f, r = 0.0f;
 		//Crossfade the sound going IN, not what comes out, the old room still owes us the echoes of what it already got
-		const float sample = weight * input;
-		m_banks[index].filters[0].process(&sample, &l, 1);
-		m_banks[index].filters[1].process(&sample, &r, 1);
-		left += l;
-		right += r;
+		for (uint32_t i = 0; i < frames; ++i) {
+			const float fade = std::min(1.0f, m_fade + fadeStep * i);
+			m_weighted[i] = (pass == 0 ? fade : 1.0f - fade) * input[i];
+		}
+		Bank& bank = m_banks[index];
+		for (uint32_t channel = 0; channel < bank.channels; ++channel) {
+			bank.filters[channel].process(m_weighted.data(), m_filtered.data(), frames);
+			if (channel >= channels) continue;
+			for (uint32_t i = 0; i < frames; ++i) out[channel][i] += m_filtered[i];
+		}
 	}
-	m_fade = std::min(1.0f, m_fade + 1.0f / (0.05f * rate));
-	if (m_previous >= 0 && m_drainFrames > 0 && --m_drainFrames == 0) {
-		m_banks[m_previous].state.store(Free, std::memory_order_release);
-		m_previous = -1;
-		m_activeBanks.store((m_current >= 0) + (m_previous >= 0), std::memory_order_relaxed);
+	m_fade = std::min(1.0f, m_fade + fadeStep * frames);
+	if (m_previous >= 0 && m_drainFrames > 0) {
+		m_drainFrames -= std::min(m_drainFrames, frames);
+		if (m_drainFrames == 0) {
+			m_banks[m_previous].state.store(Free, std::memory_order_release);
+			m_previous = -1;
+			m_activeBanks.store((m_current >= 0) + (m_previous >= 0), std::memory_order_relaxed);
+		}
 	}
 }
