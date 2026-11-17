@@ -325,7 +325,9 @@ Craig::AudioStatus Craig::Audio::getStatus() const {
 	status.reflectionsEnabled = m_reflectionsEnabled;
 	status.binaural = m_binaural;
 	status.pathingEnabled = m_pathingEnabled;
-	status.reverbReady = m_reverb.ready();
+	//The CPU simulator's response is ready as soon as it's handed over, only the GPU's energy needs our filter building first
+	//Just checking the filter used to leave the play button greyed out forever on the CPU path
+	status.reverbReady = m_reverb.ready() || m_steamReflectionsActive;
 	status.reverbFailed = m_reverb.failed();
 	status.gain = m_reportedGain.load(std::memory_order_relaxed);
 	status.reflectionOrder = m_reportedOrder.load(std::memory_order_relaxed);
