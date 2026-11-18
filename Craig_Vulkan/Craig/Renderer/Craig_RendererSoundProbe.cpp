@@ -120,6 +120,7 @@ Craig::SteamAudioSimulator::Settings Craig::Renderer::steamSimulatorSettings() c
     SteamAudioSimulator::Settings settings;
     settings.rayTracer = m_steamEmbree ? SteamAudioSimulator::RayTracer::Embree : SteamAudioSimulator::RayTracer::Default;
     settings.threads = m_steamThreads;
+    settings.reflectionRays = static_cast<uint32_t>(m_soundReflectionRayCount);
     return settings;
 }
 
@@ -420,7 +421,6 @@ void Craig::Renderer::updateSteamSimulator(Scene& scene, GameObject& listener, c
     request.occlusionRadius = m_soundOcclusionRadius;
     request.transmissionRays = static_cast<uint32_t>(m_soundTransmissionRays);
     request.reflections = m_soundReverbEnabled;
-    request.reflectionRays = static_cast<uint32_t>(m_soundReflectionRayCount);
     request.bounces = static_cast<uint32_t>(m_soundMaxBounces);
     request.order = static_cast<uint32_t>(m_soundReflectionOrder);
     request.pathing = m_soundPathing;
@@ -489,6 +489,8 @@ void Craig::Renderer::drawSoundProbeReadout() {
     m_soundOcclusionRadius = std::isfinite(m_soundOcclusionRadius) ? std::clamp(m_soundOcclusionRadius, 0.0f, 4.0f) : 1.0f;
     m_soundTransmissionRays = std::clamp(m_soundTransmissionRays, 0, 8);
     changed |= ImGui::SliderInt("Reflection rays", &m_soundReflectionRayCount, 1, SoundPropagation::kMaxReflectionRayCount);
+    // the CPU's sphere table is fixed at creation, rebuild once the drag finishes rather than on every step
+    const bool rebuildCPU = ImGui::IsItemDeactivatedAfterEdit();
     changed |= ImGui::SliderInt("Max bounces", &m_soundMaxBounces, 0, kReverbBounces);
     m_soundReflectionRayCount = std::clamp(m_soundReflectionRayCount, 1, static_cast<int>(SoundPropagation::kMaxReflectionRayCount));
     m_soundMaxBounces = std::clamp(m_soundMaxBounces, 0, static_cast<int>(kReverbBounces));
@@ -501,7 +503,12 @@ void Craig::Renderer::drawSoundProbeReadout() {
     ImGui::SetItemTooltip("How directional the reflections are, (order + 1)^2 channels. 0 is just the energy, no direction.");
     changed |= ImGui::Checkbox("Trace reflections", &m_soundReverbEnabled);
     ImGui::SetItemTooltip("Steam Audio method, traced on the GPU. Separate from playback's Reflections toggle.");
-    if (changed) resetSoundProbeContext();
+    if (changed || rebuildCPU) resetSoundProbeContext();
+    if (rebuildCPU) {
+        m_cpuSoundReady = m_steamSimulator.prepare(*mp_SceneManager->getCurrentScene(), steamSimulatorSettings()) == CRAIG_SUCCESS;
+        // rebuilding drops the old probe batch too, so restore pathing if it was enabled
+        if (m_soundPathing) bakeSoundPathing();
+    }
     ImGui::Checkbox("Show sound paths", &m_showSoundPaths);
     ImGui::SameLine();
     if (ImGui::Checkbox("Show bouncing rays", &m_showSoundBounces) && !m_showSoundBounces) mv_soundDebugBounces.clear();

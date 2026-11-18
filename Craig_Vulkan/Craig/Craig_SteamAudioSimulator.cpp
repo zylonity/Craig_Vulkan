@@ -76,7 +76,8 @@ CraigError Craig::SteamAudioSimulator::createSimulator(const Settings& settings)
 	simulationSettings.sceneType = type;
 	simulationSettings.reflectionType = IPL_REFLECTIONEFFECTTYPE_CONVOLUTION;
 	simulationSettings.maxNumOcclusionSamples = kMaxOcclusionSamples;
-	simulationSettings.maxNumRays = kMaxRays;
+	// upstream only traces a prefix of this table, so a larger maximum used to sample just one side of the hall
+	simulationSettings.maxNumRays = static_cast<IPLint32>(std::clamp(settings.reflectionRays, 1u, kMaxRays));
 	simulationSettings.numDiffuseSamples = 1024; //Same table size as the GPU's hemisphere samples
 	simulationSettings.maxDuration = kDuration;
 	simulationSettings.maxOrder = static_cast<IPLint32>(kMaxReflectionOrder);
@@ -99,6 +100,7 @@ CraigError Craig::SteamAudioSimulator::createSimulator(const Settings& settings)
 	}
 	iplSourceAdd(m_source, m_simulator);
 	m_settings = settings;
+	m_settings.reflectionRays = static_cast<uint32_t>(simulationSettings.maxNumRays);
 	m_settings.rayTracer = type == IPL_SCENETYPE_EMBREE ? RayTracer::Embree : RayTracer::Default;
 	Logger::audio().info("Steam Audio CPU simulator ready ({}, {} threads)", type == IPL_SCENETYPE_EMBREE ? "Embree" : "default ray tracer",
 		simulationSettings.numThreads);
@@ -424,7 +426,7 @@ Craig::SteamAudioSimulator::Result Craig::SteamAudioSimulator::simulate(const Jo
 		(request.reflections ? IPL_SIMULATIONFLAGS_REFLECTIONS : 0) | (pathing ? IPL_SIMULATIONFLAGS_PATHING : 0));
 	IPLSimulationSharedInputs shared{};
 	shared.listener = {toIPL(listener.right), toIPL(listener.up), toIPL(listener.ahead), toIPL(listener.origin)};
-	shared.numRays = static_cast<IPLint32>(std::min(request.reflectionRays, kMaxRays));
+	shared.numRays = static_cast<IPLint32>(m_settings.reflectionRays);
 	shared.numBounces = static_cast<IPLint32>(request.bounces);
 	shared.duration = kDuration;
 	shared.order = static_cast<IPLint32>(std::min(request.order, kMaxReflectionOrder));

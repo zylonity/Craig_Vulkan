@@ -34,6 +34,7 @@ namespace Craig {
 		struct Settings {
 			RayTracer rayTracer = RayTracer::Default;
 			int threads = 4;
+			uint32_t reflectionRays = 1024;
 			bool operator==(const Settings&) const = default;
 		};
 
@@ -45,7 +46,6 @@ namespace Craig {
 			float occlusionRadius = 1.0f;
 			uint32_t transmissionRays = 3;
 			bool reflections = true;
-			uint32_t reflectionRays = 1024;
 			uint32_t bounces = 64;
 			uint32_t order = 1;
 			bool pathing = false; //Only does anything once the probes are baked
